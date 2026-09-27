@@ -34,8 +34,10 @@ from collections import deque
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import sounddevice as sd
 import websockets
+
+if sys.platform == "win32":  # the app itself runs on Windows only; elsewhere the pure logic still imports, for tests
+    import sounddevice as sd
 
 APP_NAME, VERSION = "Thock", "0.1"
 HOME = Path.home() / ".voicetype"
@@ -362,10 +364,7 @@ def check_keys(soniox_key, openrouter_key):
 
 # ---------- Windows: key hook, foreground app, clipboard, paste ----------
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 LRESULT = ctypes.c_ssize_t
-HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wt.WPARAM, wt.LPARAM)
 
 
 class KBDLLHOOKSTRUCT(ctypes.Structure):
@@ -389,38 +388,43 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wt.DWORD), ("u", _U)]
 
 
-user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wt.HINSTANCE, wt.DWORD]
-user32.SetWindowsHookExW.restype = wt.HHOOK
-user32.UnhookWindowsHookEx.argtypes = [wt.HHOOK]
-user32.CallNextHookEx.argtypes = [wt.HHOOK, ctypes.c_int, wt.WPARAM, wt.LPARAM]
-user32.CallNextHookEx.restype = LRESULT
-user32.GetMessageW.argtypes = [ctypes.POINTER(wt.MSG), wt.HWND, wt.UINT, wt.UINT]
-user32.GetAsyncKeyState.restype = ctypes.c_short
-user32.SendInput.argtypes = [wt.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
-user32.GetForegroundWindow.restype = wt.HWND
-user32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
-user32.OpenClipboard.argtypes = [wt.HWND]
-user32.EnumClipboardFormats.argtypes = [wt.UINT]
-user32.EnumClipboardFormats.restype = wt.UINT
-user32.GetClipboardData.argtypes = [wt.UINT]
-user32.GetClipboardData.restype = wt.HANDLE
-user32.SetClipboardData.argtypes = [wt.UINT, wt.HANDLE]
-user32.SetClipboardData.restype = wt.HANDLE
-user32.RegisterClipboardFormatW.argtypes = [wt.LPCWSTR]
-user32.RegisterClipboardFormatW.restype = wt.UINT
-kernel32.GetModuleHandleW.argtypes = [wt.LPCWSTR]
-kernel32.GetModuleHandleW.restype = wt.HMODULE
-kernel32.OpenProcess.restype = wt.HANDLE
-kernel32.QueryFullProcessImageNameW.argtypes = [wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
-kernel32.CloseHandle.argtypes = [wt.HANDLE]
-kernel32.GlobalAlloc.argtypes = [wt.UINT, ctypes.c_size_t]
-kernel32.GlobalAlloc.restype = wt.HGLOBAL
-kernel32.GlobalLock.argtypes = [wt.HGLOBAL]
-kernel32.GlobalLock.restype = ctypes.c_void_p
-kernel32.GlobalUnlock.argtypes = [wt.HGLOBAL]
-kernel32.GlobalSize.argtypes = [wt.HGLOBAL]
-kernel32.GlobalSize.restype = ctypes.c_size_t
-kernel32.CreateMutexW.restype = wt.HANDLE
+if sys.platform == "win32":
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wt.WPARAM, wt.LPARAM)
+
+    user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wt.HINSTANCE, wt.DWORD]
+    user32.SetWindowsHookExW.restype = wt.HHOOK
+    user32.UnhookWindowsHookEx.argtypes = [wt.HHOOK]
+    user32.CallNextHookEx.argtypes = [wt.HHOOK, ctypes.c_int, wt.WPARAM, wt.LPARAM]
+    user32.CallNextHookEx.restype = LRESULT
+    user32.GetMessageW.argtypes = [ctypes.POINTER(wt.MSG), wt.HWND, wt.UINT, wt.UINT]
+    user32.GetAsyncKeyState.restype = ctypes.c_short
+    user32.SendInput.argtypes = [wt.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+    user32.GetForegroundWindow.restype = wt.HWND
+    user32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    user32.OpenClipboard.argtypes = [wt.HWND]
+    user32.EnumClipboardFormats.argtypes = [wt.UINT]
+    user32.EnumClipboardFormats.restype = wt.UINT
+    user32.GetClipboardData.argtypes = [wt.UINT]
+    user32.GetClipboardData.restype = wt.HANDLE
+    user32.SetClipboardData.argtypes = [wt.UINT, wt.HANDLE]
+    user32.SetClipboardData.restype = wt.HANDLE
+    user32.RegisterClipboardFormatW.argtypes = [wt.LPCWSTR]
+    user32.RegisterClipboardFormatW.restype = wt.UINT
+    kernel32.GetModuleHandleW.argtypes = [wt.LPCWSTR]
+    kernel32.GetModuleHandleW.restype = wt.HMODULE
+    kernel32.OpenProcess.restype = wt.HANDLE
+    kernel32.QueryFullProcessImageNameW.argtypes = [wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
+    kernel32.CloseHandle.argtypes = [wt.HANDLE]
+    kernel32.GlobalAlloc.argtypes = [wt.UINT, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = wt.HGLOBAL
+    kernel32.GlobalLock.argtypes = [wt.HGLOBAL]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [wt.HGLOBAL]
+    kernel32.GlobalSize.argtypes = [wt.HGLOBAL]
+    kernel32.GlobalSize.restype = ctypes.c_size_t
+    kernel32.CreateMutexW.restype = wt.HANDLE
 
 WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 13, 0x100, 0x101, 0x104, 0x105
 WM_TIMER = 0x113
@@ -730,9 +734,10 @@ class Profile:
             self.path.write_text(json.dumps(self.data), encoding="utf-8")
 
 
-ole32, oleaut32 = ctypes.WinDLL("ole32"), ctypes.WinDLL("oleaut32")
-oleaut32.SysStringLen.argtypes = [ctypes.c_void_p]
-oleaut32.SysFreeString.argtypes = [ctypes.c_void_p]
+if sys.platform == "win32":
+    ole32, oleaut32 = ctypes.WinDLL("ole32"), ctypes.WinDLL("oleaut32")
+    oleaut32.SysStringLen.argtypes = [ctypes.c_void_p]
+    oleaut32.SysFreeString.argtypes = [ctypes.c_void_p]
 _PP = ctypes.POINTER(ctypes.c_void_p)
 
 
@@ -767,10 +772,10 @@ def _bstr(b):
 
 class FieldReader:
     """Reads the focused text field of any app through UI Automation (COM, one thread only)."""
-    IID_VALUE, IID_TEXT = _guid("{a94cd8b1-0844-4cd6-9d2d-640537ab39e9}"), _guid("{32eba289-3583-42c9-9c59-3b6d9a1e9b6a}")
 
     def __init__(self):
         ole32.CoInitializeEx(None, 0)
+        self.IID_VALUE, self.IID_TEXT = _guid("{a94cd8b1-0844-4cd6-9d2d-640537ab39e9}"), _guid("{32eba289-3583-42c9-9c59-3b6d9a1e9b6a}")
         self.uia = ctypes.c_void_p()
         ole32.CoCreateInstance(ctypes.byref(_guid("{ff48dba4-60ef-4201-aa87-54103eef594e}")), None, 1,
                                ctypes.byref(_guid("{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}")), ctypes.byref(self.uia))
@@ -1157,11 +1162,6 @@ class SettingsServer:
 
 # ---------- Status overlay: Win32 layered window drawn with GDI+ ----------
 
-gdiplus = ctypes.WinDLL("gdiplus")
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
-WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
-
-
 class GdiplusStartupInput(ctypes.Structure):
     _fields_ = [("GdiplusVersion", ctypes.c_uint32), ("DebugEventCallback", ctypes.c_void_p),
                 ("SuppressBackgroundThread", wt.BOOL), ("SuppressExternalCodecs", wt.BOOL)]
@@ -1179,65 +1179,70 @@ class BLENDFUNCTION(ctypes.Structure):
                 ("SourceConstantAlpha", ctypes.c_ubyte), ("AlphaFormat", ctypes.c_ubyte)]
 
 
-class WNDCLASSW(ctypes.Structure):
-    _fields_ = [("style", wt.UINT), ("lpfnWndProc", WNDPROC), ("cbClsExtra", ctypes.c_int),
-                ("cbWndExtra", ctypes.c_int), ("hInstance", wt.HINSTANCE), ("hIcon", wt.HICON),
-                ("hCursor", wt.HANDLE), ("hbrBackground", wt.HBRUSH), ("lpszMenuName", wt.LPCWSTR),
-                ("lpszClassName", wt.LPCWSTR)]
-
-
 _P, _F, _I = ctypes.c_void_p, ctypes.c_float, ctypes.c_int
-for _name, _args in {
-    "GdiplusStartup": [ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(GdiplusStartupInput), _P],
-    "GdipCreateBitmapFromScan0": [_I, _I, _I, _I, _P, ctypes.POINTER(_P)],
-    "GdipGetImageGraphicsContext": [_P, ctypes.POINTER(_P)],
-    "GdipSetSmoothingMode": [_P, _I],
-    "GdipGraphicsClear": [_P, ctypes.c_uint32],
-    "GdipFlush": [_P, _I],
-    "GdipCreatePath": [_I, ctypes.POINTER(_P)],
-    "GdipAddPathArc": [_P, _F, _F, _F, _F, _F, _F],
-    "GdipClosePathFigure": [_P],
-    "GdipDeletePath": [_P],
-    "GdipCreateSolidFill": [ctypes.c_uint32, ctypes.POINTER(_P)],
-    "GdipFillPath": [_P, _P, _P],
-    "GdipFillEllipse": [_P, _P, _F, _F, _F, _F],
-    "GdipDeleteBrush": [_P],
-    "GdipTranslateWorldTransform": [_P, _F, _F, _I],
-    "GdipRotateWorldTransform": [_P, _F, _I],
-    "GdipResetWorldTransform": [_P],
-}.items():
-    getattr(gdiplus, _name).argtypes = _args
-gdi32.CreateCompatibleDC.argtypes = [wt.HDC]
-gdi32.CreateCompatibleDC.restype = wt.HDC
-gdi32.CreateDIBSection.argtypes = [wt.HDC, _P, wt.UINT, ctypes.POINTER(_P), wt.HANDLE, wt.DWORD]
-gdi32.CreateDIBSection.restype = wt.HBITMAP
-gdi32.SelectObject.argtypes = [wt.HDC, wt.HGDIOBJ]
-user32.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
-user32.CreateWindowExW.argtypes = [wt.DWORD, wt.LPCWSTR, wt.LPCWSTR, wt.DWORD, _I, _I, _I, _I,
-                                   wt.HWND, wt.HMENU, wt.HINSTANCE, _P]
-user32.CreateWindowExW.restype = wt.HWND
-user32.DefWindowProcW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
-user32.DefWindowProcW.restype = LRESULT
-user32.SetTimer.argtypes = [wt.HWND, ctypes.c_size_t, wt.UINT, _P]
-user32.UpdateLayeredWindow.argtypes = [wt.HWND, wt.HDC, ctypes.POINTER(wt.POINT), ctypes.POINTER(wt.SIZE), wt.HDC,
-                                       ctypes.POINTER(wt.POINT), wt.DWORD, ctypes.POINTER(BLENDFUNCTION), wt.DWORD]
-user32.ShowWindow.argtypes = [wt.HWND, _I]
-user32.IsWindowVisible.argtypes = [wt.HWND]
-user32.TranslateMessage.argtypes = [ctypes.POINTER(wt.MSG)]
-user32.DispatchMessageW.argtypes = [ctypes.POINTER(wt.MSG)]
-user32.SetProcessDpiAwarenessContext.argtypes = [_P]
-user32.SetCapture.argtypes = [wt.HWND]
-user32.SetForegroundWindow.argtypes = [wt.HWND]
-user32.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
-user32.CreatePopupMenu.restype = wt.HMENU
-user32.AppendMenuW.argtypes = [wt.HMENU, wt.UINT, ctypes.c_size_t, wt.LPCWSTR]
-user32.TrackPopupMenu.argtypes = [wt.HMENU, wt.UINT, _I, _I, _I, wt.HWND, _P]
-user32.DestroyMenu.argtypes = [wt.HMENU]
-user32.MonitorFromPoint.argtypes = [wt.POINT, wt.DWORD]
-user32.MonitorFromPoint.restype = wt.HMONITOR
-user32.SystemParametersInfoW.argtypes = [wt.UINT, wt.UINT, _P, wt.UINT]
-user32.LoadCursorW.argtypes = [wt.HINSTANCE, _P]
-user32.LoadCursorW.restype = wt.HANDLE
+
+if sys.platform == "win32":
+    gdiplus = ctypes.WinDLL("gdiplus")
+    gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+    WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
+
+    class WNDCLASSW(ctypes.Structure):
+        _fields_ = [("style", wt.UINT), ("lpfnWndProc", WNDPROC), ("cbClsExtra", ctypes.c_int),
+                    ("cbWndExtra", ctypes.c_int), ("hInstance", wt.HINSTANCE), ("hIcon", wt.HICON),
+                    ("hCursor", wt.HANDLE), ("hbrBackground", wt.HBRUSH), ("lpszMenuName", wt.LPCWSTR),
+                    ("lpszClassName", wt.LPCWSTR)]
+
+    for _name, _args in {
+        "GdiplusStartup": [ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(GdiplusStartupInput), _P],
+        "GdipCreateBitmapFromScan0": [_I, _I, _I, _I, _P, ctypes.POINTER(_P)],
+        "GdipGetImageGraphicsContext": [_P, ctypes.POINTER(_P)],
+        "GdipSetSmoothingMode": [_P, _I],
+        "GdipGraphicsClear": [_P, ctypes.c_uint32],
+        "GdipFlush": [_P, _I],
+        "GdipCreatePath": [_I, ctypes.POINTER(_P)],
+        "GdipAddPathArc": [_P, _F, _F, _F, _F, _F, _F],
+        "GdipClosePathFigure": [_P],
+        "GdipDeletePath": [_P],
+        "GdipCreateSolidFill": [ctypes.c_uint32, ctypes.POINTER(_P)],
+        "GdipFillPath": [_P, _P, _P],
+        "GdipFillEllipse": [_P, _P, _F, _F, _F, _F],
+        "GdipDeleteBrush": [_P],
+        "GdipTranslateWorldTransform": [_P, _F, _F, _I],
+        "GdipRotateWorldTransform": [_P, _F, _I],
+        "GdipResetWorldTransform": [_P],
+    }.items():
+        getattr(gdiplus, _name).argtypes = _args
+    gdi32.CreateCompatibleDC.argtypes = [wt.HDC]
+    gdi32.CreateCompatibleDC.restype = wt.HDC
+    gdi32.CreateDIBSection.argtypes = [wt.HDC, _P, wt.UINT, ctypes.POINTER(_P), wt.HANDLE, wt.DWORD]
+    gdi32.CreateDIBSection.restype = wt.HBITMAP
+    gdi32.SelectObject.argtypes = [wt.HDC, wt.HGDIOBJ]
+    user32.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
+    user32.CreateWindowExW.argtypes = [wt.DWORD, wt.LPCWSTR, wt.LPCWSTR, wt.DWORD, _I, _I, _I, _I,
+                                       wt.HWND, wt.HMENU, wt.HINSTANCE, _P]
+    user32.CreateWindowExW.restype = wt.HWND
+    user32.DefWindowProcW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+    user32.DefWindowProcW.restype = LRESULT
+    user32.SetTimer.argtypes = [wt.HWND, ctypes.c_size_t, wt.UINT, _P]
+    user32.UpdateLayeredWindow.argtypes = [wt.HWND, wt.HDC, ctypes.POINTER(wt.POINT), ctypes.POINTER(wt.SIZE), wt.HDC,
+                                           ctypes.POINTER(wt.POINT), wt.DWORD, ctypes.POINTER(BLENDFUNCTION), wt.DWORD]
+    user32.ShowWindow.argtypes = [wt.HWND, _I]
+    user32.IsWindowVisible.argtypes = [wt.HWND]
+    user32.TranslateMessage.argtypes = [ctypes.POINTER(wt.MSG)]
+    user32.DispatchMessageW.argtypes = [ctypes.POINTER(wt.MSG)]
+    user32.SetProcessDpiAwarenessContext.argtypes = [_P]
+    user32.SetCapture.argtypes = [wt.HWND]
+    user32.SetForegroundWindow.argtypes = [wt.HWND]
+    user32.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+    user32.CreatePopupMenu.restype = wt.HMENU
+    user32.AppendMenuW.argtypes = [wt.HMENU, wt.UINT, ctypes.c_size_t, wt.LPCWSTR]
+    user32.TrackPopupMenu.argtypes = [wt.HMENU, wt.UINT, _I, _I, _I, wt.HWND, _P]
+    user32.DestroyMenu.argtypes = [wt.HMENU]
+    user32.MonitorFromPoint.argtypes = [wt.POINT, wt.DWORD]
+    user32.MonitorFromPoint.restype = wt.HMONITOR
+    user32.SystemParametersInfoW.argtypes = [wt.UINT, wt.UINT, _P, wt.UINT]
+    user32.LoadCursorW.argtypes = [wt.HINSTANCE, _P]
+    user32.LoadCursorW.restype = wt.HANDLE
 
 BARS = 18  # waveform bars; the microphone delivers one loudness value per 50 ms
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONUP, WM_DEVICECHANGE = 0x200, 0x201, 0x202, 0x205, 0x219
