@@ -1,0 +1,77 @@
+# The one path Thock's installer is built, checked and released on: a clean Windows machine
+# with no Python, like a new user's PC.
+name: Windows installer
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Unit tests
+        run: uv run python -m unittest tests.test_fixes tests.test_speech_level
+
+      - name: Build app
+        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "settings.html;." voicetype.py
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=$version" installer\thock.iss
+          if ($LASTEXITCODE) { throw "ISCC exit $LASTEXITCODE" }
+          "installer: {0:N0} MB" -f ((Get-Item dist\Thock-setup-x64.exe).Length / 1MB)
+
+      - name: Install as a user would (silent), it starts and stays running
+        shell: pwsh
+        run: |
+          $run = Start-Process dist\Thock-setup-x64.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait -PassThru
+          if ($run.ExitCode) { throw "installer exit $($run.ExitCode)" }
+          $app = "$env:LOCALAPPDATA\Programs\Thock\Thock.exe"
+          if (-not (Test-Path $app)) { throw "Thock not installed at $app" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Thock.lnk")) { throw "no startup shortcut" }
+          Start-Sleep 15
+          $log = Get-Content "$env:USERPROFILE\.voicetype\voicetype.log" -Raw -ErrorAction SilentlyContinue
+          $log
+          if (-not (Get-Process Thock -ErrorAction SilentlyContinue)) { throw "Thock is not running after install" }
+          if ($log -notmatch "started, hotkey=") { throw "Thock did not log its start" }
+
+      - name: Uninstall removes it
+        shell: pwsh
+        run: |
+          Start-Process "$env:LOCALAPPDATA\Programs\Thock\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
+          $app = "$env:LOCALAPPDATA\Programs\Thock\Thock.exe"
+          for ($i = 0; $i -lt 30 -and (Test-Path $app); $i++) { Start-Sleep 1 }
+          if (Test-Path $app) { throw "uninstall left $app" }
+          if (Get-Process Thock -ErrorAction SilentlyContinue) { throw "Thock still running after uninstall" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Thock-setup-x64
+          path: dist/Thock-setup-x64.exe
+
+      - name: Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME does not match app version $version" }
+          $sha = (Get-FileHash dist\Thock-setup-x64.exe -Algorithm SHA256).Hash.ToLower()
+          $notes = "Built and verified on a clean Windows runner.`n`nSHA-256: ``$sha``"
+          gh release create $env:GITHUB_REF_NAME dist\Thock-setup-x64.exe --title "Thock $version" --notes $notes

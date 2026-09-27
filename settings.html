@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thock 설정</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect x='1' y='1' width='34' height='34' rx='9' fill='%23101010'/%3E%3Cg fill='%23fff'%3E%3Crect x='8.6' y='15.2' width='2.8' height='5.6' rx='1.4'/%3E%3Crect x='12.9' y='12.4' width='2.8' height='11.2' rx='1.4'/%3E%3Crect x='17.2' y='9.4' width='2.8' height='17.2' rx='1.4'/%3E%3Crect x='21.5' y='13.5' width='2.8' height='9' rx='1.4'/%3E%3Crect x='25.8' y='11.3' width='2.8' height='13.4' rx='1.4'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f4f4f6; --card: #ffffff; --text: #111113; --muted: #66666d; --line: #e4e4e8;
+    --field: #f7f7f9; --primary: #111113; --on-primary: #ffffff; --ok: #1a7f37; --bad: #c4291c;
+    --ring: #3b82f6; --seg: #ececef;
+    /* Hierarchy is size and weight only: app 20/700 > section 17/700 > subsection 15/700
+       > item 14/500 > body 13/400 > small 12. */
+    --font: "Noto Sans KR", "Malgun Gothic", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e0e10; --card: #18181b; --text: #f4f4f5; --muted: #a1a1aa; --line: #2a2a2f;
+      --field: #111114; --primary: #f4f4f5; --on-primary: #111113; --ok: #4ade80; --bad: #f87171;
+      --ring: #60a5fa; --seg: #232328;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 400 13px/1.55 var(--font); letter-spacing: -0.005em;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  /* Spacing: 16px between blocks in a card, 8px inside a block, 3px between a label and its hint. */
+  main { flex: 1; padding: 24px 24px 20px; display: grid; gap: 16px; align-content: start; }
+  header { display: flex; align-items: center; gap: 12px; padding: 0 4px 4px; }
+  header svg { width: 36px; height: 36px; flex: none; }
+  h1 { font-size: 20px; font-weight: 700; margin: 0; line-height: 1.3; letter-spacing: -0.02em; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px;
+    display: flex; flex-direction: column; gap: 16px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 0 0 -2px; line-height: 1.35; letter-spacing: -0.015em; }
+  .subhead { font-size: 15px; font-weight: 700; line-height: 1.4; letter-spacing: -0.01em; }
+  .group { display: flex; flex-direction: column; gap: 8px; }
+  .sep { border-top: 1px solid var(--line); padding-top: 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .row > div:first-child { flex: 1 1 220px; min-width: 0; }
+  .label { font-size: 14px; font-weight: 500; line-height: 1.45; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0; }
+  .label + .hint { margin-top: 3px; }
+
+  .seg { display: inline-flex; background: var(--seg); border-radius: 10px; padding: 3px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label { padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 13px; color: var(--muted); }
+  .seg input:checked + label { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .seg input:focus-visible + label { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+  .switch { position: relative; width: 44px; height: 26px; flex: none; }
+  .switch input { appearance: none; margin: 0; width: 44px; height: 26px; border-radius: 13px; background: var(--seg);
+    border: 1px solid var(--line); cursor: pointer; transition: background .15s; }
+  .switch input:checked { background: var(--primary); border-color: var(--primary); }
+  .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+  .switch input:checked::after { transform: translateX(18px); background: var(--on-primary); }
+  .switch input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  textarea, input[type=password], input[type=text] {
+    width: 100%; background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; font: inherit; font-size: 14px;
+  }
+  textarea { min-height: 128px; resize: vertical; }
+  textarea:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; border-color: transparent; }
+  .field { display: grid; gap: 6px; }
+  .field > label { font-size: 14px; font-weight: 500; }
+  .field .sub { color: var(--muted); font-size: 13px; font-weight: 400; }
+  .key { display: flex; gap: 6px; }
+  .field .seg { justify-self: start; }
+  .panel { margin-top: 6px; }
+  .count { color: var(--muted); font-size: 12px; text-align: right; }
+
+  button { font: inherit; font-size: 14px; font-weight: 500; border-radius: 10px; cursor: pointer; min-height: 40px; padding: 0 16px; }
+  button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .secondary:hover { background: var(--field); }
+  .icon { width: 40px; padding: 0; display: grid; place-items: center; flex: none; }
+  .icon svg { width: 18px; height: 18px; }
+  .primary { background: var(--primary); color: var(--on-primary); border: 0; min-width: 96px; font-weight: 700; }
+  .primary:disabled { opacity: .35; cursor: default; }
+  .checks { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .checks .result { margin-left: 6px; }
+  .result { font-size: 12px; font-weight: 500; }
+  .result.ok { color: var(--ok); } .result.bad { color: var(--bad); }
+
+  .notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .notes:empty { display: none; }
+  .notes li { display: flex; align-items: center; gap: 10px; background: var(--field); border: 1px solid var(--line);
+    border-radius: 10px; padding: 6px 6px 6px 12px; }
+  .notes .pair { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .notes .from { color: var(--muted); text-decoration: line-through; }
+  .notes .to { font-weight: 500; }
+  .badge { font-size: 12px; font-weight: 500; border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+    background: var(--seg); color: var(--muted); }
+  .badge.on { background: var(--primary); color: var(--on-primary); }
+  .notes button { min-height: 32px; width: 32px; padding: 0; display: grid; place-items: center; }
+  .notes button svg { width: 14px; height: 14px; }
+  .add { display: flex; align-items: center; gap: 8px; }
+  .add input { flex: 1; min-width: 0; }
+  .code { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--field); border: 1px dashed var(--line); }
+  .code b { font-size: 18px; letter-spacing: 0.08em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--field); border: 1px solid var(--line); }
+  .me-domain { font-size: 14px; font-weight: 500; }
+  footer { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line);
+    padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  #status { color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg viewBox="0 0 36 36" aria-hidden="true">
+      <rect x="1" y="1" width="34" height="34" rx="9" fill="#101010" stroke="#3a3a3a" stroke-width="1"/>
+      <g fill="#fff">
+        <rect x="8.6" y="15.2" width="2.8" height="5.6" rx="1.4"/><rect x="12.9" y="12.4" width="2.8" height="11.2" rx="1.4"/>
+        <rect x="17.2" y="9.4" width="2.8" height="17.2" rx="1.4"/><rect x="21.5" y="13.5" width="2.8" height="9" rx="1.4"/>
+        <rect x="25.8" y="11.3" width="2.8" height="13.4" rx="1.4"/>
+      </g>
+    </svg>
+    <div>
+      <h1>Thock</h1>
+      <p>Voice Typing</p>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-dictation">
+    <h2 id="h-dictation">받아쓰기</h2>
+    <div class="group">
+      <div class="row">
+        <div class="label" id="l-hotkey">단축키</div>
+        <div class="seg" role="radiogroup" aria-labelledby="l-hotkey">
+          <input type="radio" name="hotkey" id="hk-caps" value="capslock"><label for="hk-caps">CapsLock</label>
+          <input type="radio" name="hotkey" id="hk-scroll" value="scrolllock"><label for="hk-scroll">ScrollLock</label>
+        </div>
+      </div>
+      <p class="hint" id="hotkey-hint"></p>
+    </div>
+    <div class="row sep">
+      <div>
+        <div class="label">표시 위치</div>
+        <p class="hint">작업 표시줄 위의 작은 막대를 끌어서 옮길 수 있습니다.</p>
+      </div>
+      <button class="secondary" type="button" id="reset">처음 위치로</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-keys">
+    <h2 id="h-keys">연결</h2>
+    <div class="field">
+      <label for="soniox">음성 인식 <span class="sub">· Soniox API 키</span></label>
+      <div class="key">
+        <input type="password" id="soniox" autocomplete="off" spellcheck="false">
+        <button class="secondary icon" type="button" data-reveal="soniox" aria-label="Soniox 키 보기"></button>
+      </div>
+    </div>
+    <div class="row sep">
+      <div>
+        <label class="label" for="polish">AI 교정</label>
+        <p class="hint">"음, 어" 같은 군말을 지우고 띄어쓰기와 이름 표기를 바로잡습니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
+    </div>
+    <div class="field">
+      <div class="label" id="l-provider">교정에 쓸 계정</div>
+      <div class="seg" role="radiogroup" aria-labelledby="l-provider">
+        <input type="radio" name="provider" id="pv-chatgpt" value="chatgpt"><label for="pv-chatgpt">ChatGPT 구독</label>
+        <input type="radio" name="provider" id="pv-openrouter" value="openrouter"><label for="pv-openrouter">OpenRouter 키</label>
+      </div>
+      <div id="panel-chatgpt" class="group panel">
+        <div class="row">
+          <div>
+            <div class="label" id="gpt-status"></div>
+            <p class="hint" id="gpt-hint"></p>
+          </div>
+          <button class="secondary" type="button" id="gpt-login">ChatGPT로 로그인</button>
+        </div>
+        <p class="code" id="gpt-code" hidden></p>
+      </div>
+      <div id="panel-openrouter" class="key panel">
+        <input type="password" id="openrouter" autocomplete="off" spellcheck="false" aria-label="OpenRouter API 키">
+        <button class="secondary icon" type="button" data-reveal="openrouter" aria-label="OpenRouter 키 보기"></button>
+      </div>
+    </div>
+    <div class="checks sep">
+      <button class="secondary" type="button" id="check">연결 확인</button>
+      <span class="result" id="r-soniox" aria-live="polite"></span>
+      <span class="result" id="r-polish" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-terms">
+    <h2 id="h-terms">용어 사전</h2>
+    <div class="field">
+      <label for="terms">잘 틀리는 이름이나 전문용어 <span class="sub">· 한 줄에 하나씩</span></label>
+      <textarea id="terms" spellcheck="false"></textarea>
+      <div class="count" id="terms-count"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-learn">
+    <h2 id="h-learn">배우기</h2>
+    <div class="row">
+      <div>
+        <label class="label" for="learn">자동으로 배우기</label>
+        <p class="hint">붙여 넣은 뒤 직접 고친 단어와 자주 쓰는 말을 배워 다음부터 더 정확하게 적습니다. 배운 내용은 이 PC에만 저장됩니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="learn" role="switch"></span>
+    </div>
+    <div class="group sep">
+      <div class="subhead">오타 노트</div>
+      <p class="hint" id="notes-empty">아직 없습니다. 붙여 넣은 글에서 틀린 단어를 고치면 여기에 쌓이고, 같은 단어를 두 번 고치면 다음부터 맞게 적습니다.</p>
+      <ul class="notes" id="notes" aria-label="오타 노트"></ul>
+      <form class="add" id="note-form">
+        <input type="text" id="note-old" placeholder="틀린 표기" aria-label="틀린 표기" spellcheck="false">
+        <span aria-hidden="true">→</span>
+        <input type="text" id="note-new" placeholder="바른 표기" aria-label="바른 표기" spellcheck="false">
+        <button class="secondary" type="submit">추가</button>
+      </form>
+    </div>
+    <div class="group sep">
+      <div class="subhead">Thock이 아는 나</div>
+      <p class="hint" id="me-empty">받아쓰기가 쌓이면 분야와 자주 쓰는 말을 스스로 파악합니다.</p>
+      <div id="me" class="group" hidden>
+        <div class="me-domain" id="me-domain"></div>
+        <p class="hint" id="me-topics"></p>
+        <div class="chips" id="me-terms" aria-label="자주 쓰는 말"></div>
+        <p class="hint" id="me-updated"></p>
+      </div>
+      <div class="checks">
+        <button class="secondary" type="button" id="me-rebuild">다시 파악하기</button>
+        <button class="secondary" type="button" id="me-reset">지우기</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="status" role="status" aria-live="polite"></span>
+  <button class="primary" type="button" id="save" disabled>저장</button>
+</footer>
+
+<script>
+const TOKEN = "__TOKEN__";
+const $ = (id) => document.getElementById(id);
+const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body ? "POST" : "GET",
+    headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(res.status);
+  return res.json();
+}
+
+function termsList() { return $("terms").value.split("\n").map((t) => t.trim()).filter(Boolean); }
+function hotkey() { return document.querySelector("input[name=hotkey]:checked").value; }
+function provider() { return document.querySelector("input[name=provider]:checked").value; }
+let loginTimer = null;
+
+function renderProvider(s) {
+  $("panel-chatgpt").hidden = provider() !== "chatgpt";
+  $("panel-openrouter").hidden = provider() !== "openrouter";
+  if (!s) return;
+  const g = s.chatgpt;
+  $("gpt-status").textContent = g.signed_in ? `로그인됨${g.email ? " · " + g.email : ""}` : "로그인하지 않음";
+  $("gpt-hint").textContent = g.signed_in
+    ? "ChatGPT 구독 한도 안에서 교정합니다. Codex 로그인과는 따로 관리됩니다."
+    : "ChatGPT Plus 이상 구독으로 교정합니다. 따로 비용이 들지 않습니다.";
+  $("gpt-login").textContent = g.signed_in ? "로그아웃" : "ChatGPT로 로그인";
+  const waiting = g.state === "waiting" && !g.signed_in;
+  $("gpt-code").hidden = !waiting;
+  if (waiting) {
+    $("gpt-code").innerHTML = "";
+    $("gpt-code").append("브라우저에 열린 로그인 페이지에 이 코드를 입력하세요: ", Object.assign(document.createElement("b"), { textContent: g.user_code }));
+  }
+  if (g.state === "failed" || g.state === "expired") setStatus("로그인하지 못했습니다. 다시 시도해 주세요.");
+  clearTimeout(loginTimer);
+  if (waiting) loginTimer = setTimeout(async () => renderProvider(await api("/api/settings")), 2000);
+}
+function setStatus(text) { $("status").textContent = text; }
+function dirty() { $("save").disabled = false; setStatus(""); }
+
+function renderHint() {
+  const key = hotkey() === "capslock" ? "CapsLock" : "ScrollLock";
+  $("hotkey-hint").textContent = `${key}을 누른 채 말하고 떼면 글이 들어갑니다. 짧게 한 번 누르면 계속 듣고, 다시 누르면 멈춥니다.`
+    + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
+  $("terms-count").textContent = `${termsList().length}개`;
+}
+
+const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+function renderNotes(notes) {
+  const list = $("notes");
+  list.replaceChildren(...notes.map((n) => {
+    const li = document.createElement("li");
+    const pair = document.createElement("span");
+    pair.className = "pair";
+    const from = document.createElement("span"); from.className = "from"; from.textContent = n.old;
+    const to = document.createElement("span"); to.className = "to"; to.textContent = n.new;
+    pair.append(from, " → ", to);
+    const badge = document.createElement("span");
+    badge.className = `badge${n.state === "seen" ? "" : " on"}`;
+    badge.textContent = { auto: "자동으로 바꿈", on: "적용 중", seen: "한 번 고침" }[n.state];
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "secondary"; del.innerHTML = TRASH;
+    del.setAttribute("aria-label", `${n.old} → ${n.new} 삭제`);
+    del.addEventListener("click", async () => renderNotes(await api("/api/notes", { action: "delete", old: n.old })));
+    li.append(pair, badge, del);
+    return li;
+  }));
+  $("notes-empty").hidden = notes.length > 0;
+}
+
+$("note-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const old = $("note-old").value.trim(), neu = $("note-new").value.trim();
+  if (!old || !neu || old === neu) { setStatus("틀린 표기와 바른 표기를 서로 다르게 적어 주세요."); return; }
+  renderNotes(await api("/api/notes", { action: "add", old, new: neu }));
+  $("note-old").value = ""; $("note-new").value = "";
+  setStatus("오타 노트에 추가했습니다. 다음 받아쓰기부터 바로 바꿔 적습니다.");
+  $("note-old").focus();
+});
+
+function renderMe(p) {
+  const has = Boolean(p && p.domain);
+  $("me").hidden = !has;
+  $("me-empty").hidden = has;
+  $("me-rebuild").textContent = p && p.building ? "파악하는 중…" : "다시 파악하기";
+  $("me-rebuild").disabled = Boolean(p && p.building);
+  if (p && p.building) setTimeout(async () => renderMe((await api("/api/settings")).profile), 1500);
+  if (!has) return;
+  $("me-domain").textContent = p.domain;
+  $("me-topics").textContent = (p.topics || []).join(" · ");
+  $("me-terms").replaceChildren(...(p.terms || []).slice(0, 40).map((t) => Object.assign(document.createElement("span"), { textContent: t })));
+  $("me-updated").textContent = `자주 쓰는 말 ${(p.terms || []).length}개 · ${p.updated}에 파악`;
+}
+
+$("me-rebuild").addEventListener("click", async () => renderMe((await api("/api/profile", { action: "rebuild" })).profile));
+$("me-reset").addEventListener("click", async () => {
+  renderMe((await api("/api/profile", { action: "reset" })).profile);
+  setStatus("파악한 내용을 지웠습니다. 받아쓰기가 50번 더 쌓이면 다시 파악합니다.");
+});
+
+function fill(s) {
+  document.querySelector(`input[name=hotkey][value=${s.hotkey}]`).checked = true;
+  $("polish").checked = s.polish;
+  $("learn").checked = s.learn;
+  document.querySelector(`input[name=provider][value=${s.polish_provider}]`).checked = true;
+  renderProvider(s);
+  renderNotes(s.notes);
+  renderMe(s.profile);
+  $("terms").value = s.terms.join("\n");
+  for (const k of ["soniox", "openrouter"]) {
+    $(k).value = "";
+    $(k).placeholder = s[`${k}_key`] ? `저장됨 ${s[`${k}_key`]}` : "여기에 붙여 넣기";
+  }
+  renderHint();
+}
+
+document.querySelectorAll("[data-reveal]").forEach((btn) => {
+  btn.innerHTML = EYE;
+  btn.addEventListener("click", () => {
+    const input = $(btn.dataset.reveal);
+    input.type = input.type === "password" ? "text" : "password";
+  });
+});
+// The note inputs save through their own button; everything else waits for 저장.
+document.querySelectorAll("input:not(.add input), textarea").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
+
+$("save").addEventListener("click", async () => {
+  $("save").disabled = true;
+  setStatus("저장 중…");
+  try {
+    fill(await api("/api/settings", {
+      hotkey: hotkey(), polish: $("polish").checked, learn: $("learn").checked, terms: termsList(), polish_provider: provider(),
+      soniox_api_key: $("soniox").value, openrouter_api_key: $("openrouter").value,
+    }));
+    setStatus("저장했습니다. 바로 적용됩니다.");
+  } catch (e) {
+    $("save").disabled = false;
+    setStatus("저장하지 못했습니다. Thock이 켜져 있는지 확인해 주세요.");
+  }
+});
+
+function showResult(id, ok, good, bad) {
+  $(id).textContent = ok ? good : bad;
+  $(id).className = `result ${ok ? "ok" : "bad"}`;
+}
+
+$("check").addEventListener("click", async () => {
+  for (const id of ["r-soniox", "r-polish"]) { $(id).textContent = ""; $(id).className = "result"; }
+  $("check").disabled = true;
+  setStatus("확인 중…");
+  try {
+    const r = await api("/api/check", { soniox_api_key: $("soniox").value, openrouter_api_key: $("openrouter").value,
+                                        polish_provider: provider() });
+    showResult("r-soniox", r.soniox, "음성 인식 ✓", "음성 인식 ✕ 키를 확인해 주세요");
+    if (!$("polish").checked) showResult("r-polish", true, "교정 꺼짐", "");
+    else showResult("r-polish", r.polish, "교정 ✓",
+      provider() === "chatgpt" ? "교정 ✕ ChatGPT 로그인이 필요합니다" : "교정 ✕ 키를 확인해 주세요");
+    setStatus("");
+  } catch (e) {
+    setStatus("확인하지 못했습니다. 인터넷 연결을 확인해 주세요.");
+  } finally {
+    $("check").disabled = false;
+  }
+});
+
+document.querySelectorAll("input[name=provider]").forEach((el) => el.addEventListener("change", () => renderProvider()));
+
+$("gpt-login").addEventListener("click", async () => {
+  const signedIn = $("gpt-login").textContent === "로그아웃";
+  try {
+    renderProvider(await api(signedIn ? "/api/chatgpt/logout" : "/api/chatgpt/login", {}));
+    setStatus(signedIn ? "로그아웃했습니다." : "브라우저에서 ChatGPT 로그인 페이지를 열었습니다.");
+  } catch (e) {
+    setStatus("ChatGPT 로그인을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+  }
+});
+
+$("reset").addEventListener("click", async () => {
+  await api("/api/settings", { position: null });
+  setStatus("표시를 처음 위치로 옮겼습니다.");
+});
+
+api("/api/settings").then(fill).catch(() => setStatus("설정을 불러오지 못했습니다. Thock이 켜져 있는지 확인해 주세요."));
+</script>
+</body>
+</html>
