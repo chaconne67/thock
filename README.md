@@ -67,10 +67,11 @@ uv run python tests/check_pipeline.py 시험.wav
 - 키를 뗀 순간부터 결과가 나오기까지 걸린 시간을 출력합니다.
 
 ```powershell
-uv run python -m unittest tests.test_fixes
+uv run python -m unittest tests.test_fixes tests.test_speech_level
 ```
 
-- 붙여 넣은 뒤 어떤 수정을 "단어 고침"으로 볼지 시험합니다.
+- 붙여 넣은 뒤 어떤 수정을 "단어 고침"으로 볼지, 말투(반말·존댓말)를 어떻게 읽는지 시험합니다.
+- 이 두 시험은 Windows 기능을 쓰지 않아 Linux·macOS에서도 돌아갑니다.
 
 ## WhisperTyping으로 되돌리기
 
