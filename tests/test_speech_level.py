@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from voicetype import sentence_levels, speech_level_rule  # noqa: E402
+from thock.correction import sentence_levels, speech_level_rule  # noqa: E402
 
 KEEP = "문장 끝 말투(반말·존댓말)는 말한 그대로 둔다."
 

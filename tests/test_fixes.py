@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from voicetype import fixes_in_field, word_fixes  # noqa: E402
+from thock.learning import fixes_in_field, word_fixes  # noqa: E402
 
 P = "펀드키퍼 저장소에 커밋하고 푸시해 줘."
 

@@ -24,7 +24,7 @@ jobs:
         run: uv run python -m unittest tests.test_fixes tests.test_speech_level
 
       - name: Build app
-        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "settings.html;." voicetype.py
+        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" voicetype.py
 
       - name: Build installer
         shell: pwsh
