@@ -76,4 +76,8 @@ jobs:
           if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME does not match app version $version" }
           $sha = (Get-FileHash dist\Thock-setup-x64.exe -Algorithm SHA256).Hash.ToLower()
           $notes = "Built and verified on a clean Windows runner.`n`nSHA-256: ``$sha``"
-          gh release create $env:GITHUB_REF_NAME dist\Thock-setup-x64.exe --title "Thock $version" --notes $notes
+          # Hand-written notes for this tag go on top when release-notes\<tag>.md exists.
+          $file = "release-notes\$env:GITHUB_REF_NAME.md"
+          if (Test-Path $file) { $notes = (Get-Content $file -Raw -Encoding utf8).TrimEnd() + "`n`n---`n`n" + $notes }
+          Set-Content -Path release-notes.txt -Value $notes -Encoding utf8
+          gh release create $env:GITHUB_REF_NAME dist\Thock-setup-x64.exe --title "Thock $version" --notes-file release-notes.txt
