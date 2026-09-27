@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import voicetype as v  # noqa: E402
+from thock.config import HOME, load_settings  # noqa: E402
+from thock.correction import ChatGPTAuth, Polisher  # noqa: E402
+from thock.learning import Profile, TypoNotes  # noqa: E402
 
 REGRESSION = [
     "속 보이스 설정 창을 열어줘.",
@@ -38,8 +40,8 @@ REGISTER = [
 ]
 
 if __name__ == "__main__":
-    s = v.load_settings()
-    polisher = v.Polisher(s, v.TypoNotes(v.HOME / "typo_notes.json"), v.ChatGPTAuth(v.HOME / "chatgpt_auth.json"),
-                          v.Profile(v.HOME / "profile.json", v.HOME / "history.jsonl"))
+    s = load_settings()
+    polisher = Polisher(s, TypoNotes(HOME / "typo_notes.json"), ChatGPTAuth(HOME / "chatgpt_auth.json"),
+                        Profile(HOME / "profile.json", HOME / "history.jsonl"))
     for case in (REGISTER if "--register" in sys.argv else REGRESSION):
         print(f"{case}\n   -> {polisher.polish(case, 'WindowsTerminal.exe')}")

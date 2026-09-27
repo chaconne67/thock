@@ -11,13 +11,16 @@ import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import voicetype  # noqa: E402
+from thock.config import HOME, SAMPLE_RATE, load_settings  # noqa: E402
+from thock.correction import ChatGPTAuth, Polisher  # noqa: E402
+from thock.learning import Profile, TypoNotes  # noqa: E402
+from thock.speech import transcribe  # noqa: E402
 
 
 async def realtime_chunks(path, marks):
     with wave.open(str(path)) as w:
-        assert (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (voicetype.SAMPLE_RATE, 1, 2), path
-        step = voicetype.SAMPLE_RATE // 10
+        assert (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (SAMPLE_RATE, 1, 2), path
+        step = SAMPLE_RATE // 10
         while frames := w.readframes(step):
             yield frames
             await asyncio.sleep(0.1)
@@ -25,14 +28,14 @@ async def realtime_chunks(path, marks):
 
 
 async def main(paths):
-    s = voicetype.load_settings()
-    notes = voicetype.TypoNotes(voicetype.HOME / "typo_notes.json")
-    profile = voicetype.Profile(voicetype.HOME / "profile.json", voicetype.HOME / "history.jsonl")
-    polisher = voicetype.Polisher(s, notes, voicetype.ChatGPTAuth(voicetype.HOME / "chatgpt_auth.json"), profile)
+    s = load_settings()
+    notes = TypoNotes(HOME / "typo_notes.json")
+    profile = Profile(HOME / "profile.json", HOME / "history.jsonl")
+    polisher = Polisher(s, notes, ChatGPTAuth(HOME / "chatgpt_auth.json"), profile)
     for path in paths:
         marks = {}
-        raw = await voicetype.transcribe(realtime_chunks(path, marks), s["soniox_api_key"],
-                                         lambda: profile.context("WindowsTerminal.exe", s["terms"] + notes.terms()))
+        raw = await transcribe(realtime_chunks(path, marks), s["soniox_api_key"],
+                               lambda: profile.context("WindowsTerminal.exe", s["terms"] + notes.terms()))
         stt = time.perf_counter() - marks["released"]
         text = await asyncio.to_thread(polisher.polish, raw, "WindowsTerminal.exe") if raw else raw
         total = time.perf_counter() - marks["released"]
