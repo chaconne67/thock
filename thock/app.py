@@ -31,6 +31,7 @@ class Session:
         self.audio = asyncio.Queue()
         self.started = time.perf_counter()
         self.released = None
+        self.preview = ""  # what has been heard so far, shown above the pill until the paste
         self.done = self.loop.create_future()
         self.stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
                                         blocksize=SAMPLE_RATE // 20, callback=self._on_audio)
@@ -59,7 +60,8 @@ class Session:
         s, notes, record = self.state.settings, self.state.notes, {"app": self.app}
         try:
             raw = await transcribe(self.chunks(), s["soniox_api_key"],
-                                   lambda: self.state.profile.context(self.app, s["terms"] + notes.terms()))
+                                   lambda: self.state.profile.context(self.app, s["terms"] + notes.terms()),
+                                   lambda heard: setattr(self, "preview", heard.strip()))
             record.update(raw=raw, stt_seconds=round(time.perf_counter() - self.released, 3))
             text = raw
             if raw and s["polish"]:
@@ -185,6 +187,11 @@ class App:
         if self.active:
             return "processing", False
         return None, False
+
+    def preview(self):
+        """For the overlay: what the newest dictation has heard so far, until it is pasted."""
+        session = self.last
+        return session.preview if session and session in self.active else ""
 
     def public_settings(self):
         s = self.settings

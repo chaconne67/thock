@@ -11,9 +11,10 @@ from .config import SAMPLE_RATE, SONIOX_MODEL, SONIOX_URL
 _background = set()  # keeps fire-and-forget tasks alive until they finish
 
 
-async def transcribe(chunks, api_key, get_context):
+async def transcribe(chunks, api_key, get_context, on_text=lambda text: None):
     """Stream PCM chunks to Soniox; after the source ends, finalize and return the final text.
-    get_context is called after connecting, so fixes learned while connecting are already included."""
+    get_context is called after connecting, so fixes learned while connecting are already included.
+    on_text gets the text heard so far, words still being revised included, each time Soniox sends more."""
     for attempt in range(3):  # audio keeps buffering in the queue while we retry
         try:
             ws = await websockets.connect(SONIOX_URL, max_size=None, open_timeout=5)
@@ -41,11 +42,13 @@ async def transcribe(chunks, api_key, get_context):
             data = json.loads(message)
             if data.get("error_code"):
                 raise RuntimeError(f"Soniox {data['error_code']}: {data.get('error_message')}")
-            final = [t["text"] for t in data.get("tokens", []) if t.get("is_final")]
-            if "<fin>" in final:
-                parts += final[: final.index("<fin>")]
+            tokens = data.get("tokens", [])
+            final = [t["text"] for t in tokens if t.get("is_final")]
+            done = "<fin>" in final
+            parts += final[: final.index("<fin>")] if done else final
+            on_text("".join(parts + [t["text"] for t in tokens if not t.get("is_final")]))
+            if done:
                 break
-            parts += final
         else:
             raise RuntimeError("Soniox closed before finalizing")
     finally:

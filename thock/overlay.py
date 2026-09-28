@@ -38,7 +38,12 @@ class WNDCLASSW(ctypes.Structure):
                 ("lpszClassName", wt.LPCWSTR)]
 
 
+class RectF(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_float), ("y", ctypes.c_float), ("w", ctypes.c_float), ("h", ctypes.c_float)]
+
+
 _P, _F, _I = ctypes.c_void_p, ctypes.c_float, ctypes.c_int
+_R = ctypes.POINTER(RectF)
 for _name, _args in {
     "GdiplusStartup": [ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(GdiplusStartupInput), _P],
     "GdipCreateBitmapFromScan0": [_I, _I, _I, _I, _P, ctypes.POINTER(_P)],
@@ -57,6 +62,12 @@ for _name, _args in {
     "GdipTranslateWorldTransform": [_P, _F, _F, _I],
     "GdipRotateWorldTransform": [_P, _F, _I],
     "GdipResetWorldTransform": [_P],
+    "GdipSetTextRenderingHint": [_P, _I],
+    "GdipCreateFontFamilyFromName": [wt.LPCWSTR, _P, ctypes.POINTER(_P)],
+    "GdipCreateFont": [_P, _F, _I, _I, ctypes.POINTER(_P)],
+    "GdipCreateStringFormat": [_I, wt.WORD, ctypes.POINTER(_P)],
+    "GdipMeasureString": [_P, wt.LPCWSTR, _I, _P, _R, _P, _R, ctypes.POINTER(_I), ctypes.POINTER(_I)],
+    "GdipDrawString": [_P, wt.LPCWSTR, _I, _P, _R, _P, _P],
 }.items():
     getattr(gdiplus, _name).argtypes = _args
 gdi32.CreateCompatibleDC.argtypes = [wt.HDC]
@@ -95,17 +106,15 @@ BARS = 18  # waveform bars; the microphone delivers one loudness value per 50 ms
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONUP, WM_DEVICECHANGE = 0x200, 0x201, 0x202, 0x205, 0x219
 
 
-def _capsule(g, x, y, w, h, argb):
-    """Fill an anti-aliased pill (rounded ends on the short side)."""
-    d = min(w, h)
+def _capsule(g, x, y, w, h, argb, r=None):
+    """Fill an anti-aliased rounded rectangle with corner radius r; by default a pill (rounded ends on the short side)."""
+    d = 2 * r if r else min(w, h)
     path, brush = _P(), _P()
     gdiplus.GdipCreatePath(0, ctypes.byref(path))
-    if w >= h:
-        gdiplus.GdipAddPathArc(path, x, y, d, d, 90, 180)
-        gdiplus.GdipAddPathArc(path, x + w - d, y, d, d, 270, 180)
-    else:
-        gdiplus.GdipAddPathArc(path, x, y, d, d, 180, 180)
-        gdiplus.GdipAddPathArc(path, x, y + h - d, d, d, 0, 180)
+    gdiplus.GdipAddPathArc(path, x, y, d, d, 180, 90)
+    gdiplus.GdipAddPathArc(path, x + w - d, y, d, d, 270, 90)
+    gdiplus.GdipAddPathArc(path, x + w - d, y + h - d, d, d, 0, 90)
+    gdiplus.GdipAddPathArc(path, x, y + h - d, d, d, 90, 90)
     gdiplus.GdipClosePathFigure(path)
     gdiplus.GdipCreateSolidFill(argb, ctypes.byref(brush))
     gdiplus.GdipFillPath(g, brush, path)
@@ -122,11 +131,13 @@ def _circle(g, cx, cy, r, argb):
 
 class Overlay:
     """A small handle above the taskbar that grows into the pill: live waveform while listening,
-    ripple while processing, red on error. Hover shows a settings button above it, right-click shows
-    a menu, dragging moves it. It never takes keyboard focus away from the text being written."""
+    ripple while processing, red on error. While a dictation is on its way, a box above the pill shows
+    what has been heard so far. Hover shows a settings button above it, right-click shows a menu,
+    dragging moves it. It never takes keyboard focus away from the text being written."""
     FULL_W, FULL_H = 132, 36   # pill while listening or hovered, in 96-dpi pixels before SIZE
     IDLE_W, IDLE_H = 44, 10    # resting handle
     GEAR, GAP, MARGIN = 30, 8, 10
+    TEXT_W, TEXT_H, FONT, PAD, LINES = 400, 72, 18, 9, 2  # preview box: widest, tallest, font px, padding, lines
     SIZE = 0.8
     MENU_SETTINGS, MENU_RESET, MENU_QUIT = 1, 2, 3
 
@@ -134,10 +145,11 @@ class Overlay:
         self.app, self.state, self.locked, self.alpha = app, None, False, 0
         self.w, self.h = float(self.IDLE_W), float(self.IDLE_H)
         self.hover, self.press, self.drag_anchor, self.drawn = False, None, None, None
+        self.heard, self.preview = None, None  # last text measured, and (text, width, height) to show
         self.dpi = user32.GetDpiForSystem() / 96
         self.s = self.dpi * self.SIZE
-        self.bw = round((self.FULL_W + 2 * self.MARGIN) * self.s)
-        self.bh = round((self.FULL_H + self.GAP + self.GEAR + 2 * self.MARGIN) * self.s)
+        self.bw = round((max(self.FULL_W, self.TEXT_W) + 2 * self.MARGIN) * self.s)
+        self.bh = round((self.FULL_H + self.GAP + max(self.GEAR, self.TEXT_H) + 2 * self.MARGIN) * self.s)
         token = ctypes.c_size_t()
         gdiplus.GdiplusStartup(ctypes.byref(token), ctypes.byref(GdiplusStartupInput(1)), None)
         # One premultiplied BGRA surface: GDI+ draws into it, UpdateLayeredWindow shows it.
@@ -149,6 +161,11 @@ class Overlay:
         gdiplus.GdipCreateBitmapFromScan0(self.bw, self.bh, self.bw * 4, 0xE200B, self.bits, ctypes.byref(bitmap))  # 32bppPARGB
         gdiplus.GdipGetImageGraphicsContext(bitmap, ctypes.byref(self.g))
         gdiplus.GdipSetSmoothingMode(self.g, 4)  # anti-alias
+        gdiplus.GdipSetTextRenderingHint(self.g, 4)  # grayscale anti-alias: ClearType smears on a see-through surface
+        family, self.font, self.format = _P(), _P(), _P()
+        gdiplus.GdipCreateFontFamilyFromName("Malgun Gothic", None, ctypes.byref(family))
+        gdiplus.GdipCreateFont(family, self.FONT * self.s, 0, 2, ctypes.byref(self.font))  # regular, pixels
+        gdiplus.GdipCreateStringFormat(0, 0, ctypes.byref(self.format))
         self.wndproc = WNDPROC(self._wndproc)
         wc = WNDCLASSW(lpfnWndProc=self.wndproc, hInstance=kernel32.GetModuleHandleW(None),
                        hCursor=user32.LoadCursorW(None, _P(32649)),  # hand
@@ -277,10 +294,11 @@ class Overlay:
         target_alpha = 255 if big else 190
         step = 40 if target_alpha > self.alpha else 16
         self.alpha = min(target_alpha, self.alpha + step) if target_alpha > self.alpha else max(target_alpha, self.alpha - step)
+        self._fit(self.app.preview() if state in ("recording", "processing") else "")
 
         live = self.state == "recording" and tuple(self.app.levels)
         ripple = self.state == "processing" and int(time.perf_counter() * 60)
-        key = (self.state, self.locked, self.hover, self.w, self.h, self.alpha, live, ripple, self.anchor())
+        key = (self.state, self.locked, self.hover, self.w, self.h, self.alpha, live, ripple, self.preview, self.anchor())
         if key == self.drawn:
             return  # nothing changed: stay idle, no redraw
         self.drawn = key
@@ -325,7 +343,47 @@ class Overlay:
 
         if self.hover and not self.state and grown > 0.85:
             self._draw_gear(self.bw / 2, y0 - (self.GAP + self.GEAR / 2) * s)
+        if self.preview and grown > 0.85:
+            self._draw_preview(y0 - self.GAP * s)
         gdiplus.GdipFlush(g, 1)
+
+    def _measure(self, text):
+        """(width, height, lines) of text wrapped to the preview box, in screen pixels."""
+        box, fitted, lines = RectF(), _I(), _I()
+        room = RectF(0, 0, (self.TEXT_W - 2 * self.PAD) * self.s, 1e5)
+        gdiplus.GdipMeasureString(self.g, text, -1, self.font, ctypes.byref(room), self.format,
+                                  ctypes.byref(box), ctypes.byref(fitted), ctypes.byref(lines))
+        return box.w, box.h, lines.value
+
+    def _fit(self, heard):
+        """Keep the end of heard that fits in LINES lines: self.preview = (text, width, height), or None."""
+        if heard == self.heard:
+            return
+        self.heard, lo, hi = heard, 0, len(heard)
+        while lo < hi:  # the earliest start whose tail still fits
+            mid = (lo + hi) // 2
+            if self._measure(("…" if mid else "") + heard[mid:])[2] <= self.LINES:
+                hi = mid
+            else:
+                lo = mid + 1
+        if lo and (space := heard.find(" ", lo, lo + 8)) > 0:
+            lo = space + 1  # start at a word
+        text = ("…" if lo else "") + heard[lo:]
+        self.preview = (text, *self._measure(text)[:2]) if heard else None
+
+    def _draw_preview(self, bottom):
+        """The box above the pill showing the end of what has been heard."""
+        g, s, pad = self.g, self.s, self.PAD * self.s
+        text, tw, th = self.preview
+        w, h = tw + 2 * pad, th + 2 * pad
+        x, y = (self.bw - w) / 2, bottom - h
+        _capsule(g, x, y, w, h, 0xFF3A3A3A, 10 * s)  # hairline edge
+        _capsule(g, x + s, y + s, w - 2 * s, h - 2 * s, 0xFF0F0F0F, 9 * s)
+        brush = _P()
+        gdiplus.GdipCreateSolidFill(0xF2FFFFFF, ctypes.byref(brush))
+        room = RectF(x + pad, y + pad, (self.TEXT_W - 2 * self.PAD) * s, th + s)  # same width as measured, same wrapping
+        gdiplus.GdipDrawString(g, text, -1, self.font, ctypes.byref(room), self.format, brush)
+        gdiplus.GdipDeleteBrush(brush)
 
     def _draw_gear(self, cx, cy):
         g, s = self.g, self.s
