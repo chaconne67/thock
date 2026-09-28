@@ -1,0 +1,18 @@
+Fonts for the live preview box, loaded privately by Thock (not installed into Windows).
+All are under the SIL Open Font License 1.1 (see the OFL-*.txt next to each font);
+the OFL allows bundling them with software, sold or not, but not selling them alone.
+
+Korean (each also has Latin letters)
+- NotoSansKR-Regular.ttf (Noto Sans KR, Source Han Sans / 본고딕): google/fonts
+  ofl/notosanskr/NotoSansKR[wght].ttf, static instance at wght 400 made with
+  fontTools varLib.instancer (GDI+ draws only static TrueType fonts).
+- Pretendard-Regular.ttf: orioncactus/pretendard release v1.3.9,
+  public/static/alternative/Pretendard-Regular.ttf, unchanged.
+- NanumBarunGothic.ttf (나눔바른고딕): NAVER hangeul.naver.com
+  webfont/zips/nanum-barun-gothic.zip, NanumBarunGothic.ttf, unchanged. NAVER
+  publishes the Nanum fonts under the SIL OFL 1.1 ("오픈 라이선스, 상업적 사용 허용").
+
+English (Latin only; used when the dictated text has no Hangul)
+- Inter-Regular.ttf: google/fonts ofl/inter/Inter[opsz,wght].ttf, instance at wght 400, opsz 14.
+- Roboto-Regular.ttf: google/fonts ofl/roboto/Roboto[wdth,wght].ttf, instance at wght 400, wdth 100.
+- SourceSans3-Regular.ttf: google/fonts ofl/sourcesans3/SourceSans3[wght].ttf, instance at wght 400.

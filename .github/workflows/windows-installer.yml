@@ -34,7 +34,7 @@ jobs:
         run: uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds
 
       - name: Build app
-        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/sounds;thock/sounds" voicetype.py
+        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/sounds;thock/sounds" --add-data "thock/fonts;thock/fonts" voicetype.py
 
       - name: Build installer
         shell: pwsh
@@ -61,6 +61,8 @@ jobs:
                             "hhkb-recording.wav", "hhkb-processing.wav")) {
             if (-not (Test-Path (Join-Path $soundDir $sound))) { throw "missing sound asset: $sound" }
           }
+          $fonts = Get-ChildItem "$env:LOCALAPPDATA\Programs\Thock\_internal\thock\fonts\*.ttf"
+          if ($fonts.Count -ne 6) { throw "expected 6 preview fonts, found $($fonts.Count)" }
           if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Thock.lnk")) { throw "no startup shortcut" }
           Start-Sleep 15
           $log = Get-Content "$env:USERPROFILE\.voicetype\voicetype.log" -Raw -ErrorAction SilentlyContinue

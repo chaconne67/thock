@@ -164,8 +164,15 @@
       <span class="switch"><input type="checkbox" id="preview" role="switch"></span>
     </div>
     <div class="row">
-      <label class="label" for="preview-font">글꼴</label>
-      <select id="preview-font"></select>
+      <label class="label" for="preview-font-ko">국문 글꼴</label>
+      <select id="preview-font-ko"></select>
+    </div>
+    <div class="row">
+      <div>
+        <label class="label" for="preview-font-en">영문 글꼴</label>
+        <p class="hint">한글이 없는 영어 받아쓰기에 씁니다. 한글과 섞인 영어는 국문 글꼴로 보입니다.</p>
+      </div>
+      <select id="preview-font-en"></select>
     </div>
     <div class="row">
       <label class="label" for="preview-size">글자 크기</label>
@@ -445,9 +452,10 @@ function fill(s) {
   $("sound-keyboard").replaceChildren(...Object.entries(s.sound_keyboards).map(([id, label]) => new Option(label, id)));
   $("sound-keyboard").value = s.sound_keyboard;
   $("preview").checked = s.preview;
-  const fonts = s.fonts.includes(s.preview_font) ? s.fonts : [s.preview_font, ...s.fonts];
-  $("preview-font").replaceChildren(...fonts.map((f) => new Option(s.fonts.includes(f) ? f : `${f} (설치 안 됨 · 맑은 고딕으로 표시)`, f)));
-  $("preview-font").value = s.preview_font;
+  for (const lang of ["ko", "en"]) {
+    $(`preview-font-${lang}`).replaceChildren(...Object.entries(s.preview_fonts[lang]).map(([name, label]) => new Option(label, name)));
+    $(`preview-font-${lang}`).value = s[`preview_font_${lang}`];
+  }
   $("preview-size").replaceChildren(...s.preview_font_sizes.map((n) => new Option(n, n)));
   $("preview-size").value = s.preview_font_size;
   document.querySelector(`input[name=provider][value=${s.polish_provider}]`).checked = true;
@@ -480,7 +488,8 @@ $("save").addEventListener("click", async () => {
       hotkey: hotkey(), polish: $("polish").checked, learn: $("learn").checked, terms: termsList(), polish_provider: provider(),
       sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
       sound_keyboard: $("sound-keyboard").value,
-      preview: $("preview").checked, preview_font: $("preview-font").value, preview_font_size: Number($("preview-size").value),
+      preview: $("preview").checked, preview_font_ko: $("preview-font-ko").value,
+      preview_font_en: $("preview-font-en").value, preview_font_size: Number($("preview-size").value),
       soniox_api_key: $("soniox").value, openrouter_api_key: $("openrouter").value,
     }));
     setStatus("저장했습니다. 바로 적용됩니다.");

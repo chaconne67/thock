@@ -13,12 +13,12 @@ from collections import deque
 
 import sounddevice as sd
 
-from .config import (APP_NAME, HOME, HOTKEYS, PREVIEW_FONT_SIZES, SAMPLE_RATE, SOUND_KEYBOARDS, TAP_SECONDS, load_settings, log,
-                     save_settings)
+from .config import (APP_NAME, HOME, HOTKEYS, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
+                     TAP_SECONDS, load_settings, log, save_settings)
 from .correction import ChatGPTAuth, Polisher
 from .editwatch import EditWatcher
 from .learning import Profile, TypoNotes
-from .overlay import BARS, installed_fonts, run_overlay
+from .overlay import BARS, run_overlay
 from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
@@ -200,8 +200,9 @@ class App:
         return {"hotkey": s["hotkey"], "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
                 "sound_recording": s["sound_recording"], "sound_processing": s["sound_processing"],
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
-                "preview": s["preview"], "preview_font": s["preview_font"], "preview_font_size": s["preview_font_size"],
-                "fonts": installed_fonts(), "preview_font_sizes": list(PREVIEW_FONT_SIZES),
+                "preview": s["preview"], "preview_font_ko": s["preview_font_ko"], "preview_font_en": s["preview_font_en"],
+                "preview_font_size": s["preview_font_size"], "preview_fonts": PREVIEW_FONTS,
+                "preview_font_sizes": list(PREVIEW_FONT_SIZES),
                 "notes": self.notes.listing(), "polish_provider": s["polish_provider"],
                 "profile": {**self.profile.data, "building": self.profile.building},
                 "chatgpt": {"signed_in": bool(self.auth.tokens), "email": self.auth.email(), **self.auth.login},
@@ -218,8 +219,9 @@ class App:
         for flag in ("polish", "learn", "sound_recording", "sound_processing", "preview"):
             if isinstance(body.get(flag), bool):
                 s[flag] = body[flag]
-        if isinstance(body.get("preview_font"), str) and body["preview_font"].strip():
-            s["preview_font"] = body["preview_font"].strip()[:100]
+        for lang, fonts in PREVIEW_FONTS.items():
+            if isinstance(body.get(f"preview_font_{lang}"), str) and body[f"preview_font_{lang}"] in fonts:
+                s[f"preview_font_{lang}"] = body[f"preview_font_{lang}"]
         if body.get("preview_font_size") in PREVIEW_FONT_SIZES:
             s["preview_font_size"] = body["preview_font_size"]
         if isinstance(body.get("terms"), list):

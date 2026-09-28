@@ -3,7 +3,9 @@
 import ctypes
 import ctypes.wintypes as wt
 import math
+import re
 import time
+from pathlib import Path
 
 from .config import APP_NAME, log, save_settings
 from .win32 import LRESULT, WM_TIMER, kernel32, user32
@@ -70,14 +72,17 @@ for _name, _args in {
     "GdipDrawString": [_P, wt.LPCWSTR, _I, _P, _R, _P, _P],
     "GdipDeleteFont": [_P],
     "GdipDeleteFontFamily": [_P],
-    "GdipNewInstalledFontCollection": [ctypes.POINTER(_P)],
-    "GdipGetFontCollectionFamilyCount": [_P, ctypes.POINTER(_I)],
-    "GdipGetFontCollectionFamilyList": [_P, _I, ctypes.POINTER(_P), ctypes.POINTER(_I)],
-    "GdipGetFamilyName": [_P, ctypes.c_wchar_p, wt.WORD],
+    "GdipNewPrivateFontCollection": [ctypes.POINTER(_P)],
+    "GdipPrivateAddFontFile": [_P, wt.LPCWSTR],
 }.items():
     getattr(gdiplus, _name).argtypes = _args
-# Started once at import: the settings page may list fonts before the overlay window exists.
 gdiplus.GdiplusStartup(ctypes.byref(ctypes.c_size_t()), ctypes.byref(GdiplusStartupInput(1)), None)
+# The preview fonts ship with Thock (thock/fonts, see SOURCE.txt) and are loaded for this process only.
+FONTS = _P()
+gdiplus.GdipNewPrivateFontCollection(ctypes.byref(FONTS))
+for _file in sorted((Path(__file__).resolve().parent / "fonts").glob("*.ttf")):
+    gdiplus.GdipPrivateAddFontFile(FONTS, str(_file))
+HANGUL = re.compile("[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]")
 gdi32.CreateCompatibleDC.argtypes = [wt.HDC]
 gdi32.CreateCompatibleDC.restype = wt.HDC
 gdi32.CreateDIBSection.argtypes = [wt.HDC, _P, wt.UINT, ctypes.POINTER(_P), wt.HANDLE, wt.DWORD]
@@ -168,7 +173,7 @@ class Overlay:
         gdiplus.GdipGetImageGraphicsContext(bitmap, ctypes.byref(self.g))
         gdiplus.GdipSetSmoothingMode(self.g, 4)  # anti-alias
         gdiplus.GdipSetTextRenderingHint(self.g, 5)  # ClearType: the text always sits on the opaque preview box
-        self.font, self.font_key, self.format = None, None, _P()
+        self.font, self.fonts, self.font_key, self.format = None, {}, None, _P()
         gdiplus.GdipStringFormatGetGenericTypographic(ctypes.byref(self.format))  # the default adds loose letter spacing
         self.wndproc = WNDPROC(self._wndproc)
         wc = WNDCLASSW(lpfnWndProc=self.wndproc, hInstance=kernel32.GetModuleHandleW(None),
@@ -353,19 +358,21 @@ class Overlay:
         gdiplus.GdipFlush(g, 1)
 
     def _update_font(self):
-        """Make the preview font again when its setting changes; Malgun Gothic if the chosen one is not installed."""
+        """Make the Korean and English preview fonts again when their settings change;
+        Malgun Gothic if a bundled font is missing."""
         s = self.app.settings
-        want = (s["preview_font"], s["preview_font_size"])
+        want = (s["preview_font_ko"], s["preview_font_en"], s["preview_font_size"])
         if want == self.font_key:
             return
         self.font_key, self.heard = want, None  # measure the text again in the new font
-        if self.font:
-            gdiplus.GdipDeleteFont(self.font)
-        family, self.font = _P(), _P()
-        if gdiplus.GdipCreateFontFamilyFromName(want[0], None, ctypes.byref(family)):
-            gdiplus.GdipCreateFontFamilyFromName("Malgun Gothic", None, ctypes.byref(family))
-        gdiplus.GdipCreateFont(family, want[1] * self.dpi, 0, 2, ctypes.byref(self.font))  # regular, pixels
-        gdiplus.GdipDeleteFontFamily(family)
+        for font in self.fonts.values():
+            gdiplus.GdipDeleteFont(font)
+        for lang, name in zip(("ko", "en"), want):
+            family, self.fonts[lang] = _P(), _P()
+            if gdiplus.GdipCreateFontFamilyFromName(name, FONTS, ctypes.byref(family)):
+                gdiplus.GdipCreateFontFamilyFromName("Malgun Gothic", None, ctypes.byref(family))
+            gdiplus.GdipCreateFont(family, want[2] * self.dpi, 0, 2, ctypes.byref(self.fonts[lang]))  # regular, pixels
+            gdiplus.GdipDeleteFontFamily(family)
 
     def _measure(self, text):
         """(width, height, lines) of text wrapped to the preview box, in screen pixels."""
@@ -380,6 +387,7 @@ class Overlay:
         if heard == self.heard:
             return
         self.heard, lo, hi = heard, 0, len(heard)
+        self.font = self.fonts["ko" if HANGUL.search(heard) else "en"]  # English fonts have no Hangul
         while lo < hi:  # the earliest start whose tail still fits
             mid = (lo + hi) // 2
             if self._measure(("…" if mid else "") + heard[mid:])[2] <= self.LINES:
@@ -419,21 +427,6 @@ class Overlay:
             gdiplus.GdipResetWorldTransform(g)
         _circle(g, cx, cy, ring, 0xFFFFFFFF)
         _circle(g, cx, cy, 2.2 * s, 0xFF0F0F0F)
-
-
-def installed_fonts():
-    """Names of the font families installed on this PC, for the settings page."""
-    fonts, count, found = _P(), _I(), _I()
-    gdiplus.GdipNewInstalledFontCollection(ctypes.byref(fonts))  # owned by GDI+, not freed
-    gdiplus.GdipGetFontCollectionFamilyCount(fonts, ctypes.byref(count))
-    families = (_P * count.value)()
-    gdiplus.GdipGetFontCollectionFamilyList(fonts, count, families, ctypes.byref(found))
-    name = ctypes.create_unicode_buffer(32)  # LF_FACESIZE
-    names = set()
-    for family in families[: found.value]:
-        gdiplus.GdipGetFamilyName(family, name, 0)
-        names.add(name.value)
-    return sorted(names)
 
 
 def run_overlay(app):
