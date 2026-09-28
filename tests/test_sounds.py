@@ -1,7 +1,9 @@
 """Phase selection, repeat playback and bundled keyboard audio."""
 
+import array
 import sys
 import tempfile
+import time
 import types
 import unittest
 import wave
@@ -46,30 +48,66 @@ class SoundPhases(unittest.TestCase):
 
 
 class SoundPlayback(unittest.TestCase):
-    def test_switches_loops_and_stops_without_restarting_same_mode(self):
-        calls = []
-        fake = types.SimpleNamespace(PlaySound=lambda name, flags: calls.append((name, flags)),
-                                     SND_FILENAME=1, SND_ASYNC=2, SND_LOOP=4, SND_NODEFAULT=8)
-        with patch.dict(sys.modules, {"winsound": fake}):
-            player = KeyboardSounds()
-            player.set_mode("recording")
-            player.set_mode("recording")
-            player.set_mode("processing")
-            player.set_mode(None)
-        self.assertEqual([Path(name).name if name else None for name, _ in calls],
-                         [None, "recording.wav", None, "processing.wav", None])
-        self.assertEqual(calls[1][1], 15)
+    @staticmethod
+    def wait_until(predicate):
+        deadline = time.monotonic() + 2
+        while not predicate() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        if not predicate():
+            raise AssertionError("sound worker did not reach the expected state")
 
-    def test_playback_failure_does_not_interrupt_dictation(self):
-        def fail_on_file(name, flags):
-            if name:
+    def test_switches_phases_and_fades_out_after_completion(self):
+        class Output:
+            def __init__(self):
+                self.open_count = 0
+                self.blocks = []
+
+            def __enter__(self):
+                self.open_count += 1
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def write(self, data):
+                samples = array.array("h", data)
+                self.blocks.append((samples[0], samples[-1]))
+                time.sleep(0.001)
+
+        output = Output()
+        fake = types.SimpleNamespace(RawOutputStream=lambda **_: output)
+        with patch.dict(sys.modules, {"sounddevice": fake}):
+            player = KeyboardSounds()
+            player._audio = {mode: array.array("h", [amplitude] * 480).tobytes()
+                             for mode, amplitude in (("recording", 1000), ("processing", 2000))}
+            player.set_mode("recording")
+            self.wait_until(lambda: len(output.blocks) >= 3)
+            player.set_mode("recording")
+            player.set_mode("processing")
+            self.wait_until(lambda: any(first == 2000 for first, _ in output.blocks[-50:]))
+            before_stop = len(output.blocks)
+            player.set_mode(None)
+            self.wait_until(lambda: player._worker is None)
+        self.assertEqual(output.open_count, 1)
+        first_processing = next(i for i, (first, _) in enumerate(output.blocks) if first == 2000)
+        self.assertEqual(output.blocks[first_processing - 1][-1], 0)
+        self.assertGreaterEqual(len(output.blocks) - before_stop, 20)
+        tail = [abs(first) for first, _ in output.blocks[-22:]]
+        self.assertTrue(all(a >= b for a, b in zip(tail, tail[1:])))
+        self.assertEqual(output.blocks[-1][-1], 0)
+        self.assertIsNone(player.mode)
+
+    def test_output_failure_does_not_interrupt_dictation(self):
+        class FailingOutput:
+            def __enter__(self):
                 raise RuntimeError("no output device")
-        fake = types.SimpleNamespace(PlaySound=fail_on_file,
-                                     SND_FILENAME=1, SND_ASYNC=2, SND_LOOP=4, SND_NODEFAULT=8)
-        with patch.dict(sys.modules, {"winsound": fake}), self.assertLogs("voicetype", level="WARNING"):
+
+        fake = types.SimpleNamespace(RawOutputStream=lambda **_: FailingOutput())
+        with patch.dict(sys.modules, {"sounddevice": fake}), self.assertLogs("voicetype", level="WARNING"):
             player = KeyboardSounds()
             player.set_mode("processing")
-            self.assertIsNone(player.mode)
+            self.wait_until(lambda: player._worker is None)
+        self.assertIsNone(player.mode)
 
 
 class SoundAssets(unittest.TestCase):
