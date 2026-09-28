@@ -16,7 +16,9 @@ TAP_SECONDS = 0.35  # shorter press = toggle mode, longer press = push-to-talk
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # settings.json
             "terms": [], "position": None, "learn": True,
-            "sound_recording": False, "sound_processing": True}
+            "sound_recording": False, "sound_processing": True,
+            "preview": True, "preview_font": "Noto Sans KR", "preview_font_size": 13}
+PREVIEW_FONT_SIZES = range(11, 21)  # pixels at 100% display scaling
 
 
 log = logging.getLogger("voicetype")

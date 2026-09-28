@@ -67,6 +67,9 @@
     width: 100%; background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 12px; font: inherit; font-size: 14px;
   }
+  select { background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font: inherit; font-size: 14px; max-width: 240px; }
+  select:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; }
   textarea { min-height: 128px; resize: vertical; }
   textarea:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; border-color: transparent; }
   .field { display: grid; gap: 6px; }
@@ -150,6 +153,21 @@
         <p class="hint">작업 표시줄 위의 작은 막대를 끌어서 옮길 수 있습니다.</p>
       </div>
       <button class="secondary" type="button" id="reset">처음 위치로</button>
+    </div>
+    <div class="row sep">
+      <div>
+        <label class="label" for="preview">말하는 동안 글 보여 주기</label>
+        <p class="hint">막대 위에 받아 적히는 글이 바로 보입니다. 화면을 공유 중이면 다른 사람에게도 보입니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="preview" role="switch"></span>
+    </div>
+    <div class="row">
+      <label class="label" for="preview-font">글꼴</label>
+      <select id="preview-font"></select>
+    </div>
+    <div class="row">
+      <label class="label" for="preview-size">글자 크기</label>
+      <select id="preview-size"></select>
     </div>
   </section>
 
@@ -376,6 +394,12 @@ function fill(s) {
   $("learn").checked = s.learn;
   $("sound-recording").checked = s.sound_recording;
   $("sound-processing").checked = s.sound_processing;
+  $("preview").checked = s.preview;
+  const fonts = s.fonts.includes(s.preview_font) ? s.fonts : [s.preview_font, ...s.fonts];
+  $("preview-font").replaceChildren(...fonts.map((f) => new Option(s.fonts.includes(f) ? f : `${f} (설치 안 됨 · 맑은 고딕으로 표시)`, f)));
+  $("preview-font").value = s.preview_font;
+  $("preview-size").replaceChildren(...s.preview_font_sizes.map((n) => new Option(n, n)));
+  $("preview-size").value = s.preview_font_size;
   document.querySelector(`input[name=provider][value=${s.polish_provider}]`).checked = true;
   renderProvider(s);
   renderNotes(s.notes);
@@ -396,7 +420,7 @@ document.querySelectorAll("[data-reveal]").forEach((btn) => {
   });
 });
 // The note inputs save through their own button; everything else waits for 저장.
-document.querySelectorAll("input:not(.add input), textarea").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
+document.querySelectorAll("input:not(.add input), textarea, select").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
 
 $("save").addEventListener("click", async () => {
   $("save").disabled = true;
@@ -405,6 +429,7 @@ $("save").addEventListener("click", async () => {
     fill(await api("/api/settings", {
       hotkey: hotkey(), polish: $("polish").checked, learn: $("learn").checked, terms: termsList(), polish_provider: provider(),
       sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
+      preview: $("preview").checked, preview_font: $("preview-font").value, preview_font_size: Number($("preview-size").value),
       soniox_api_key: $("soniox").value, openrouter_api_key: $("openrouter").value,
     }));
     setStatus("저장했습니다. 바로 적용됩니다.");
