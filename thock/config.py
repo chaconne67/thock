@@ -19,7 +19,7 @@ SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
 DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # settings.json
             "terms": [], "position": None, "learn": True,
             "sound_recording": False, "sound_processing": True, "sound_keyboard": "rainy75",
-            "preview": True, "preview_font": "Noto Sans KR", "preview_font_size": 13}
+            "preview": True, "preview_font": "Noto Sans KR", "preview_font_size": 14}
 PREVIEW_FONT_SIZES = range(11, 21)  # pixels at 100% display scaling
 
 

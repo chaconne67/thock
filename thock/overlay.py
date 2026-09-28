@@ -65,7 +65,7 @@ for _name, _args in {
     "GdipSetTextRenderingHint": [_P, _I],
     "GdipCreateFontFamilyFromName": [wt.LPCWSTR, _P, ctypes.POINTER(_P)],
     "GdipCreateFont": [_P, _F, _I, _I, ctypes.POINTER(_P)],
-    "GdipCreateStringFormat": [_I, wt.WORD, ctypes.POINTER(_P)],
+    "GdipStringFormatGetGenericTypographic": [ctypes.POINTER(_P)],
     "GdipMeasureString": [_P, wt.LPCWSTR, _I, _P, _R, _P, _R, ctypes.POINTER(_I), ctypes.POINTER(_I)],
     "GdipDrawString": [_P, wt.LPCWSTR, _I, _P, _R, _P, _P],
     "GdipDeleteFont": [_P],
@@ -145,7 +145,7 @@ class Overlay:
     FULL_W, FULL_H = 132, 36   # pill while listening or hovered, in 96-dpi pixels before SIZE
     IDLE_W, IDLE_H = 44, 10    # resting handle
     GEAR, GAP, MARGIN = 30, 8, 10
-    TEXT_W, TEXT_H, PAD, LINES = 400, 96, 9, 2  # preview box: widest, tallest (largest font), padding, lines
+    TEXT_W, TEXT_H, PAD, LINES = 700, 96, 9, 2  # preview box: widest, tallest (largest font), padding, lines
     SIZE = 0.8
     MENU_SETTINGS, MENU_RESET, MENU_QUIT = 1, 2, 3
 
@@ -167,9 +167,9 @@ class Overlay:
         gdiplus.GdipCreateBitmapFromScan0(self.bw, self.bh, self.bw * 4, 0xE200B, self.bits, ctypes.byref(bitmap))  # 32bppPARGB
         gdiplus.GdipGetImageGraphicsContext(bitmap, ctypes.byref(self.g))
         gdiplus.GdipSetSmoothingMode(self.g, 4)  # anti-alias
-        gdiplus.GdipSetTextRenderingHint(self.g, 4)  # grayscale anti-alias: ClearType smears on a see-through surface
+        gdiplus.GdipSetTextRenderingHint(self.g, 5)  # ClearType: the text always sits on the opaque preview box
         self.font, self.font_key, self.format = None, None, _P()
-        gdiplus.GdipCreateStringFormat(0, 0, ctypes.byref(self.format))
+        gdiplus.GdipStringFormatGetGenericTypographic(ctypes.byref(self.format))  # the default adds loose letter spacing
         self.wndproc = WNDPROC(self._wndproc)
         wc = WNDCLASSW(lpfnWndProc=self.wndproc, hInstance=kernel32.GetModuleHandleW(None),
                        hCursor=user32.LoadCursorW(None, _P(32649)),  # hand
@@ -400,7 +400,7 @@ class Overlay:
         _capsule(g, x, y, w, h, 0xFF3A3A3A, 10 * s)  # hairline edge
         _capsule(g, x + s, y + s, w - 2 * s, h - 2 * s, 0xFF0F0F0F, 9 * s)
         brush = _P()
-        gdiplus.GdipCreateSolidFill(0xF2FFFFFF, ctypes.byref(brush))
+        gdiplus.GdipCreateSolidFill(0xFFFFFFFF, ctypes.byref(brush))
         room = RectF(x + pad, y + pad, (self.TEXT_W - 2 * self.PAD) * s, th + s)  # same width as measured, same wrapping
         gdiplus.GdipDrawString(g, text, -1, self.font, ctypes.byref(room), self.format, brush)
         gdiplus.GdipDeleteBrush(brush)
