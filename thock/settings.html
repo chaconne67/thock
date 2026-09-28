@@ -88,8 +88,8 @@
   button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
   .secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
   .secondary:hover { background: var(--field); }
-  .sound-preview { position: relative; display: inline-flex; align-items: center; gap: 10px;
-    min-width: 154px; min-height: 56px; padding: 0 12px 4px 10px; overflow: hidden; text-align: left;
+  .sound-preview { display: inline-flex; align-items: center; gap: 10px;
+    min-width: 154px; min-height: 56px; padding: 0 12px 0 10px; text-align: left;
     border: 0; background: transparent; font-weight: 600; white-space: nowrap; }
   .sound-preview-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: none;
     border-radius: 50%; background: var(--primary); color: var(--on-primary); }
@@ -97,10 +97,12 @@
   .sound-preview-stop { display: none; }
   .sound-preview-detail { display: grid; gap: 2px; line-height: 1.15; }
   .sound-preview-wave { width: 60px; height: 12px; color: var(--muted); }
-  .sound-preview-track { position: absolute; left: 10px; right: 10px; bottom: 5px; height: 2px;
-    overflow: hidden; border-radius: 2px; background: var(--seg); pointer-events: none; }
-  .sound-preview-progress { display: block; height: 100%; width: var(--preview-progress, 0%); background: var(--text); }
+  .sound-preview-wave path { transform-box: fill-box; transform-origin: center; }
   .sound-preview[aria-pressed="true"] .sound-preview-wave { color: var(--text); }
+  .sound-preview[aria-pressed="true"] .sound-preview-wave path { animation: preview-wave .62s ease-in-out infinite alternate; }
+  .sound-preview[aria-pressed="true"] .sound-preview-wave path:nth-child(3n+2) { animation-duration: .46s; animation-delay: -.2s; }
+  .sound-preview[aria-pressed="true"] .sound-preview-wave path:nth-child(3n+3) { animation-duration: .77s; animation-delay: -.41s; }
+  @keyframes preview-wave { from { transform: scaleY(.48); } to { transform: scaleY(1.25); } }
   .sound-preview[aria-pressed="true"] .sound-preview-play { display: none; }
   .sound-preview[aria-pressed="true"] .sound-preview-stop { display: block; }
   @media (max-width: 400px) {
@@ -138,7 +140,7 @@
   footer { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line);
     padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   #status { color: var(--muted); }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
@@ -218,10 +220,11 @@
           <span class="sound-preview-detail">
             <span id="sound-preview-label">미리듣기</span>
             <svg class="sound-preview-wave" viewBox="0 0 60 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-              <path d="M2 5v2m5-4v6m5-3v1m5-5v8m5-6v4m5-6v8m5-4v1m5-3v5m5-7v10m5-7v3m5-5v7m5-4v1"/>
+              <path d="M2 5v2"/><path d="M7 3v6"/><path d="M12 5v2"/><path d="M17 2v8"/>
+              <path d="M22 4v4"/><path d="M27 1v10"/><path d="M32 5v2"/><path d="M37 3v6"/>
+              <path d="M42 2v8"/><path d="M47 5v2"/><path d="M52 3v6"/><path d="M57 5v2"/>
             </svg>
           </span>
-          <span class="sound-preview-track" aria-hidden="true"><span class="sound-preview-progress"></span></span>
         </button>
       </div>
     </div>
@@ -394,7 +397,6 @@ function stopSoundPreview() {
     previewAudio = null;
   }
   $("sound-preview-label").textContent = "미리듣기";
-  $("sound-preview").style.setProperty("--preview-progress", "0%");
   $("sound-preview").setAttribute("aria-pressed", "false");
 }
 
@@ -405,10 +407,6 @@ $("sound-preview").addEventListener("click", async () => {
   const audio = new Audio("/api/sound-preview?keyboard=" + encodeURIComponent(keyboard) + "&t=" + encodeURIComponent(TOKEN));
   previewAudio = audio;
   audio.addEventListener("ended", () => { if (previewAudio === audio) stopSoundPreview(); }, { once: true });
-  audio.addEventListener("timeupdate", () => {
-    if (previewAudio !== audio || !Number.isFinite(audio.duration) || !audio.duration) return;
-    $("sound-preview").style.setProperty("--preview-progress", `${audio.currentTime / audio.duration * 100}%`);
-  });
   audio.addEventListener("error", () => {
     if (previewAudio === audio) {
       stopSoundPreview();
