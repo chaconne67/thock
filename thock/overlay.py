@@ -145,7 +145,7 @@ class Overlay:
     FULL_W, FULL_H = 132, 36   # pill while listening or hovered, in 96-dpi pixels before SIZE
     IDLE_W, IDLE_H = 44, 10    # resting handle
     GEAR, GAP, MARGIN = 30, 8, 10
-    TEXT_W, TEXT_H, PAD, LINES = 700, 96, 9, 2  # preview box: widest, tallest (largest font), padding, lines
+    TEXT_W, TEXT_H, PAD_X, PAD_Y, LINES = 600, 96, 20, 11, 2  # preview box: widest, tallest (largest font), padding, lines
     SIZE = 0.8
     MENU_SETTINGS, MENU_RESET, MENU_QUIT = 1, 2, 3
 
@@ -370,7 +370,7 @@ class Overlay:
     def _measure(self, text):
         """(width, height, lines) of text wrapped to the preview box, in screen pixels."""
         box, fitted, lines = RectF(), _I(), _I()
-        room = RectF(0, 0, (self.TEXT_W - 2 * self.PAD) * self.s, 1e5)
+        room = RectF(0, 0, (self.TEXT_W - 2 * self.PAD_X) * self.s, 1e5)
         gdiplus.GdipMeasureString(self.g, text, -1, self.font, ctypes.byref(room), self.format,
                                   ctypes.byref(box), ctypes.byref(fitted), ctypes.byref(lines))
         return box.w, box.h, lines.value
@@ -393,15 +393,15 @@ class Overlay:
 
     def _draw_preview(self, bottom):
         """The box above the pill showing the end of what has been heard."""
-        g, s, pad = self.g, self.s, self.PAD * self.s
+        g, s, px, py = self.g, self.s, self.PAD_X * self.s, self.PAD_Y * self.s
         text, tw, th = self.preview
-        w, h = tw + 2 * pad, th + 2 * pad
+        w, h = tw + 2 * px, th + 2 * py
         x, y = (self.bw - w) / 2, bottom - h
         _capsule(g, x, y, w, h, 0xFF3A3A3A, 10 * s)  # hairline edge
         _capsule(g, x + s, y + s, w - 2 * s, h - 2 * s, 0xFF0F0F0F, 9 * s)
         brush = _P()
         gdiplus.GdipCreateSolidFill(0xFFFFFFFF, ctypes.byref(brush))
-        room = RectF(x + pad, y + pad, (self.TEXT_W - 2 * self.PAD) * s, th + s)  # same width as measured, same wrapping
+        room = RectF(x + px, y + py, (self.TEXT_W - 2 * self.PAD_X) * s, th + s)  # same width as measured, same wrapping
         gdiplus.GdipDrawString(g, text, -1, self.font, ctypes.byref(room), self.format, brush)
         gdiplus.GdipDeleteBrush(brush)
 
