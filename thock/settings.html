@@ -90,7 +90,7 @@
   .secondary:hover { background: var(--field); }
   .sound-preview { position: relative; display: inline-flex; align-items: center; gap: 10px;
     min-width: 154px; min-height: 56px; padding: 0 12px 4px 10px; overflow: hidden; text-align: left;
-    background: var(--card); font-weight: 600; white-space: nowrap; }
+    border: 0; background: transparent; font-weight: 600; white-space: nowrap; }
   .sound-preview-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: none;
     border-radius: 50%; background: var(--primary); color: var(--on-primary); }
   .sound-preview-icon svg { width: 17px; height: 17px; }
@@ -100,7 +100,6 @@
   .sound-preview-track { position: absolute; left: 10px; right: 10px; bottom: 5px; height: 2px;
     overflow: hidden; border-radius: 2px; background: var(--seg); pointer-events: none; }
   .sound-preview-progress { display: block; height: 100%; width: var(--preview-progress, 0%); background: var(--text); }
-  .sound-preview[aria-pressed="true"] { background: var(--field); border-color: var(--text); }
   .sound-preview[aria-pressed="true"] .sound-preview-wave { color: var(--text); }
   .sound-preview[aria-pressed="true"] .sound-preview-play { display: none; }
   .sound-preview[aria-pressed="true"] .sound-preview-stop { display: block; }
@@ -211,7 +210,7 @@
       </div>
       <div class="sound-picker">
         <select id="sound-keyboard"></select>
-        <button class="secondary sound-preview" type="button" id="sound-preview" aria-pressed="false">
+        <button class="sound-preview" type="button" id="sound-preview" aria-pressed="false">
           <span class="sound-preview-icon" aria-hidden="true">
             <svg class="sound-preview-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg>
             <svg class="sound-preview-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
