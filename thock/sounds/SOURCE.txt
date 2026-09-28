@@ -3,17 +3,21 @@ https://freesound.org/people/Techrul/sounds/815614/
 License: Creative Commons 0 (CC0), as stated on the source page.
 https://creativecommons.org/publicdomain/zero/1.0/
 
-Both loops are derived from a real Rainy75 keyboard strike at 35.204-35.275 seconds in
-the public HQ MP3 preview:
+Both loops use this recording's public HQ MP3 preview:
 https://cdn.freesound.org/previews/815/815614_15899953-hq.mp3
 The source's original MP3 download requires a Freesound login.
 
-The single strike was made mono 48 kHz 16-bit PCM and trimmed before the next
-separate impact. It has short fades, 55 Hz high-pass, +2.5 dB at 230 Hz,
--3 dB at 3.5 kHz and 9 kHz low-pass, with 5 dB output gain.
-No pitch shift, synthesis or other keyboard recording was used.
+The natural sequence of different key strikes and its changing rhythm are retained.
+The preview was decoded to mono 48 kHz, 16-bit PCM. No single strike was copied
+and repeated; no pitch, speed, or equalization change was applied.
 
-recording.wav: 6.0-second seamless loop, 15 irregularly spaced strikes,
-approximately -24 dBFS peak. The quiet level is intended for microphone use.
-processing.wav: 2.4-second seamless loop, 11 faster strikes,
-approximately -12 dBFS peak. It ends when pasting/processing finishes.
+recording.wav: source 0.360-58.261 seconds; 12 long pauses shortened; final
+53.001 seconds, -23.8 dB gain. Intended as quiet sound during microphone use.
+processing.wav: source 2.000-20.300 seconds; 1 long pause shortened; final
+17.830 seconds, -11.8 dB gain. Intended for transcription/correction wait.
+
+A long pause is a gap over 0.42 seconds between active 10 ms frames
+(frame RMS above -36 dBFS or peak above -34 dBFS). Each edited gap keeps
+0.11 seconds after the preceding strike and before the next strike; the cut
+has a 20 ms linear crossfade. Shorter intervals are preserved. Each file has
+a 90 ms sine fade-in and a 220 ms cosine fade-out, including zero endpoints.

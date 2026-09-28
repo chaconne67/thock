@@ -75,13 +75,13 @@ class SoundPlayback(unittest.TestCase):
 class SoundAssets(unittest.TestCase):
     def test_bundled_loops_are_pcm_wav_with_quiet_boundaries(self):
         folder = Path(__file__).resolve().parent.parent / "thock" / "sounds"
-        for name, seconds in (("recording.wav", 6.0), ("processing.wav", 2.4)):
+        for name, minimum_seconds in (("recording.wav", 45), ("processing.wav", 15)):
             with self.subTest(name=name), wave.open(str(folder / name), "rb") as audio:
                 self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()), (1, 2, 48000))
-                self.assertEqual(audio.getnframes(), round(seconds * 48000))
-                self.assertEqual(audio.readframes(48), bytes(96))
-                audio.setpos(audio.getnframes() - 48)
-                self.assertEqual(audio.readframes(48), bytes(96))
+                self.assertGreater(audio.getnframes(), minimum_seconds * 48000)
+                self.assertEqual(audio.readframes(1), bytes(2))
+                audio.setpos(audio.getnframes() - 1)
+                self.assertEqual(audio.readframes(1), bytes(2))
 
 
 if __name__ == "__main__":
