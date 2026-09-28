@@ -182,7 +182,7 @@
       </div>
       <div class="sound-picker">
         <select id="sound-keyboard"></select>
-        <button class="secondary" type="button" id="sound-preview" aria-pressed="false">들어보기</button>
+        <button class="secondary" type="button" id="sound-preview" aria-pressed="false">미리듣기</button>
       </div>
     </div>
     <div class="row sep">
@@ -353,7 +353,7 @@ function stopSoundPreview() {
     previewAudio.currentTime = 0;
     previewAudio = null;
   }
-  $("sound-preview").textContent = "들어보기";
+  $("sound-preview").textContent = "미리듣기";
   $("sound-preview").setAttribute("aria-pressed", "false");
 }
 
@@ -370,7 +370,7 @@ $("sound-preview").addEventListener("click", async () => {
       setStatus("소리를 재생하지 못했습니다.");
     }
   }, { once: true });
-  $("sound-preview").textContent = "멈추기";
+  $("sound-preview").textContent = "스탑";
   $("sound-preview").setAttribute("aria-pressed", "true");
   try {
     await audio.play();
