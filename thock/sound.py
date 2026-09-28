@@ -13,6 +13,9 @@ SOUNDS = {
     "rainy75": {"recording": "recording.wav", "processing": "processing.wav"},
     "ikki68": {"recording": "ikki68-recording.wav", "processing": "ikki68-processing.wav"},
     "hhkb": {"recording": "hhkb-recording.wav", "processing": "hhkb-processing.wav"},
+    "leopold": {"recording": "leopold-recording.wav", "processing": "leopold-processing.wav"},
+    "technics": {"recording": "technics-recording.wav", "processing": "technics-processing.wav"},
+    "keychron": {"recording": "keychron-recording.wav", "processing": "keychron-processing.wav"},
 }
 RATE, BLOCK_FRAMES, FADE_FRAMES = 48000, 480, 10560  # 10 ms blocks; 220 ms stop fade
 

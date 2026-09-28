@@ -15,7 +15,8 @@ POLISH_MODEL = "openai/gpt-6-luna"  # via OpenRouter; chosen by a 16+8 sentence 
 TAP_SECONDS = 0.35  # shorter press = toggle mode, longer press = push-to-talk
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
-                   "hhkb": "HHKB Professional Hybrid"}
+                   "hhkb": "HHKB Professional Hybrid", "leopold": "Leopold FC660M",
+                   "technics": "Technics · Gateron Yellow", "keychron": "Keychron K10 · Linear"}
 DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # settings.json
             "terms": [], "position": None, "learn": True,
             "sound_recording": False, "sound_processing": True, "sound_keyboard": "rainy75",
