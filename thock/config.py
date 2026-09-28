@@ -14,9 +14,11 @@ SONIOX_MODEL = "stt-rt-v5"
 POLISH_MODEL = "openai/gpt-6-luna"  # via OpenRouter; chosen by a 16+8 sentence comparison (docs)
 TAP_SECONDS = 0.35  # shorter press = toggle mode, longer press = push-to-talk
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
+SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
+                   "hhkb": "HHKB Professional Hybrid"}
 DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # settings.json
             "terms": [], "position": None, "learn": True,
-            "sound_recording": False, "sound_processing": True,
+            "sound_recording": False, "sound_processing": True, "sound_keyboard": "rainy75",
             "preview": True, "preview_font": "Noto Sans KR", "preview_font_size": 13}
 PREVIEW_FONT_SIZES = range(11, 21)  # pixels at 100% display scaling
 
@@ -28,8 +30,11 @@ def load_settings():
     keys_path, settings_path = HOME / "secrets.toml", HOME / "settings.json"
     keys = tomllib.loads(keys_path.read_text(encoding="utf-8")) if keys_path.exists() else {}
     stored = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
-    return {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS},
-            "soniox_api_key": keys.get("soniox_api_key", ""), "openrouter_api_key": keys.get("openrouter_api_key", "")}
+    settings = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS},
+                "soniox_api_key": keys.get("soniox_api_key", ""), "openrouter_api_key": keys.get("openrouter_api_key", "")}
+    if not isinstance(settings["sound_keyboard"], str) or settings["sound_keyboard"] not in SOUND_KEYBOARDS:
+        settings["sound_keyboard"] = DEFAULTS["sound_keyboard"]
+    return settings
 
 
 def save_settings(s):

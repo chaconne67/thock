@@ -9,7 +9,11 @@ from pathlib import Path
 from .config import log
 
 
-SOUNDS = {"recording": "recording.wav", "processing": "processing.wav"}
+SOUNDS = {
+    "rainy75": {"recording": "recording.wav", "processing": "processing.wav"},
+    "ikki68": {"recording": "ikki68-recording.wav", "processing": "ikki68-processing.wav"},
+    "hhkb": {"recording": "hhkb-recording.wav", "processing": "hhkb-processing.wav"},
+}
 RATE, BLOCK_FRAMES, FADE_FRAMES = 48000, 480, 10560  # 10 ms blocks; 220 ms stop fade
 
 
@@ -29,9 +33,10 @@ class KeyboardSounds:
         self._worker = None
         self._audio = {}
 
-    def set_mode(self, mode):
-        if mode is not None and mode not in SOUNDS:
-            raise ValueError(f"unknown keyboard sound mode: {mode}")
+    def set_mode(self, phase, keyboard="rainy75"):
+        if phase is not None and (keyboard not in SOUNDS or phase not in SOUNDS[keyboard]):
+            raise ValueError(f"unknown keyboard sound: {keyboard}/{phase}")
+        mode = (keyboard, phase) if phase is not None else None
         with self._lock:
             if mode == self.mode:
                 return
@@ -45,7 +50,7 @@ class KeyboardSounds:
 
     def _read_audio(self, mode):
         if mode not in self._audio:
-            path = Path(__file__).resolve().parent / "sounds" / SOUNDS[mode]
+            path = Path(__file__).resolve().parent / "sounds" / SOUNDS[mode[0]][mode[1]]
             with wave.open(str(path), "rb") as source:
                 if (source.getnchannels(), source.getsampwidth(), source.getframerate()) != (1, 2, RATE):
                     raise ValueError(f"unsupported keyboard sound format: {path}")

@@ -56,7 +56,9 @@ jobs:
           $app = "$env:LOCALAPPDATA\Programs\Thock\Thock.exe"
           if (-not (Test-Path $app)) { throw "Thock not installed at $app" }
           $soundDir = "$env:LOCALAPPDATA\Programs\Thock\_internal\thock\sounds"
-          foreach ($sound in @("recording.wav", "processing.wav")) {
+          foreach ($sound in @("recording.wav", "processing.wav",
+                            "ikki68-recording.wav", "ikki68-processing.wav",
+                            "hhkb-recording.wav", "hhkb-processing.wav")) {
             if (-not (Test-Path (Join-Path $soundDir $sound))) { throw "missing sound asset: $sound" }
           }
           if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Thock.lnk")) { throw "no startup shortcut" }

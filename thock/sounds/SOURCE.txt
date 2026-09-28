@@ -21,3 +21,34 @@ A long pause is a gap over 0.42 seconds between active 10 ms frames
 0.11 seconds after the preceding strike and before the next strike; the cut
 has a 20 ms linear crossfade. Shorter intervals are preserved. Each file has
 a 90 ms sine fade-in and a 220 ms cosine fade-out, including zero endpoints.
+
+Additional real-keyboard recordings (both Creative Commons 0 / CC0):
+- Ikki68 Aurora, hand-lubed WS Brown switches, recorded by Reina0613 with Zoom H8.
+  https://freesound.org/people/Reina0613/sounds/709460/
+  HQ preview: https://cdn.freesound.org/previews/709/709460_13652097-hq.mp3
+- HHKB Professional Hybrid, unmodified 45 g Topre switches, recorded by grcekh
+  with Yeti Nano.
+  https://freesound.org/people/grcekh/sounds/546032/
+  HQ preview: https://cdn.freesound.org/previews/546/546032_12206738-hq.mp3
+Both source pages explicitly allow copying, modifying, distributing and
+commercial use under CC0. Their original downloads require Freesound login;
+the public HQ MP3 previews above were used.
+
+Ikki68: recording.wav equivalent uses source 17.50-45.55 s (28.05 s);
+processing uses 20.00-38.70 s (18.70 s). The early part of the source has
+very low level, so these sustained typing sections were selected.
+HHKB: recording uses source 0.00-44.70 s (44.70 s); processing uses
+2.00-21.00 s (19.00 s). All are mono 48 kHz, 16-bit PCM.
+No individual hit was copied or sequenced. Each recording's own varied typing
+cadence remains. Each has a 90 ms sine fade-in, a 220 ms cosine fade-out and
+zero endpoints. Loudness was matched to the existing Rainy75 phase tracks
+(approximately -59.9 dBFS RMS while recording; -46.9 dBFS RMS while processing)
+to avoid a sudden loudness jump when switching keyboards. No speed or pitch
+changes or noise reduction were applied.
+
+Reference listening only, not used as app audio: Taeha Types' Keycult No.1/65
+sound test (https://www.youtube.com/watch?v=Jm9R1GtbKHY), Mode's Sonnet
+build guide with sound test (https://www.youtube.com/watch?v=ygTXMZzGd20),
+and TGR Jane v2 ME sound test (https://www.youtube.com/watch?v=FIdZi6gRprA).
+Their video audio was not copied because redistribution rights were not
+established.

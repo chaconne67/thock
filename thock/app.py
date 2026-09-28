@@ -13,7 +13,7 @@ from collections import deque
 
 import sounddevice as sd
 
-from .config import (APP_NAME, HOME, HOTKEYS, PREVIEW_FONT_SIZES, SAMPLE_RATE, TAP_SECONDS, load_settings, log,
+from .config import (APP_NAME, HOME, HOTKEYS, PREVIEW_FONT_SIZES, SAMPLE_RATE, SOUND_KEYBOARDS, TAP_SECONDS, load_settings, log,
                      save_settings)
 from .correction import ChatGPTAuth, Polisher
 from .editwatch import EditWatcher
@@ -174,7 +174,7 @@ class App:
         self._sync_sound()
 
     def _sync_sound(self):
-        self.sounds.set_mode(selected_mode(self.recording, self.active, self.settings))
+        self.sounds.set_mode(selected_mode(self.recording, self.active, self.settings), self.settings["sound_keyboard"])
 
     def flash_error(self):
         self.error_until = time.perf_counter() + 2
@@ -199,6 +199,7 @@ class App:
         hint = lambda key: f"••••{key[-4:]}" if key else ""  # noqa: E731
         return {"hotkey": s["hotkey"], "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
                 "sound_recording": s["sound_recording"], "sound_processing": s["sound_processing"],
+                "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
                 "preview": s["preview"], "preview_font": s["preview_font"], "preview_font_size": s["preview_font_size"],
                 "fonts": installed_fonts(), "preview_font_sizes": list(PREVIEW_FONT_SIZES),
                 "notes": self.notes.listing(), "polish_provider": s["polish_provider"],
@@ -212,6 +213,8 @@ class App:
             s["hotkey"] = body["hotkey"]
         if body.get("polish_provider") in ("chatgpt", "openrouter"):
             s["polish_provider"] = body["polish_provider"]
+        if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:
+            s["sound_keyboard"] = body["sound_keyboard"]
         for flag in ("polish", "learn", "sound_recording", "sound_processing", "preview"):
             if isinstance(body.get(flag), bool):
                 s[flag] = body[flag]

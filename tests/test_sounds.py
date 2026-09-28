@@ -1,6 +1,7 @@
 """Phase selection, repeat playback and bundled keyboard audio."""
 
 import array
+import json
 import sys
 import tempfile
 import time
@@ -12,7 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from thock import config  # noqa: E402
-from thock.sound import KeyboardSounds, selected_mode  # noqa: E402
+from thock.sound import SOUNDS, KeyboardSounds, selected_mode  # noqa: E402
 
 
 class SoundSettings(unittest.TestCase):
@@ -22,11 +23,20 @@ class SoundSettings(unittest.TestCase):
             settings = config.load_settings()
             self.assertFalse(settings["sound_recording"])
             self.assertTrue(settings["sound_processing"])
-            settings.update(sound_recording=True, sound_processing=False)
+            self.assertEqual(settings["sound_keyboard"], "rainy75")
+            settings.update(sound_recording=True, sound_processing=False, sound_keyboard="ikki68")
             config.save_settings(settings)
             saved = config.load_settings()
             self.assertTrue(saved["sound_recording"])
             self.assertFalse(saved["sound_processing"])
+            self.assertEqual(saved["sound_keyboard"], "ikki68")
+
+    def test_unknown_saved_keyboard_falls_back_to_rainy75(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(config, "HOME", Path(folder)):
+            for invalid in ("unavailable", ["rainy75"]):
+                (Path(folder) / "settings.json").write_text(
+                    json.dumps({"sound_keyboard": invalid}), encoding="utf-8")
+                self.assertEqual(config.load_settings()["sound_keyboard"], "rainy75")
 
 
 class SoundPhases(unittest.TestCase):
@@ -79,17 +89,23 @@ class SoundPlayback(unittest.TestCase):
         with patch.dict(sys.modules, {"sounddevice": fake}):
             player = KeyboardSounds()
             player._audio = {mode: array.array("h", [amplitude] * 480).tobytes()
-                             for mode, amplitude in (("recording", 1000), ("processing", 2000))}
+                             for mode, amplitude in ((("rainy75", "recording"), 1000),
+                                                     (("ikki68", "recording"), 3000),
+                                                     (("hhkb", "processing"), 2000))}
             player.set_mode("recording")
             self.wait_until(lambda: len(output.blocks) >= 3)
             player.set_mode("recording")
-            player.set_mode("processing")
+            player.set_mode("recording", "ikki68")
+            self.wait_until(lambda: any(first == 3000 for first, _ in output.blocks[-50:]))
+            player.set_mode("processing", "hhkb")
             self.wait_until(lambda: any(first == 2000 for first, _ in output.blocks[-50:]))
             before_stop = len(output.blocks)
             player.set_mode(None)
             self.wait_until(lambda: player._worker is None)
         self.assertEqual(output.open_count, 1)
+        first_ikki = next(i for i, (first, _) in enumerate(output.blocks) if first == 3000)
         first_processing = next(i for i, (first, _) in enumerate(output.blocks) if first == 2000)
+        self.assertEqual(output.blocks[first_ikki - 1][-1], 0)
         self.assertEqual(output.blocks[first_processing - 1][-1], 0)
         self.assertGreaterEqual(len(output.blocks) - before_stop, 20)
         tail = [abs(first) for first, _ in output.blocks[-22:]]
@@ -113,13 +129,16 @@ class SoundPlayback(unittest.TestCase):
 class SoundAssets(unittest.TestCase):
     def test_bundled_loops_are_pcm_wav_with_quiet_boundaries(self):
         folder = Path(__file__).resolve().parent.parent / "thock" / "sounds"
-        for name, minimum_seconds in (("recording.wav", 45), ("processing.wav", 15)):
-            with self.subTest(name=name), wave.open(str(folder / name), "rb") as audio:
-                self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()), (1, 2, 48000))
-                self.assertGreater(audio.getnframes(), minimum_seconds * 48000)
-                self.assertEqual(audio.readframes(1), bytes(2))
-                audio.setpos(audio.getnframes() - 1)
-                self.assertEqual(audio.readframes(1), bytes(2))
+        self.assertEqual(set(SOUNDS), set(config.SOUND_KEYBOARDS))
+        for keyboard, phases in SOUNDS.items():
+            for phase, name in phases.items():
+                minimum_seconds = (45 if keyboard == "rainy75" else 25) if phase == "recording" else 15
+                with self.subTest(keyboard=keyboard, phase=phase), wave.open(str(folder / name), "rb") as audio:
+                    self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()), (1, 2, 48000))
+                    self.assertGreater(audio.getnframes(), minimum_seconds * 48000)
+                    self.assertEqual(audio.readframes(1), bytes(2))
+                    audio.setpos(audio.getnframes() - 1)
+                    self.assertEqual(audio.readframes(1), bytes(2))
 
 
 if __name__ == "__main__":
