@@ -23,7 +23,8 @@ DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt", 
 PREVIEW_FONT_SIZES = range(11, 21)  # pixels at 100% display scaling
 # Bundled in thock/fonts (family name: label). Korean fonts also carry Latin letters;
 # the English font is used only when the text has no Hangul.
-PREVIEW_FONTS = {"ko": {"Noto Sans KR": "본고딕", "Pretendard": "프리텐다드", "NanumBarunGothic": "나눔바른고딕"},
+PREVIEW_FONTS = {"ko": {"Noto Sans KR": "본고딕", "Pretendard": "프리텐다드", "NanumGothic": "나눔고딕",
+                        "NanumBarunGothic": "나눔바른고딕"},
                  "en": {"Inter": "Inter", "Roboto": "Roboto", "Source Sans 3": "Source Sans 3"}}
 
 
