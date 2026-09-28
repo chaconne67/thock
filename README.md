@@ -17,6 +17,9 @@ CapsLock으로 어느 입력창에서나 말을 받아 적는 Windows 프로그�
   - 왼쪽에 빨간 점: 켜 두고 말하기 방식이라 다시 누를 때까지 계속 듣습니다.
   - 흐린 막대가 물결침: 글로 바꾸고 다듬는 중
   - 빨간 알약: 실패함. 받아 적은 글이 있으면 기록 파일에 남아 있습니다.
+- **타건음**: 녹음 중에는 작고 느리게, 녹음을 끝낸 뒤 전사·교정 중에는 더 빠르게 이어집니다.
+  설정 창에서 두 구간을 각각 켜거나 끌 수 있습니다. 녹음 중 소리는 기본적으로 꺼져 있어
+  스피커 소리가 마이크로 들어가는 것을 피하고, 처리 중 소리는 기본적으로 켜져 있습니다.
 - **교정 연결**: 기본은 ChatGPT 구독입니다. 설정 창 "연결"에서 [ChatGPT로 로그인]을 누르면 브라우저가 열리고, 나온 코드를 입력하면 됩니다. OpenRouter 키로 바꿀 수도 있습니다.
 - **말투**: 설정하지 않습니다. 말한 말투를 따릅니다. 음성 인식이 끝말을 잘못 들어 반말과 존댓말이 섞이면, 더 많이 쓴 쪽(반반이면 평소 말투)으로 맞춥니다. 따옴표 안 인용은 그대로 둡니다.
 - **Thock이 아는 나**: 받아쓰기가 쌓이면(처음 20회, 이후 50회마다) 분야·주제·자주 쓰는 말을 스스로 파악해 인식과 교정에 씁니다. 설정 창에서 보고, 다시 파악하거나 지웁니다.
@@ -39,7 +42,7 @@ CapsLock → 마이크 → Soniox 실시간 인식(`stt-rt-v5`, 용어·프로�
 | `secrets.toml` | `soniox_api_key`, `openrouter_api_key`(OpenRouter로 교정할 때만). 설정 창에서 붙여 넣으면 저장됨 |
 | `chatgpt_auth.json` | Thock 전용 ChatGPT 로그인 토큰. Codex의 로그인 파일과 따로 관리함(갱신 토큰을 나눠 쓰면 서로 로그아웃됨) |
 | `profile.json` | Thock이 아는 나: 분야·주제·자주 쓰는 말. 받아쓰기 50회마다 새로 파악 |
-| `settings.json` | 단축키, 교정 켜기/끄기, 교정 연결(ChatGPT 구독/OpenRouter), 용어 사전, 표시 위치, 배우기 켜기/끄기. 설정 창에서 바꿈 |
+| `settings.json` | 단축키, 교정 켜기/끄기, 교정 연결(ChatGPT 구독/OpenRouter), 용어 사전, 표시 위치, 배우기 켜기/끄기, 구간별 타건음. 설정 창에서 바꿈 |
 | `typo_notes.json` | 오타 노트: 틀린 표기 → 바른 표기, 고친 횟수 |
 | `history.jsonl` | 받아 적은 글, 교정된 글, 걸린 시간. 음성은 저장하지 않음 |
 | `voicetype.log` | 오류 기록 |
@@ -67,7 +70,7 @@ uv run python tests/check_pipeline.py 시험.wav
 - 키를 뗀 순간부터 결과가 나오기까지 걸린 시간을 출력합니다.
 
 ```powershell
-uv run python -m unittest tests.test_fixes tests.test_speech_level
+uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds
 ```
 
 - 붙여 넣은 뒤 어떤 수정을 "단어 고침"으로 볼지, 말투(반말·존댓말)를 어떻게 읽는지 시험합니다.

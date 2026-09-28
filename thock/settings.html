@@ -153,6 +153,24 @@
     </div>
   </section>
 
+  <section aria-labelledby="h-sounds">
+    <h2 id="h-sounds">타건음</h2>
+    <div class="row">
+      <div>
+        <label class="label" for="sound-recording">말하는 동안</label>
+        <p class="hint">작고 느린 타건음이 이어집니다. 스피커 소리가 마이크에 잡힐 수 있습니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="sound-recording" role="switch"></span>
+    </div>
+    <div class="row sep">
+      <div>
+        <label class="label" for="sound-processing">글로 바꾸는 동안</label>
+        <p class="hint">녹음을 끝낸 뒤 글이 들어갈 때까지 빠른 타건음이 이어집니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="sound-processing" role="switch"></span>
+    </div>
+  </section>
+
   <section aria-labelledby="h-keys">
     <h2 id="h-keys">연결</h2>
     <div class="field">
@@ -356,6 +374,8 @@ function fill(s) {
   document.querySelector(`input[name=hotkey][value=${s.hotkey}]`).checked = true;
   $("polish").checked = s.polish;
   $("learn").checked = s.learn;
+  $("sound-recording").checked = s.sound_recording;
+  $("sound-processing").checked = s.sound_processing;
   document.querySelector(`input[name=provider][value=${s.polish_provider}]`).checked = true;
   renderProvider(s);
   renderNotes(s.notes);
@@ -384,6 +404,7 @@ $("save").addEventListener("click", async () => {
   try {
     fill(await api("/api/settings", {
       hotkey: hotkey(), polish: $("polish").checked, learn: $("learn").checked, terms: termsList(), polish_provider: provider(),
+      sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
       soniox_api_key: $("soniox").value, openrouter_api_key: $("openrouter").value,
     }));
     setStatus("저장했습니다. 바로 적용됩니다.");

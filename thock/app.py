@@ -19,6 +19,7 @@ from .editwatch import EditWatcher
 from .learning import Profile, TypoNotes
 from .overlay import BARS, run_overlay
 from .settings_server import SettingsServer
+from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .win32 import foreground_app, kernel32, paste, run_key_hook, user32
 
@@ -81,14 +82,17 @@ class Session:
             record["error"] = str(e)
             self.state.flash_error()
         finally:
-            record["recorded_seconds"] = round((self.released or time.perf_counter()) - self.started, 3)
-            record["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
-            with open(HOME / "history.jsonl", "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-            if s["learn"]:
-                self.state.profile.maybe_rebuild()
-            self.state.active.discard(self)
-            self.done.set_result(None)
+            try:
+                record["recorded_seconds"] = round((self.released or time.perf_counter()) - self.started, 3)
+                record["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                with open(HOME / "history.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                if s["learn"]:
+                    self.state.profile.maybe_rebuild()
+            finally:
+                self.state.active.discard(self)
+                self.state._sync_sound()
+                self.done.set_result(None)
 
 
 class App:
@@ -110,6 +114,8 @@ class App:
         self.levels = deque([0.0] * BARS, maxlen=BARS)  # microphone loudness, newest last
         self.devices_changed = False
         self.open_settings = lambda: None  # set once the settings server exists
+        self.sounds = KeyboardSounds()
+        self.loop = None
 
     def hotkey_vk(self):
         return HOTKEYS[self.settings["hotkey"]]
@@ -136,6 +142,7 @@ class App:
                     return
                 self.active.add(self.recording)
                 self.last = self.recording
+                self._sync_sound()
         elif event == "up" and self.recording and not self.toggle:
             if now - self.pressed_at < TAP_SECONDS:
                 self.toggle = True
@@ -161,6 +168,10 @@ class App:
     def _stop(self):
         self.recording.stop()
         self.recording = None
+        self._sync_sound()
+
+    def _sync_sound(self):
+        self.sounds.set_mode(selected_mode(self.recording, self.active, self.settings))
 
     def flash_error(self):
         self.error_until = time.perf_counter() + 2
@@ -179,6 +190,7 @@ class App:
         s = self.settings
         hint = lambda key: f"••••{key[-4:]}" if key else ""  # noqa: E731
         return {"hotkey": s["hotkey"], "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
+                "sound_recording": s["sound_recording"], "sound_processing": s["sound_processing"],
                 "notes": self.notes.listing(), "polish_provider": s["polish_provider"],
                 "profile": {**self.profile.data, "building": self.profile.building},
                 "chatgpt": {"signed_in": bool(self.auth.tokens), "email": self.auth.email(), **self.auth.login},
@@ -190,7 +202,7 @@ class App:
             s["hotkey"] = body["hotkey"]
         if body.get("polish_provider") in ("chatgpt", "openrouter"):
             s["polish_provider"] = body["polish_provider"]
-        for flag in ("polish", "learn"):
+        for flag in ("polish", "learn", "sound_recording", "sound_processing"):
             if isinstance(body.get(flag), bool):
                 s[flag] = body[flag]
         if isinstance(body.get("terms"), list):
@@ -201,6 +213,8 @@ class App:
         if "position" in body and body["position"] is None:
             s["position"] = None
         save_settings(s)
+        if self.loop:
+            self.loop.call_soon_threadsafe(self._sync_sound)
         return self.public_settings()
 
 
@@ -215,6 +229,7 @@ def main():
     app = App(load_settings())
     app.open_settings = SettingsServer(app).open
     loop = asyncio.new_event_loop()
+    app.loop = loop
     threading.Thread(target=loop.run_forever, daemon=True).start()
     threading.Thread(target=run_key_hook, args=(app.hotkey_vk, lambda e: loop.call_soon_threadsafe(app.on_key, e)),
                      daemon=True).start()
@@ -223,4 +238,7 @@ def main():
     polish_ready = app.auth.tokens if s["polish_provider"] == "chatgpt" else s["openrouter_api_key"]
     if not s["soniox_api_key"] or not polish_ready:
         app.open_settings()  # first run: nothing works well until recognition and correction are connected
-    run_overlay(app)
+    try:
+        run_overlay(app)
+    finally:
+        app.sounds.set_mode(None)

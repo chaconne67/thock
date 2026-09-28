@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv run python -m unittest tests.test_fixes tests.test_speech_level
+      - run: uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds
 
   installer:
     runs-on: windows-2022
@@ -31,10 +31,10 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Unit tests
-        run: uv run python -m unittest tests.test_fixes tests.test_speech_level
+        run: uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds
 
       - name: Build app
-        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" voicetype.py
+        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/sounds;thock/sounds" voicetype.py
 
       - name: Build installer
         shell: pwsh
@@ -55,6 +55,10 @@ jobs:
           if ($run.ExitCode) { throw "installer exit $($run.ExitCode)" }
           $app = "$env:LOCALAPPDATA\Programs\Thock\Thock.exe"
           if (-not (Test-Path $app)) { throw "Thock not installed at $app" }
+          $soundDir = "$env:LOCALAPPDATA\Programs\Thock\_internal\thock\sounds"
+          foreach ($sound in @("recording.wav", "processing.wav")) {
+            if (-not (Test-Path (Join-Path $soundDir $sound))) { throw "missing sound asset: $sound" }
+          }
           if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Thock.lnk")) { throw "no startup shortcut" }
           Start-Sleep 15
           $log = Get-Content "$env:USERPROFILE\.voicetype\voicetype.log" -Raw -ErrorAction SilentlyContinue

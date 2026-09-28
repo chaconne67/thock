@@ -1,0 +1,19 @@
+Source: "Typing on a rainy 75" by Techrul, Freesound
+https://freesound.org/people/Techrul/sounds/815614/
+License: Creative Commons 0 (CC0), as stated on the source page.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Both loops are derived from a real Rainy75 keyboard strike at 35.204-35.275 seconds in
+the public HQ MP3 preview:
+https://cdn.freesound.org/previews/815/815614_15899953-hq.mp3
+The source's original MP3 download requires a Freesound login.
+
+The single strike was made mono 48 kHz 16-bit PCM and trimmed before the next
+separate impact. It has short fades, 55 Hz high-pass, +2.5 dB at 230 Hz,
+-3 dB at 3.5 kHz and 9 kHz low-pass, with 5 dB output gain.
+No pitch shift, synthesis or other keyboard recording was used.
+
+recording.wav: 6.0-second seamless loop, 15 irregularly spaced strikes,
+approximately -24 dBFS peak. The quiet level is intended for microphone use.
+processing.wav: 2.4-second seamless loop, 11 faster strikes,
+approximately -12 dBFS peak. It ends when pasting/processing finishes.
