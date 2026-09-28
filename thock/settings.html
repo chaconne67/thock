@@ -73,7 +73,7 @@
     padding: 8px 40px 8px 14px; font: inherit; font-size: 14px; max-width: 240px; cursor: pointer; }
   select:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; }
   .sound-picker { display: flex; align-items: stretch; gap: 8px; width: 100%; max-width: 440px; }
-  .sound-picker select { flex: 1; min-width: 0; max-width: none; }
+  .sound-picker select { flex: 1; min-width: 0; max-width: none; min-height: 56px; }
   textarea { min-height: 128px; resize: vertical; }
   textarea:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; border-color: transparent; }
   .field { display: grid; gap: 6px; }
@@ -88,18 +88,22 @@
   button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
   .secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
   .secondary:hover { background: var(--field); }
-  .sound-preview { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-    min-width: 130px; min-height: 48px; padding: 0 14px 0 8px; overflow: hidden; font-weight: 600; white-space: nowrap; }
-  .sound-preview-icon { width: 30px; height: 30px; display: grid; place-items: center; flex: none;
-    border-radius: 8px; background: var(--seg); color: var(--text); }
-  .sound-preview-icon svg { width: 16px; height: 16px; }
+  .sound-preview { position: relative; display: inline-flex; align-items: center; gap: 10px;
+    min-width: 154px; min-height: 56px; padding: 0 12px 4px 10px; overflow: hidden; text-align: left;
+    background: var(--card); font-weight: 600; white-space: nowrap; }
+  .sound-preview-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: none;
+    border-radius: 50%; background: var(--primary); color: var(--on-primary); }
+  .sound-preview-icon svg { width: 17px; height: 17px; }
   .sound-preview-stop { display: none; }
-  .sound-preview[aria-pressed="true"] { background: var(--field); }
-  .sound-preview[aria-pressed="true"] .sound-preview-icon { background: var(--primary); color: var(--on-primary); }
+  .sound-preview-detail { display: grid; gap: 2px; line-height: 1.15; }
+  .sound-preview-wave { width: 60px; height: 12px; color: var(--muted); }
+  .sound-preview-track { position: absolute; left: 10px; right: 10px; bottom: 5px; height: 2px;
+    overflow: hidden; border-radius: 2px; background: var(--seg); pointer-events: none; }
+  .sound-preview-progress { display: block; height: 100%; width: var(--preview-progress, 0%); background: var(--text); }
+  .sound-preview[aria-pressed="true"] { background: var(--field); border-color: var(--text); }
+  .sound-preview[aria-pressed="true"] .sound-preview-wave { color: var(--text); }
   .sound-preview[aria-pressed="true"] .sound-preview-play { display: none; }
   .sound-preview[aria-pressed="true"] .sound-preview-stop { display: block; }
-  .sound-preview-progress { position: absolute; left: 0; bottom: 0; height: 3px;
-    width: var(--preview-progress, 0%); background: var(--ring); pointer-events: none; }
   @media (max-width: 400px) {
     .sound-picker { flex-wrap: wrap; }
     .sound-picker select { flex-basis: 100%; }
@@ -212,8 +216,13 @@
             <svg class="sound-preview-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg>
             <svg class="sound-preview-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
           </span>
-          <span id="sound-preview-label">미리듣기</span>
-          <span class="sound-preview-progress" aria-hidden="true"></span>
+          <span class="sound-preview-detail">
+            <span id="sound-preview-label">미리듣기</span>
+            <svg class="sound-preview-wave" viewBox="0 0 60 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <path d="M2 5v2m5-4v6m5-3v1m5-5v8m5-6v4m5-6v8m5-4v1m5-3v5m5-7v10m5-7v3m5-5v7m5-4v1"/>
+            </svg>
+          </span>
+          <span class="sound-preview-track" aria-hidden="true"><span class="sound-preview-progress"></span></span>
         </button>
       </div>
     </div>
