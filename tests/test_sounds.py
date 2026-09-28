@@ -1,6 +1,7 @@
 """Phase selection, repeat playback and bundled keyboard audio."""
 
 import array
+import http.client
 import json
 import sys
 import tempfile
@@ -14,6 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from thock import config  # noqa: E402
 from thock.sound import SOUNDS, KeyboardSounds, selected_mode  # noqa: E402
+from thock.settings_server import SettingsServer  # noqa: E402
 
 
 class SoundSettings(unittest.TestCase):
@@ -139,6 +141,37 @@ class SoundAssets(unittest.TestCase):
                     self.assertEqual(audio.readframes(1), bytes(2))
                     audio.setpos(audio.getnframes() - 1)
                     self.assertEqual(audio.readframes(1), bytes(2))
+
+
+class SoundPreview(unittest.TestCase):
+    def test_only_authenticated_known_keyboards_serve_the_selected_recording(self):
+        server = SettingsServer(types.SimpleNamespace())
+        port = server.httpd.server_port
+
+        def get(path, token=None):
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+            try:
+                connection.request("GET", path, headers={"X-Token": token} if token else {})
+                response = connection.getresponse()
+                return response.status, response.getheader("Content-Type"), response.read()
+            finally:
+                connection.close()
+
+        try:
+            self.assertEqual(get("/api/sound-preview?keyboard=rainy75")[0], 403)
+            for keyboard, phases in SOUNDS.items():
+                with self.subTest(keyboard=keyboard):
+                    status, content_type, body = get(
+                        f"/api/sound-preview?keyboard={keyboard}", server.token)
+                    expected = Path(__file__).resolve().parent.parent / "thock/sounds" / phases["processing"]
+                    self.assertEqual((status, content_type), (200, "audio/wav"))
+                    self.assertEqual(body, expected.read_bytes())
+            for keyboard in ("missing", "../settings.html"):
+                self.assertEqual(
+                    get(f"/api/sound-preview?keyboard={keyboard}", server.token)[0], 404)
+        finally:
+            server.httpd.shutdown()
+            server.httpd.server_close()
 
 
 if __name__ == "__main__":

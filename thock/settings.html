@@ -70,6 +70,8 @@
   select { background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
     padding: 8px 10px; font: inherit; font-size: 14px; max-width: 240px; }
   select:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; }
+  .sound-picker { display: flex; align-items: center; gap: 8px; width: min(100%, 340px); }
+  .sound-picker select { flex: 1; min-width: 0; }
   textarea { min-height: 128px; resize: vertical; }
   textarea:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; border-color: transparent; }
   .field { display: grid; gap: 6px; }
@@ -178,7 +180,10 @@
         <label class="label" for="sound-keyboard">키보드</label>
         <p class="hint">기종마다 다른 실제 연속 타건음이 들립니다.</p>
       </div>
-      <select id="sound-keyboard"></select>
+      <div class="sound-picker">
+        <select id="sound-keyboard"></select>
+        <button class="secondary" type="button" id="sound-preview" aria-pressed="false">들어보기</button>
+      </div>
     </div>
     <div class="row sep">
       <div>
@@ -310,6 +315,7 @@ function termsList() { return $("terms").value.split("\n").map((t) => t.trim()).
 function hotkey() { return document.querySelector("input[name=hotkey]:checked").value; }
 function provider() { return document.querySelector("input[name=provider]:checked").value; }
 let loginTimer = null;
+let previewAudio = null;
 
 function renderProvider(s) {
   $("panel-chatgpt").hidden = provider() !== "chatgpt";
@@ -340,6 +346,41 @@ function renderHint() {
     + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
   $("terms-count").textContent = `${termsList().length}개`;
 }
+
+function stopSoundPreview() {
+  if (previewAudio) {
+    previewAudio.pause();
+    previewAudio.currentTime = 0;
+    previewAudio = null;
+  }
+  $("sound-preview").textContent = "들어보기";
+  $("sound-preview").setAttribute("aria-pressed", "false");
+}
+
+$("sound-keyboard").addEventListener("input", stopSoundPreview);
+$("sound-preview").addEventListener("click", async () => {
+  if (previewAudio) return stopSoundPreview();
+  const keyboard = $("sound-keyboard").value;
+  const audio = new Audio("/api/sound-preview?keyboard=" + encodeURIComponent(keyboard) + "&t=" + encodeURIComponent(TOKEN));
+  previewAudio = audio;
+  audio.addEventListener("ended", () => { if (previewAudio === audio) stopSoundPreview(); }, { once: true });
+  audio.addEventListener("error", () => {
+    if (previewAudio === audio) {
+      stopSoundPreview();
+      setStatus("소리를 재생하지 못했습니다.");
+    }
+  }, { once: true });
+  $("sound-preview").textContent = "멈추기";
+  $("sound-preview").setAttribute("aria-pressed", "true");
+  try {
+    await audio.play();
+  } catch (e) {
+    if (previewAudio === audio) {
+      stopSoundPreview();
+      setStatus("소리를 재생하지 못했습니다.");
+    }
+  }
+});
 
 const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 

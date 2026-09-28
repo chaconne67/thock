@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .config import HOME, log
 from .correction import check_keys
+from .sound import SOUNDS
 
 
 class SettingsServer:
@@ -66,6 +67,12 @@ class SettingsServer:
                                       "text/html; charset=utf-8")
                 if path == "/api/settings":
                     return self._send(200, server.app.public_settings())
+                if path == "/api/sound-preview":
+                    keyboard = parse_qs(urlparse(self.path).query).get("keyboard", [""])[0]
+                    if keyboard not in SOUNDS:
+                        return self._send(404, {"error": "not found"})
+                    audio = Path(__file__).parent / "sounds" / SOUNDS[keyboard]["processing"]
+                    return self._send(200, audio.read_bytes(), "audio/wav")
                 self._send(404, {"error": "not found"})
 
             def do_POST(self):
