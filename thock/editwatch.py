@@ -12,6 +12,18 @@ from .learning import fixes_in_field
 ole32, oleaut32 = ctypes.WinDLL("ole32"), ctypes.WinDLL("oleaut32")
 oleaut32.SysStringLen.argtypes = [ctypes.c_void_p]
 oleaut32.SysFreeString.argtypes = [ctypes.c_void_p]
+oleaut32.SafeArrayGetLBound.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_long)]
+oleaut32.SafeArrayGetUBound.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_long)]
+oleaut32.SafeArrayGetElement.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_long), ctypes.c_void_p]
+oleaut32.SafeArrayDestroy.argtypes = [ctypes.c_void_p]
+_local_reader = threading.local()
+
+
+def field_reader():
+    if not hasattr(_local_reader, "reader"):
+        _local_reader.reader = FieldReader()
+    return _local_reader.reader
+
 _PP = ctypes.POINTER(ctypes.c_void_p)
 
 
@@ -54,9 +66,39 @@ class FieldReader:
         ole32.CoCreateInstance(ctypes.byref(_guid("{ff48dba4-60ef-4201-aa87-54103eef594e}")), None, 1,
                                ctypes.byref(_guid("{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}")), ctypes.byref(self.uia))
 
+    def focus_id(self):
+        element, rid = ctypes.c_void_p(), ctypes.c_void_p()
+        try:
+            if not self.uia:
+                return None
+            if _com(self.uia, 8, _PP)(self.uia, ctypes.byref(element)) < 0 or not element:
+                return None
+            if _com(element, 4, _PP)(element, ctypes.byref(rid)) < 0 or not rid:
+                return None
+            lo, hi = ctypes.c_long(), ctypes.c_long()
+            if (oleaut32.SafeArrayGetLBound(rid, 1, ctypes.byref(lo)) < 0
+                    or oleaut32.SafeArrayGetUBound(rid, 1, ctypes.byref(hi)) < 0
+                    or not 0 <= hi.value - lo.value < 64):
+                return None
+            values = []
+            for i in range(lo.value, hi.value + 1):
+                index, value = ctypes.c_long(i), ctypes.c_long()
+                if oleaut32.SafeArrayGetElement(rid, ctypes.byref(index), ctypes.byref(value)) < 0:
+                    return None
+                values.append(value.value)
+            return tuple(values)
+        except OSError:
+            return None
+        finally:
+            if rid:
+                oleaut32.SafeArrayDestroy(rid)
+            _release(element)
+
     def read_focused(self):
         el = ctypes.c_void_p()
         try:
+            if not self.uia:
+                return None
             _com(self.uia, 8, _PP)(self.uia, ctypes.byref(el))  # GetFocusedElement
             return self.read(el) if el else None
         except OSError:
@@ -109,10 +151,17 @@ class EditWatcher:
 
     def __init__(self, notes):
         self.notes, self.jobs = notes, queue.Queue()
+        self.enabled = True
+        self.generation = 0
         threading.Thread(target=self._run, daemon=True).start()
 
+    def configure(self, notes, enabled):
+        self.generation += 1
+        self.notes, self.enabled = notes, enabled
+        self.jobs.put(None)
+
     def watch(self, pasted):
-        self.jobs.put(pasted)
+        self.jobs.put((pasted, self.notes, self.generation))
 
     def flush(self):
         """Record what the user fixed so far (called when the next dictation starts)."""
@@ -124,7 +173,10 @@ class EditWatcher:
             job = job if job else self.jobs.get()
             job = self._follow(reader, job) if job else None
 
-    def _follow(self, reader, pasted):
+    def _follow(self, reader, job):
+        pasted, notes, generation = job
+        if generation != self.generation or not self.enabled:
+            return None
         best, nxt = [], None
         try:
             before = reader.read_focused()
@@ -148,5 +200,6 @@ class EditWatcher:
         except Exception:
             log.exception("edit watcher")
         for old, new in best:
-            self.notes.record(old, new)
+            if self.enabled and generation == self.generation:
+                notes.record(old, new)
         return nxt

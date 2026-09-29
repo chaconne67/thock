@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds tests.test_profile tests.test_account
+      - run: uv run python -m unittest discover -s tests -p "test_*.py"
 
   installer:
     runs-on: windows-2022
@@ -31,10 +31,10 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Unit tests
-        run: uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds tests.test_profile tests.test_account
+        run: uv run python -m unittest discover -s tests -p "test_*.py"
 
       - name: Build app
-        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/sounds;thock/sounds" --add-data "thock/fonts;thock/fonts" voicetype.py
+        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/welcome.html;thock" --add-data "thock/recovery.html;thock" --add-data "thock/sounds;thock/sounds" --add-data "thock/fonts;thock/fonts" voicetype.py
 
       - name: Build installer
         shell: pwsh
@@ -83,6 +83,17 @@ jobs:
         with:
           name: Thock-setup-x64
           path: dist/Thock-setup-x64.exe
+
+      - name: Verify company signature before public release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          foreach ($file in @("dist/Thock-setup-x64.exe", "dist/Thock/Thock.exe")) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file
+            if ($signature.Status -ne "Valid") {
+              throw "Public release requires a valid company code signature: $file"
+            }
+          }
 
       - name: Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')

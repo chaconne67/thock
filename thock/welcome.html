@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thock 시작하기</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4f4f6;--card:#fff;--text:#17171c;--sub:#656572;--line:#dedee5;--button:#17171c;--on:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#121215;--card:#1c1c21;--text:#f6f6f8;--sub:#b2b2bd;--line:#34343e;--button:#f6f6f8;--on:#17171c}}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 "Malgun Gothic",sans-serif}
+main{max-width:480px;margin:auto;padding:44px 32px 28px}.mark{display:flex;align-items:center;gap:12px;font-size:21px;font-weight:700;letter-spacing:-1px}.icon{background:#15151a;color:white;border-radius:14px;width:52px;height:52px;display:grid;place-items:center;font-size:26px;letter-spacing:-3px}
+.eyebrow{font-size:12px;letter-spacing:2px;color:var(--sub);margin:36px 0 12px}h1{font-size:32px;line-height:1.4;letter-spacing:-1.5px;margin:0 0 16px}p{margin:0 0 20px;color:var(--sub)}
+.card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:22px;margin:24px 0}.card p:last-child{margin:0}
+button{width:100%;min-height:50px;font:700 15px "Malgun Gothic",sans-serif;border-radius:11px;border:0;background:var(--button);color:var(--on);padding:12px;cursor:pointer}button:disabled{opacity:.45;cursor:wait}.secondary{background:transparent;color:var(--text);border:1px solid var(--line);margin-top:10px}
+button:focus-visible,a:focus-visible{outline:3px solid #4d89ff;outline-offset:3px}a{color:var(--text)}.links{font-size:12px;display:flex;justify-content:center;gap:16px;margin-top:28px}.status{font-size:14px;min-height:24px;overflow-wrap:anywhere}.account{font-weight:700;color:var(--text)}label{font-size:13px;display:flex;gap:10px;margin:16px 0}input{margin-top:5px}small{color:var(--sub);display:block}.foot{text-align:center;font-size:12px;margin-top:28px}
+</style></head><body><main>
+<div class="mark"><div class="icon" aria-hidden="true">▂▅▇▃</div>Thock</div>
+<p class="eyebrow">VOICE TYPING BY AI SHIFT</p>
+<h1 id="title">말하면,<br>바로 쓰입니다.</h1>
+<p id="intro">Google 계정을 연결하면 준비가 끝납니다.</p>
+<div class="card">
+<p id="email" class="account" hidden></p>
+<p id="access" hidden></p>
+<p id="status" class="status" role="status" aria-live="polite">계정 상태를 확인하고 있습니다.</p>
+<label id="legacy" hidden><input type="checkbox" id="import"><span>이 PC의 이전 Thock 자료 가져오기<small>내 단어·학습 기록을 이 계정에 복사합니다. 원본은 보존됩니다.</small></span></label>
+<button id="login" hidden>Google로 연결하기</button>
+<button id="start" hidden>Thock 사용 시작</button>
+<button id="switch" class="secondary" hidden>다른 계정으로 연결</button>
+<button id="refresh" class="secondary" hidden>연결 다시 확인</button>
+</div>
+<p id="complete" hidden>준비가 끝났습니다. 이 창을 닫고 사용하시면 됩니다.</p>
+<div class="links"><a href="https://aishift.kr/#thock-beta" target="_blank" rel="noopener noreferrer">무료 베타 안내</a><a href="https://aishift.kr/privacy/" target="_blank" rel="noopener noreferrer">개인정보 처리</a><a href="https://aishift.kr/terms/" target="_blank" rel="noopener noreferrer">이용약관</a></div>
+<p class="foot">카드 등록 없이 시작 · 자동 결제 없음</p>
+</main><script>
+const TOKEN="__TOKEN__", $=id=>document.getElementById(id);let timer, busy=false;
+async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.message||"연결을 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");return data}
+async function refresh(){
+ if(busy)return;busy=true;clearTimeout(timer);
+ try{
+ const a=await api("/api/account/status");const connected=a.state==="signed_in"||a.state==="offline";
+ $("title").innerHTML=a.welcome_complete?"계정 연결":"말하면,<br>바로 쓰입니다.";
+ $("intro").textContent=a.welcome_complete?"사용하던 AI Shift 계정을 다시 연결하세요.":"Google 계정을 연결하면 준비가 끝납니다.";
+ $("email").hidden=!connected;$("email").textContent=a.email||"";
+ $("status").textContent=a.error||(a.ready?"바로 사용할 수 있습니다.":a.state==="waiting"?"브라우저에서 Google 로그인을 완료해 주세요.":"AI Shift 계정으로 연결해 주세요.");
+ $("login").hidden=connected;$("login").disabled=a.state==="waiting";
+ $("refresh").hidden=false;$("switch").hidden=!connected;$("start").hidden=!a.ready;
+ $("legacy").hidden=a.welcome_complete||!a.ready||!a.legacy_available;
+ $("access").hidden=!a.access?.label;
+ if(a.access?.label){const x=a.access;$("access").textContent=x.label+" · 남은 "+Math.floor(x.remaining_seconds/60)+"분 "+Math.floor(x.remaining_seconds%60)+"초"+(x.period_end?" · "+new Date(x.period_end).toLocaleDateString("ko-KR")+"까지":"");}
+ if(a.state==="waiting"||a.state==="checking")timer=setTimeout(refresh,1500);
+ }catch(e){$("status").textContent=e.message;$("refresh").hidden=false}finally{busy=false}
+}
+$("login").onclick=async()=>{try{await api("/api/account/login",{});await refresh()}catch(e){$("status").textContent=e.message}};
+$("refresh").onclick=refresh;
+$("switch").onclick=async()=>{try{await api("/api/account/logout",{});await api("/api/account/login",{});await refresh()}catch(e){$("status").textContent=e.message}};
+$("start").onclick=async()=>{try{await api("/api/welcome/complete",{import_legacy:$("import").checked});$("start").hidden=true;$("legacy").hidden=true;$("complete").hidden=false;$("status").textContent="사용 준비 완료";window.close()}catch(e){$("status").textContent=e.message}};
+refresh();
+</script></body></html>

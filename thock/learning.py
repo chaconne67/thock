@@ -10,6 +10,7 @@ import unicodedata
 
 from .config import log
 from .correction import sentence_levels
+from .personal import read_data, write_data, history_data
 
 
 
@@ -73,10 +74,10 @@ class TypoNotes:
 
     def __init__(self, path):
         self.path, self.lock = path, threading.Lock()
-        self.notes = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        self.notes = read_data(path, {})
 
     def _save(self):
-        self.path.write_text(json.dumps(self.notes, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_data(self.path, self.notes)
 
     def record(self, old, new):
         with self.lock:
@@ -86,7 +87,7 @@ class TypoNotes:
             else:
                 self.notes[old] = {"to": new, "count": 1}
             self._save()
-        log.info("typo note: %s -> %s (%d)", old, new, self.notes[old]["count"])
+        log.info("typo note updated")
 
     def add(self, old, new):
         with self.lock:
@@ -129,8 +130,10 @@ class Profile:
 
     def __init__(self, path, history):
         self.path, self.history, self.lock, self.building = path, history, threading.Lock(), False
-        self.data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        self.data = read_data(path, {})
         self.complete = None  # set to the AI Shift profile request
+        self.last_error = ""
+        self.can_store = lambda: True
 
     def terms(self):
         return self.data.get("terms", [])
@@ -156,22 +159,25 @@ class Profile:
             general.append({"key": "domain", "value": self.data["domain"]})
         if self.data.get("topics"):
             general.append({"key": "topics", "value": ", ".join(self.data["topics"])})
-        return {"general": general, "terms": list(dict.fromkeys(terms + self.terms()))}
+        return {"general": general, "terms": [t[:80] for t in dict.fromkeys(terms + self.terms()) if isinstance(t, str)][:150]}
 
     def _texts(self):
-        if not self.history.exists():
-            return []
-        rows = [json.loads(line) for line in self.history.read_text(encoding="utf-8").splitlines() if line.strip()]
-        return [r["text"] for r in rows if r.get("text")]
+        return [r["text"] for r in history_data(self.history)["rows"] if r.get("text")]
+
+    def _count(self):
+        return history_data(self.history)["total"]
 
     def maybe_rebuild(self):
         """Called after each dictation: rebuild once enough new text has piled up."""
-        count = len(self._texts())
+        count = self._count()
         due = count - self.data.get("built_at", 0) >= self.EVERY if self.data else count >= self.FIRST
         if due and not self.building:
             self.rebuild()
 
     def rebuild(self):
+        if self.building:
+            return
+        self.last_error = ""
         self.building = True
         threading.Thread(target=self._build, daemon=True).start()
 
@@ -185,7 +191,7 @@ class Profile:
             if not sample:
                 return
             answer = self.complete(sample)
-            found = json.loads(answer[answer.find("{"):answer.rfind("}") + 1])
+            found = json.loads(answer)
             terms, seen = [], set()
             for candidate in found.get("terms", []):
                 term = str(candidate).strip()[:40]
@@ -200,18 +206,22 @@ class Profile:
             data = {"domain": str(found.get("domain", ""))[:80],
                     "topics": [str(t)[:40] for t in found.get("topics", [])][:8],
                     "terms": [term for _, term in terms[:150]],
-                    "built_at": len(texts), "updated": time.strftime("%Y-%m-%d %H:%M")}
+                    "built_at": self._count(), "updated": time.strftime("%Y-%m-%d %H:%M")}
             with self.lock:
+                if not self.can_store():
+                    return
                 self.data = data
-                self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-            log.info("profile rebuilt: %s, %d terms", data["domain"], len(data["terms"]))
-        except Exception:
-            log.exception("profile rebuild failed")
+                write_data(self.path, data)
+            log.info("profile rebuilt: %d terms", len(data["terms"]))
+        except Exception as error:
+            from .account import AccountError
+            self.last_error = str(error) if isinstance(error, AccountError) else "내용을 파악하지 못했습니다. 잠시 뒤 다시 시도해 주세요."
+            log.warning("profile rebuild failed: %s", type(error).__name__)
         finally:
             self.building = False
 
     def reset(self):
         """Forget the profile; learning starts again after EVERY new dictations."""
         with self.lock:
-            self.data = {"built_at": len(self._texts())}
-            self.path.write_text(json.dumps(self.data), encoding="utf-8")
+            self.data = {"built_at": self._count()}
+            write_data(self.path, self.data)

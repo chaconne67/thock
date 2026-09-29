@@ -132,12 +132,9 @@
     padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   #status { color: var(--muted); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
-  .onboard { padding: 18px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
-  .onboard .primary { align-self: flex-start; padding: 11px 18px; }
-  .onboard p { margin: 0; }
-  .onboard #account-error { color: var(--bad); }
-  #account-connected textarea { min-height: 82px; }
-  #account-connected .label { display: block; }
+  .account-actions { display:flex; flex-wrap:wrap; gap:8px; }
+  .account-actions a {color:var(--text);font-size:13px;align-self:center}
+  #account-error, #me-error { color:var(--bad); }
 </style>
 </head>
 <body>
@@ -157,36 +154,13 @@
     </div>
   </header>
 
-  <section aria-labelledby="h-account">
-    <h2 id="h-account">AI Shift 계정</h2>
-    <div id="onboarding" class="group onboard">
-      <div class="label">말하면, 바로 쓰입니다.</div>
-      <p class="hint">Google 계정으로 로그인하고, 아래 체험 칸에서 CapsLock을 누른 채 한 문장을 말해 보세요.</p>
-      <button class="primary" type="button" id="account-login">Google로 시작하기</button>
-      <p class="hint" id="account-error" role="status"></p>
-    </div>
-    <div id="account-connected" class="group" hidden>
-      <div class="row">
-        <div><div class="label">연결된 계정</div><p class="hint" id="account-email"></p></div>
-        <button class="secondary" type="button" id="account-logout">로그아웃</button>
-      </div>
-      <p class="hint">음성은 Soniox로 전송되고, 인식된 글은 AI Shift를 거쳐 AI 교정에 사용됩니다. 받아쓰기 기록과 배운 내용은 이 PC에 저장됩니다.</p>
-      <label class="label" for="try">첫 받아쓰기 체험</label>
-      <p class="hint" id="beta-state"></p>
-      <textarea id="try" placeholder="여기를 클릭하고 CapsLock을 누른 채 한 문장을 말해 보세요."></textarea>
-      <button class="secondary" type="button" id="account-refresh">연결 확인</button>
-    </div>
-    <div class="row sep">
-      <div>
-        <label class="label" for="polish">AI 교정</label>
-        <p class="hint">"음, 어" 같은 군말을 지우고 띄어쓰기와 이름 표기를 바로잡습니다.</p>
-      </div>
-      <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
-    </div>
-  </section>
-
   <section aria-labelledby="h-dictation">
     <h2 id="h-dictation">받아쓰기</h2>
+    <div class="row"><label class="label" for="input-mode">입력 방식</label><select id="input-mode"></select></div>
+    <div class="row sep">
+      <div><label class="label" for="polish">문장 다듬기</label><p class="hint">군말과 띄어쓰기를 정리하고 뜻은 유지합니다.</p></div>
+      <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
+    </div>
     <div class="group">
       <div class="row">
         <div class="label" id="l-hotkey">단축키</div>
@@ -283,7 +257,7 @@
     <div class="row">
       <div>
         <label class="label" for="learn">자동으로 배우기</label>
-        <p class="hint">붙여 넣은 뒤 직접 고친 단어와 자주 쓰는 말을 배워 다음부터 더 정확하게 적습니다. 배운 내용은 이 PC에만 저장됩니다.</p>
+        <p class="hint">붙여 넣은 뒤 직접 고친 단어와 자주 쓰는 말을 배워 다음부터 더 정확하게 적습니다. 학습 기록은 이 Windows 사용자에게 보호되어 최대 30일·최근 1,000건 보관됩니다. 끄면 새 글을 학습 기록에 저장하지 않습니다.</p>
       </div>
       <span class="switch"><input type="checkbox" id="learn" role="switch"></span>
     </div>
@@ -307,12 +281,26 @@
         <div class="chips" id="me-terms" aria-label="자주 쓰는 말"></div>
         <p class="hint" id="me-updated"></p>
       </div>
+      <p class="hint" id="me-error" role="status"></p>
       <div class="checks">
         <button class="secondary" type="button" id="me-rebuild">다시 파악하기</button>
         <button class="secondary" type="button" id="me-reset">지우기</button>
       </div>
     </div>
+    <div class="group sep"><p class="hint">배운 표현·프로필·학습 기록을 함께 지웁니다. 직접 등록한 용어는 남습니다. 이전 버전의 원본 자료는 별도로 보존됩니다.</p><button class="secondary" type="button" id="forget-learning">학습 자료 모두 지우기</button></div>
   </section>
+  <section aria-labelledby="h-account">
+    <h2 id="h-account">계정과 이용 시간</h2>
+    <div class="group"><div class="label" id="account-email"></div><p class="hint" id="account-usage"></p>
+    <p class="hint" id="account-error" role="status"></p></div>
+    <div class="account-actions">
+      <button class="secondary" type="button" id="account-login">계정 다시 연결</button>
+      <button class="secondary" type="button" id="account-logout" hidden>로그아웃</button>
+      <button class="secondary" type="button" id="account-refresh">연결 확인</button>
+      <a href="https://aishift.kr/account/" target="_blank" rel="noopener noreferrer">내 계정 ↗</a>
+    </div>
+  </section>
+  <section aria-labelledby="h-recovery"><h2 id="h-recovery">글 복구</h2><p class="hint">입력하지 못했거나 입력 여부를 확인하지 못한 글을 최근 5건까지 보호해 보관합니다.</p><button class="secondary" id="open-recovery" type="button">보관한 글 열기</button></section>
 </main>
 
 <footer>
@@ -341,18 +329,17 @@ let previewAudio = null;
 
 function renderAccount(a) {
   clearTimeout(accountTimer);
-  const signedIn = a.state === "signed_in";
-  $("onboarding").hidden = signedIn;
-  $("account-connected").hidden = !signedIn;
-  $("account-email").textContent = a.email || "";
-  $("try").disabled = !a.beta_ready;
-  $("beta-state").textContent = a.beta_ready
-    ? "여기를 클릭하고 CapsLock을 누른 채 한 문장을 말해 보세요."
-    : "베타 음성입력 준비 중입니다. 사용이 열리면 여기서 한 문장을 시험할 수 있습니다.";
-  $("account-login").disabled = a.state === "waiting";
-  $("account-login").textContent = a.state === "waiting" ? "브라우저에서 로그인하는 중…" : "Google로 시작하기";
+  const connected = a.state === "signed_in" || a.state === "offline";
+  $("account-email").textContent = a.email || (a.state === "checking" ? "확인 중…" : "연결된 계정 없음");
+  $("account-logout").hidden = !connected;
+  $("account-login").hidden = connected;
+  const x = a.access;
+  $("account-usage").textContent = x?.label
+    ? x.label + " · 남은 " + Math.floor(x.remaining_seconds / 60) + "분 " + Math.floor(x.remaining_seconds % 60) + "초"
+      + (x.pending_seconds ? " · 사용 시간 확인 중" : "")
+      + (x.period_end ? " · " + new Date(x.period_end).toLocaleDateString("ko-KR") + "까지" : "")
+    : "";
   $("account-error").textContent = a.error || "";
-  if (a.state === "waiting") accountTimer = setTimeout(refreshAccount, 1500);
 }
 
 async function refreshAccount() {
@@ -367,8 +354,11 @@ function dirty() { $("save").disabled = false; setStatus(""); }
 
 function renderHint() {
   const key = hotkey() === "capslock" ? "CapsLock" : "ScrollLock";
-  $("hotkey-hint").textContent = `${key}을 누른 채 말하고 떼면 글이 들어갑니다. 짧게 한 번 누르면 계속 듣고, 다시 누르면 멈춥니다.`
-    + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
+  const mode = $("input-mode").value;
+  const message = mode === "hold" ? key + "을 누르는 동안 말하고, 떼면 끝납니다."
+    : mode === "toggle" ? key + "을 한 번 눌러 시작하고, 다시 누르면 끝납니다."
+    : key + "을 누르는 동안 말하거나, 짧게 한 번 눌러 시작하고 다시 눌러 끝냅니다.";
+  $("hotkey-hint").textContent = message + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
   $("terms-count").textContent = `${termsList().length}개`;
 }
 
@@ -442,6 +432,7 @@ $("note-form").addEventListener("submit", async (e) => {
 });
 
 function renderMe(p) {
+  $("me-error").textContent = p?.error || "";
   const has = Boolean(p && p.domain);
   $("me").hidden = !has;
   $("me-empty").hidden = has;
@@ -463,6 +454,8 @@ $("me-reset").addEventListener("click", async () => {
 
 function fill(s) {
   document.querySelector(`input[name=hotkey][value=${s.hotkey}]`).checked = true;
+  $("input-mode").replaceChildren(...Object.entries(s.input_modes).map(([value,label])=>new Option(label,value)));
+  $("input-mode").value = s.input_mode;
   $("polish").checked = s.polish;
   $("learn").checked = s.learn;
   $("sound-recording").checked = s.sound_recording;
@@ -481,18 +474,20 @@ function fill(s) {
   renderNotes(s.notes);
   renderMe(s.profile);
   $("terms").value = s.terms.join("\n");
+  $("terms").disabled = !s.personal_ready;
+  for (const id of ["note-old","note-new","me-rebuild","me-reset","forget-learning"]) $(id).disabled = !s.personal_ready;
   renderHint();
 }
 
 // The note inputs save through their own button; everything else waits for 저장.
-document.querySelectorAll("input:not(.add input), textarea:not(#try), select").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
+document.querySelectorAll("input:not(.add input), textarea, select").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
 
 $("save").addEventListener("click", async () => {
   $("save").disabled = true;
   setStatus("저장 중…");
   try {
     fill(await api("/api/settings", {
-      hotkey: hotkey(), polish: $("polish").checked, learn: $("learn").checked, terms: termsList(),
+      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, learn: $("learn").checked, terms: termsList(),
       sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
       sound_keyboard: $("sound-keyboard").value,
       preview: $("preview").checked, preview_font_ko: $("preview-font-ko").value,
@@ -506,17 +501,18 @@ $("save").addEventListener("click", async () => {
 });
 
 $("account-login").addEventListener("click", async () => {
-  try {
-    renderAccount(await api("/api/account/login", {}));
-    setStatus("기본 브라우저에서 Google 로그인을 완료해 주세요.");
-  } catch (e) {
-    setStatus("로그인을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
-  }
+  await api("/api/window", {name:"welcome"});
 });
-
+$("open-recovery").onclick=()=>api("/api/window",{name:"recovery"});
+$("forget-learning").onclick=async()=>{
+  if(!confirm("배운 표현과 학습 기록을 모두 지울까요? 직접 등록한 용어는 남습니다.")) return;
+  try {fill(await api("/api/forget-learning",{}));setStatus("학습 자료를 지웠습니다.");}
+  catch(e){setStatus("진행 중인 받아쓰기가 끝난 뒤 다시 시도해 주세요.");}
+};
 $("account-logout").addEventListener("click", async () => {
   try {
-    renderAccount(await api("/api/account/logout", {}));
+    await api("/api/account/logout", {});
+    fill(await api("/api/settings"));
     setStatus("Thock에서 로그아웃했습니다.");
   } catch (e) {
     setStatus("연결을 해제하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.");
@@ -530,6 +526,7 @@ $("reset").addEventListener("click", async () => {
   setStatus("표시를 처음 위치로 옮겼습니다.");
 });
 
+window.addEventListener("focus", refreshAccount);
 api("/api/settings").then(fill).catch(() => setStatus("설정을 불러오지 못했습니다. Thock이 켜져 있는지 확인해 주세요."));
 </script>
 </body>

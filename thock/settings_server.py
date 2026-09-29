@@ -1,4 +1,4 @@
-"""Settings and first-use window served only on this PC."""
+"""Separate settings, welcome and recovery windows served only on this PC."""
 
 import hmac
 import http.server
@@ -24,8 +24,17 @@ class SettingsServer:
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
     def open(self):
-        log.info("settings window opened")
-        url = f"http://127.0.0.1:{self.httpd.server_port}/?t={self.token}"
+        self._open("/")
+
+    def open_welcome(self):
+        self._open("/welcome")
+
+    def open_recovery(self):
+        self._open("/recovery")
+
+    def _open(self, path):
+        log.info("local window opened: %s", path)
+        url = f"http://127.0.0.1:{self.httpd.server_port}{path}?t={self.token}"
         edge = next((p for p in (Path(os.environ.get("ProgramFiles(x86)", "")) / "Microsoft/Edge/Application/msedge.exe",
                                  Path(os.environ.get("ProgramFiles", "")) / "Microsoft/Edge/Application/msedge.exe")
                      if p.exists()), None)
@@ -69,6 +78,7 @@ class SettingsServer:
                     try:
                         code, state = query["code"][0], query["state"][0]
                         server.app.account.finish(code, state)
+                        server.app.account_status(force=True)
                     except (KeyError, IndexError, AccountError, OSError):
                         server.app.account.last_error = "Google 로그인을 완료하지 못했습니다. Thock에서 다시 시도해 주세요."
                         page = "<!doctype html><meta charset=utf-8><title>Thock</title><p>로그인을 완료하지 못했습니다. Thock에서 다시 시도해 주세요.</p>"
@@ -77,14 +87,17 @@ class SettingsServer:
                     return self._send(200, page.encode(), "text/html; charset=utf-8")
                 if not self._allowed():
                     return self._send(403, {"error": "forbidden"})
-                if path == "/":
-                    page = (Path(__file__).parent / "settings.html").read_text(encoding="utf-8")
+                if path in {"/", "/welcome", "/recovery"}:
+                    name = {"/": "settings", "/welcome": "welcome", "/recovery": "recovery"}[path]
+                    page = (Path(__file__).parent / (name + ".html")).read_text(encoding="utf-8")
                     return self._send(200, page.replace("__TOKEN__", server.token).encode("utf-8"),
                                       "text/html; charset=utf-8")
                 if path == "/api/settings":
                     return self._send(200, server.app.public_settings())
                 if path == "/api/account/status":
-                    return self._send(200, server.app.account.status())
+                    return self._send(200, server.app.account_status())
+                if path == "/api/recovery":
+                    return self._send(200, server.app.recovery)
                 if path == "/api/sound-preview":
                     keyboard = parse_qs(urlparse(self.path).query).get("keyboard", [""])[0]
                     if keyboard not in SOUNDS:
@@ -98,7 +111,7 @@ class SettingsServer:
                     return self._send(403, {"error": "forbidden"})
                 try:
                     length = int(self.headers.get("Content-Length") or 0)
-                    if length > 20000:
+                    if not 0 <= length <= 20000:
                         raise ValueError
                     body = json.loads(self.rfile.read(length) or b"{}")
                     if not isinstance(body, dict):
@@ -106,6 +119,32 @@ class SettingsServer:
                 except (ValueError, TypeError):
                     return self._send(400, {"error": "bad_request"})
                 path = urlparse(self.path).path
+                if path == "/api/window":
+                    action = {"welcome": server.open_welcome, "recovery": server.open_recovery}.get(body.get("name"))
+                    if not action:
+                        return self._send(400, {"error": "bad_request"})
+                    action()
+                    return self._send(200, {"ok": True})
+                if path == "/api/welcome/complete":
+                    try:
+                        server.app.complete_welcome(bring_legacy=body.get("import_legacy") is True)
+                    except (AccountError, OSError) as error:
+                        return self._send(409, {"message": str(error)})
+                    return self._send(200, {"ready": True})
+                if path == "/api/recovery":
+                    try:
+                        server.app.recovery_action(body.get("id"), body.get("action"))
+                    except (ValueError, OSError):
+                        return self._send(409, {"error": "recovery_unavailable"})
+                    return self._send(200, {"ok": True})
+                if path in {"/api/profile", "/api/notes", "/api/forget-learning"} and not server.app.data_root:
+                    return self._send(401, {"message": "계정을 먼저 연결해 주세요."})
+                if path == "/api/forget-learning":
+                    try:
+                        server.app.forget_learning()
+                    except (AccountError, OSError) as error:
+                        return self._send(409, {"message": str(error)})
+                    return self._send(200, server.app.public_settings())
                 if path == "/api/settings":
                     return self._send(200, server.app.update_settings(body))
                 if path == "/api/profile":
@@ -114,7 +153,15 @@ class SettingsServer:
                     elif body.get("action") == "reset":
                         server.app.profile.reset()
                     return self._send(200, server.app.public_settings())
+                if path in {"/api/account/login", "/api/account/logout"} and (server.app.active or server.app.profile.building):
+                    return self._send(409, {"message": "진행 중인 받아쓰기가 끝나면 계정을 변경해 주세요."})
                 if path == "/api/account/login":
+                    if server.app.account.token:
+                        try:
+                            server.app.account.logout()
+                        except AccountError as error:
+                            return self._send(503, {"message": str(error)})
+                    server.app.account_status()
                     url = server.app.account.begin(server.httpd.server_port)
                     try:
                         os.startfile(url)
@@ -127,7 +174,7 @@ class SettingsServer:
                         server.app.account.logout()
                     except AccountError as error:
                         return self._send(503, {"error": error.code})
-                    return self._send(200, server.app.account.status())
+                    return self._send(200, server.app.account_status())
                 if path == "/api/notes":
                     old, new = str(body.get("old", "")).strip(), str(body.get("new", "")).strip()
                     if body.get("action") == "add" and old and new and old != new:

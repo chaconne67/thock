@@ -51,7 +51,7 @@ class AccountFlowTests(unittest.TestCase):
         account = Account()
         with patch.object(account, "_request", side_effect=AccountError("signed_out")),              patch("thock.account.delete_token") as delete:
             with self.assertRaises(AccountError):
-                account.session_key()
+                account.start_session()
         delete.assert_called_once()
         self.assertIsNone(account.token)
 

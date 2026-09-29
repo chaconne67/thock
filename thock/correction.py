@@ -34,7 +34,7 @@ class Polisher:
     def __init__(self, settings, notes, account, profile):
         self.settings, self.notes, self.account, self.profile = settings, notes, account, profile
 
-    def polish(self, text, app):
+    def polish(self, text, app, session_id):
         terms = [term for term in dict.fromkeys(self.settings["terms"] + self.profile.terms()[:60])
                  if isinstance(term, str) and len(term) <= 80][:60]
         fixes = self.notes.hint()
@@ -42,6 +42,7 @@ class Polisher:
             fixes = fixes[:1000].rsplit(", ", 1)[0]
         return self.account.complete("polish", {
             "text": text,
+            "session_id": session_id,
             "terms": terms,
             "fixes": fixes or "없음",
             "profile": self.profile.summary() or "아직 모름",

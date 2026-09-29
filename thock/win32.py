@@ -3,6 +3,7 @@
 import ctypes
 import ctypes.wintypes as wt
 import time
+import threading
 from pathlib import Path
 
 
@@ -64,6 +65,8 @@ kernel32.GlobalLock.restype = ctypes.c_void_p
 kernel32.GlobalUnlock.argtypes = [wt.HGLOBAL]
 kernel32.GlobalSize.argtypes = [wt.HGLOBAL]
 kernel32.GlobalSize.restype = ctypes.c_size_t
+kernel32.GlobalFree.argtypes = [wt.HGLOBAL]
+kernel32.GlobalFree.restype = wt.HGLOBAL
 kernel32.CreateMutexW.restype = wt.HANDLE
 
 WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 13, 0x100, 0x101, 0x104, 0x105
@@ -72,6 +75,7 @@ VK_SHIFT, VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x10, 0x11, 0x56, 
 CF_UNICODETEXT, GMEM_MOVEABLE = 13, 2
 GDI_FORMATS = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}  # handles that are not global memory
 HOOK_REARM_MS = 30_000
+_clipboard_lock = threading.Lock()
 
 
 def run_key_hook(get_vk, on_key):
@@ -140,40 +144,82 @@ def _open_clipboard():
 
 def _set_clipboard(fmt, data):
     handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, max(len(data), 1))
-    ctypes.memmove(kernel32.GlobalLock(handle), data, len(data))
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    pointer = kernel32.GlobalLock(handle)
+    if not pointer:
+        kernel32.GlobalFree(handle)
+        raise ctypes.WinError(ctypes.get_last_error())
+    ctypes.memmove(pointer, data, len(data))
     kernel32.GlobalUnlock(handle)
-    user32.SetClipboardData(fmt, handle)
+    if not user32.SetClipboardData(fmt, handle):
+        kernel32.GlobalFree(handle)
+        raise ctypes.WinError(ctypes.get_last_error())
 
 
-def paste(text):
-    """Paste text at the cursor, then put the previous clipboard contents back."""
-    _open_clipboard()
-    try:
-        saved, fmt = [], user32.EnumClipboardFormats(0)
-        while fmt:
-            handle = user32.GetClipboardData(fmt) if fmt not in GDI_FORMATS else None
-            if handle and (size := kernel32.GlobalSize(handle)):
-                saved.append((fmt, ctypes.string_at(kernel32.GlobalLock(handle), size)))
-                kernel32.GlobalUnlock(handle)
-            fmt = user32.EnumClipboardFormats(fmt)
-        user32.EmptyClipboard()
-        _set_clipboard(CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
-        # Keep dictated text out of clipboard history and clipboard managers.
-        _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
-    finally:
-        user32.CloseClipboard()
+def capture_target():
+    """Window and UI Automation input identity; never focus or activate another window."""
+    from .editwatch import field_reader
+    window = user32.GetForegroundWindow()
+    identity = field_reader().focus_id()
+    if not window or not identity or window != user32.GetForegroundWindow():
+        return None
+    return window, identity
 
-    keys = [(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
-    inputs = (INPUT * len(keys))(*[INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, 0))) for vk, flags in keys])
-    try:
-        if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
-            raise ctypes.WinError(ctypes.get_last_error())
-        time.sleep(0.4)  # the target app reads the clipboard asynchronously
-    finally:
+
+def copy_text(text):
+    with _clipboard_lock:
         _open_clipboard()
         try:
             user32.EmptyClipboard()
-            for fmt, data in saved:
-                _set_clipboard(fmt, data)
+            _set_clipboard(CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
+            _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
         finally:
             user32.CloseClipboard()
+
+
+def paste(text, target):
+    """Return verified/sent/moved. A changed or unknown input target is never pasted into."""
+    from .editwatch import field_reader
+    if not target or capture_target() != target:
+        return "moved"
+    with _clipboard_lock:
+        reader = field_reader()
+        before = reader.read_focused()
+        _open_clipboard()
+        try:
+            saved, fmt = [], user32.EnumClipboardFormats(0)
+            while fmt:
+                handle = user32.GetClipboardData(fmt) if fmt not in GDI_FORMATS else None
+                if handle and (size := kernel32.GlobalSize(handle)):
+                    saved.append((fmt, ctypes.string_at(kernel32.GlobalLock(handle), size)))
+                    kernel32.GlobalUnlock(handle)
+                fmt = user32.EnumClipboardFormats(fmt)
+            user32.EmptyClipboard()
+            _set_clipboard(CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
+            _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
+        finally:
+            user32.CloseClipboard()
+        sequence = user32.GetClipboardSequenceNumber()
+        keys = [(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
+        inputs = (INPUT * len(keys))(*[
+            INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, 0))) for vk, flags in keys])
+        try:
+            if capture_target() != target:
+                return "moved"
+            if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
+                raise ctypes.WinError(ctypes.get_last_error())
+            time.sleep(0.4)
+            after = reader.read_focused() if capture_target() == target else None
+            return "verified" if (before is not None and after is not None
+                                  and after.count(text) > before.count(text)) else "sent"
+        finally:
+            _open_clipboard()
+            try:
+                # Another application may have copied something while the paste was in flight.
+                if user32.GetClipboardSequenceNumber() == sequence:
+                    user32.EmptyClipboard()
+                    for fmt, data in saved:
+                        _set_clipboard(fmt, data)
+            finally:
+                user32.CloseClipboard()

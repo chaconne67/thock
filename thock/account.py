@@ -12,14 +12,28 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 SITE = "https://aishift.kr"
 CREDENTIAL_NAME = "AIShift/Thock"
 MESSAGES = {
     "signed_out": "AI Shift에 다시 로그인해 주세요.",
-    "quota_exceeded": "베타 사용 한도에 도달했습니다. 내일 다시 시도해 주세요.",
-    "beta_unavailable": "Thock 베타 음성입력이 아직 준비되지 않았습니다.",
+    "access_unavailable": "이 계정의 Thock 이용권을 확인해 주세요.",
+    "access_suspended": "Thock 이용이 중지되었습니다. 내 계정에서 확인해 주세요.",
+    "access_not_started": "이용 시작일 전입니다. 내 계정에서 기간을 확인해 주세요.",
+    "access_expired": "이용 기간이 끝났습니다. 내 계정에서 확인해 주세요.",
+    "time_exhausted": "제공 시간이 모두 사용되었습니다. 내 계정에서 확인해 주세요.",
+    "budget_exhausted": "무료 베타의 운영 한도에 도달해 잠시 쉬고 있습니다.",
+    "session_busy": "진행 중인 받아쓰기가 끝나면 다시 시작해 주세요.",
+    "beta_unavailable": "Thock 서비스를 준비 중입니다. 잠시 뒤 연결을 확인해 주세요.",
     "provider_unavailable": "음성 서비스에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
+    "invalid_completion": "문장을 다듬지 못했습니다. 인식한 원문을 확인해 주세요.",
+    "learning_paused": "자동으로 배우기가 꺼져 있습니다.",
+    "profile_not_due": "새 받아쓰기가 더 쌓이면 다시 파악할 수 있습니다.",
+    "already_processed": "이미 처리한 요청입니다.",
+    "session_expired": "처리 시간이 지났습니다. 새 받아쓰기를 시작해 주세요.",
+    "account_unreachable": "인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+    "sign_in": "로그인을 완료하지 못했습니다. 다시 연결해 주세요.",
 }
 
 
@@ -92,6 +106,8 @@ class Account:
         self.pending = None
         self.lock = threading.Lock()
         self.last_error = ""
+        self.cached = {"state": "checking" if self.token else "signed_out", "email": "", "ready": False}
+        self.checked_at = 0.0
 
     @staticmethod
     def _request(path, data=None, token=None, timeout=8):
@@ -146,29 +162,50 @@ class Account:
                 pass
             raise
         self.token = token
+        self.checked_at = 0
         self.email = response.get("email", "")
         self.last_error = ""
         return self.email
 
-    def status(self):
+    def status(self, force=False):
         if self.pending and time.monotonic() > self.pending[2]:
             self.pending = None
             self.last_error = "로그인 시간이 지났습니다. 다시 시도해 주세요."
         if not self.token:
-            return {"state": "waiting" if self.pending else "signed_out",
-                    "email": "", "error": self.last_error}
+            self.cached = {"state": "waiting" if self.pending else "signed_out",
+                           "email": "", "error": self.last_error, "ready": False}
+            return self.cached
+        if not force and time.monotonic() - self.checked_at < 15:
+            return self.cached
+        token = self.token
         try:
-            body = self._request("/api/app/me", token=self.token)
+            body = self._request("/api/app/me", token=token)
         except AccountError as error:
             if error.code == "signed_out":
+                self._clear(token)
+                self.cached = {"state": "signed_out", "email": "", "ready": False, "error": str(error)}
+            else:
+                self.cached = {**self.cached, "state": "offline", "ready": False, "error": str(error)}
+        else:
+            if token != self.token:
+                return self.cached
+            self.email = body.get("email", "")
+            access = body.get("access", {})
+            ready = bool(body.get("beta_ready") and access.get("allowed"))
+            reason = ("beta_unavailable" if not body.get("beta_ready") else access.get("reason", ""))
+            self.cached = {"state": "signed_in", "email": self.email, "account_id": body.get("account_id"),
+                           "beta_ready": body.get("beta_ready", False), "ready": ready, "access": access,
+                           "error": MESSAGES.get(reason, "")}
+        self.checked_at = time.monotonic()
+        return self.cached
+
+    def _clear(self, token):
+        with self.lock:
+            if token == self.token:
                 delete_token()
                 self.token = None
                 self.email = ""
-                return {"state": "signed_out", "email": "", "error": error.code}
-            return {"state": "offline", "email": self.email, "error": error.code}
-        self.email = body.get("email", "")
-        return {"state": "signed_in", "email": self.email, "beta_ready": body.get("beta_ready", False),
-                "error": self.last_error}
+                self.checked_at = 0
 
     def logout(self):
         if self.token:
@@ -177,24 +214,40 @@ class Account:
             except AccountError as error:
                 if error.code != "signed_out":
                     raise
-        delete_token()
-        self.token = None
-        self.email = ""
+        self._clear(self.token)
+        self.pending = None
+        self.cached = {"state": "signed_out", "email": "", "ready": False}
 
     def _authorized(self, path, payload, timeout=8):
         if not self.token:
             raise AccountError("signed_out")
+        token = self.token
         try:
-            return self._request(path, payload, token=self.token, timeout=timeout)
+            return self._request(path, payload, token=token, timeout=timeout)
         except AccountError as error:
             if error.code == "signed_out":
-                delete_token()
-                self.token = None
-                self.email = ""
+                self._clear(token)
+            self.last_error = str(error)
             raise
 
-    def session_key(self):
-        return self._authorized("/api/thock/session", {})["api_key"]
+    def start_session(self):
+        response = self._authorized("/api/thock/session", {"request_id": str(uuid.uuid4())}, timeout=10)
+        try:
+            uuid.UUID(response["session_id"])
+            if (not isinstance(response["api_key"], str) or not response["api_key"]
+                    or isinstance(response["max_session_seconds"], bool)
+                    or not 1 <= response["max_session_seconds"] <= 120):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            raise AccountError("provider_unavailable") from None
+        self.last_error = ""
+        return response
+
+    def report(self, session_id, recorded_ms, outcome, **metrics):
+        return self._authorized("/api/thock/finish", {
+            "session_id": session_id, "recorded_ms": recorded_ms, "outcome": outcome, **metrics})
+
+
 
     def complete(self, kind, payload):
-        return self._authorized("/api/thock/complete", {"kind": kind, **payload}, timeout=17)["text"]
+        return self._authorized("/api/thock/complete", {"kind": kind, **payload}, timeout=35)["text"]

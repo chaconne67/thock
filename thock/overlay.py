@@ -152,7 +152,7 @@ class Overlay:
     GEAR, GAP, MARGIN = 30, 8, 10
     TEXT_W, TEXT_H, PAD_X, PAD_Y, LINES = 600, 96, 20, 11, 2  # preview box: widest, tallest (largest font), padding, lines
     SIZE = 0.8
-    MENU_SETTINGS, MENU_RESET, MENU_QUIT = 1, 2, 3
+    MENU_SETTINGS, MENU_RESET, MENU_QUIT, MENU_RECOVERY, MENU_ACCOUNT = 1, 2, 3, 4, 5
 
     def __init__(self, app):
         self.app, self.state, self.locked, self.alpha = app, None, False, 0
@@ -259,8 +259,15 @@ class Overlay:
                 save_settings(self.app.settings)
             elif target == "gear":
                 self.app.open_settings()
+            elif target == "pill" and not self.app.active:
+                if self.app.recovery:
+                    self.app.open_recovery()
+                elif not self.app.account.cached.get("ready"):
+                    self.app.open_welcome()
         elif msg == WM_RBUTTONUP:
             self._menu()
+        elif msg == 0x218 and wparam in (7, 18):  # WM_POWERBROADCAST resume
+            self.app.account_refresh_needed = True
         elif msg == WM_DEVICECHANGE:
             self.app.devices_changed = True  # a microphone was plugged, unplugged or switched
         else:
@@ -271,6 +278,8 @@ class Overlay:
         menu = user32.CreatePopupMenu()
         user32.AppendMenuW(menu, 0, self.MENU_SETTINGS, "설정")
         user32.AppendMenuW(menu, 0, self.MENU_RESET, "위치 초기화")
+        user32.AppendMenuW(menu, 0, self.MENU_RECOVERY, "보관한 글")
+        user32.AppendMenuW(menu, 0, self.MENU_ACCOUNT, "계정 연결")
         user32.AppendMenuW(menu, 0x800, 0, None)  # separator
         user32.AppendMenuW(menu, 0, self.MENU_QUIT, f"{APP_NAME} 종료")
         x, y = self._cursor()
@@ -280,6 +289,10 @@ class Overlay:
         user32.DestroyMenu(menu)
         if choice == self.MENU_SETTINGS:
             self.app.open_settings()
+        elif choice == self.MENU_RECOVERY:
+            self.app.open_recovery()
+        elif choice == self.MENU_ACCOUNT:
+            self.app.open_welcome()
         elif choice == self.MENU_RESET:
             self.app.update_settings({"position": None})
         elif choice == self.MENU_QUIT:
@@ -304,7 +317,7 @@ class Overlay:
         step = 40 if target_alpha > self.alpha else 16
         self.alpha = min(target_alpha, self.alpha + step) if target_alpha > self.alpha else max(target_alpha, self.alpha - step)
         self._update_font()
-        self._fit(self.app.preview() if state in ("recording", "processing") else "")
+        self._fit(self.app.preview() if state else "")
 
         live = self.state == "recording" and tuple(self.app.levels)
         ripple = self.state == "processing" and int(time.perf_counter() * 60)
