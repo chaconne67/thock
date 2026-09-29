@@ -4,10 +4,12 @@ every meaningful word kept, nothing added, commands and questions kept as text.
 Run: uv run python tests/polish_cases.py"""
 
 import sys
+import asyncio
+import hashlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from thock.config import HOME, load_settings  # noqa: E402
+from thock.config import HOME, SAMPLE_RATE, load_settings  # noqa: E402
 from thock.account import Account  # noqa: E402
 from thock.correction import Polisher  # noqa: E402
 from thock.learning import Profile, TypoNotes  # noqa: E402
@@ -43,9 +45,23 @@ REGISTER = [
 if __name__ == "__main__":
     s = load_settings()
     account = Account()
-    if not account.token:
-        raise SystemExit("Thock에서 AI Shift에 먼저 로그인해 주세요.")
-    polisher = Polisher(s, TypoNotes(HOME / "typo_notes.json"), account,
-                        Profile(HOME / "profile.json", HOME / "history.jsonl"))
-    for case in (REGISTER if "--register" in sys.argv else REGRESSION):
-        print(f"{case}\n   -> {polisher.polish(case, 'WindowsTerminal.exe')}")
+    status = account.status(force=True)
+    if not status.get("ready"):
+        raise SystemExit(status.get("error") or "Thock 이용권을 확인해 주세요.")
+    root = HOME / "accounts" / hashlib.sha256(str(status["account_id"]).encode()).hexdigest()[:24]
+    from thock.personal import read_data
+    from thock.speech import transcribe
+    s["terms"] = read_data(root / "terms.protected", [])
+    polisher = Polisher(s, TypoNotes(root / "notes.protected"), account,
+                        Profile(root / "profile.protected", root / "history.protected"))
+
+    async def check():
+        for case in (REGISTER if "--register" in sys.argv else REGRESSION):
+            grant = await asyncio.to_thread(account.start_session)
+            async def silence():
+                yield bytes(SAMPLE_RATE)  # Half a second; completes the same metered voice path.
+            await transcribe(silence(), grant["api_key"], lambda: {})
+            result = await asyncio.to_thread(polisher.polish, case, "WindowsTerminal.exe", grant["session_id"])
+            await asyncio.to_thread(account.report, grant["session_id"], 500, "empty")
+            print(f"{case}\n   -> {result}")
+    asyncio.run(check())

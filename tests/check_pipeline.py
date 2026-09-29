@@ -6,6 +6,7 @@ and how soon and how often the live preview got text while the audio was still p
 """
 
 import asyncio
+import hashlib
 import sys
 import time
 import wave
@@ -32,22 +33,34 @@ async def realtime_chunks(path, marks):
 
 async def main(paths):
     s = load_settings()
-    notes = TypoNotes(HOME / "typo_notes.json")
-    profile = Profile(HOME / "profile.json", HOME / "history.jsonl")
     account = Account()
-    if not account.token:
-        raise SystemExit("Thock에서 AI Shift에 먼저 로그인해 주세요.")
+    status = account.status(force=True)
+    if not status.get("ready"):
+        raise SystemExit(status.get("error") or "Thock에서 AI Shift 계정과 이용권을 확인해 주세요.")
+    root = HOME / "accounts" / hashlib.sha256(str(status["account_id"]).encode()).hexdigest()[:24]
+    from thock.personal import read_data
+    s["terms"] = read_data(root / "terms.protected", [])
+    notes = TypoNotes(root / "notes.protected")
+    profile = Profile(root / "profile.protected", root / "history.protected")
     polisher = Polisher(s, notes, account, profile)
     for path in paths:
         marks, heard = {}, []
-        temporary_key = await asyncio.to_thread(account.session_key)
-        raw = await transcribe(realtime_chunks(path, marks), temporary_key,
+        with wave.open(str(path)) as source:
+            recorded_ms = round(source.getnframes() * 1000 / source.getframerate())
+        if recorded_ms > 120000:
+            raise SystemExit("검증 음성은 120초 이하여야 합니다.")
+        grant = await asyncio.to_thread(account.start_session)
+        if recorded_ms > grant["max_session_seconds"] * 1000:
+            raise SystemExit("이용권의 남은 시간이 검증 음성보다 짧습니다.")
+        raw = await transcribe(realtime_chunks(path, marks), grant["api_key"],
                                lambda: profile.context("WindowsTerminal.exe", s["terms"] + notes.terms()),
                                lambda text: heard.append((time.perf_counter(), text.strip())))
         live = [(t, text) for t, text in heard if text and t < marks["released"]]
         stt = time.perf_counter() - marks["released"]
-        text = await asyncio.to_thread(polisher.polish, raw, "WindowsTerminal.exe") if raw else raw
+        text = await asyncio.to_thread(polisher.polish, raw, "WindowsTerminal.exe", grant["session_id"]) if raw else raw
         total = time.perf_counter() - marks["released"]
+        await asyncio.to_thread(account.report, grant["session_id"], recorded_ms, "delivered",
+                                input_mode="hold", stt_ms=round(stt*1000), total_ms=round(total*1000))
         print(f"{Path(path).name}: stt {stt:.2f}s, total {total:.2f}s\n  raw : {raw}\n  text: {text}")
         if live:
             print(f"  live: first text {live[0][0] - marks['started']:.2f}s after start, {len(live)} updates"

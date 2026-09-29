@@ -14,6 +14,8 @@ import urllib.parse
 import urllib.request
 import uuid
 
+from .config import VERSION
+
 SITE = "https://aishift.kr"
 CREDENTIAL_NAME = "AIShift/Thock"
 MESSAGES = {
@@ -111,7 +113,7 @@ class Account:
 
     @staticmethod
     def _request(path, data=None, token=None, timeout=8):
-        headers = {"User-Agent": "Thock/0.2", "Accept": "application/json"}
+        headers = {"User-Agent": f"Thock/{VERSION}", "Accept": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         if data is not None:
