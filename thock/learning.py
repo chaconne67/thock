@@ -3,6 +3,7 @@
 import difflib
 import json
 import os
+import re
 import threading
 import time
 import unicodedata
@@ -12,10 +13,10 @@ from .correction import sentence_levels
 
 
 PROFILE_PROMPT = """You keep a short profile that helps a dictation app spell this user's words correctly.
-The user message holds texts this user dictated recently, one per line. From those texts only:
+The user message is a JSON array of recent dictations, one string per dictation. Repeated entries are separate dictations. From those texts only:
 - "domain": the user's field or work, in a few words
 - "topics": up to 8 recurring subjects
-- "terms": up to 150 names, product names, jargon and code words the user actually used, spelled exactly as in the texts
+- "terms": up to 150 candidate names, product names, jargon and code words the user actually used, spelled exactly as in the texts. Prefer terms used in separate dictations; the app will count and keep only repeated terms.
 Do not guess beyond the texts. Write domain and topics in the language the user mostly writes in.
 Reply with JSON only: {"domain": "...", "topics": ["..."], "terms": ["..."]}"""
 
@@ -191,11 +192,22 @@ class Profile:
                 sample.append(text)
             if not sample:
                 return
-            answer = self.complete(PROFILE_PROMPT, "\n".join(dict.fromkeys(sample)))
+            answer = self.complete(PROFILE_PROMPT, json.dumps(sample, ensure_ascii=False))
             found = json.loads(answer[answer.find("{"):answer.rfind("}") + 1])
+            terms, seen = [], set()
+            for candidate in found.get("terms", []):
+                term = str(candidate).strip()[:40]
+                if not term or term.casefold() in seen:
+                    continue
+                seen.add(term.casefold())
+                pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", re.IGNORECASE)
+                count = sum(pattern.search(text) is not None for text in sample)
+                if count >= 2:
+                    terms.append((count, term))
+            terms.sort(key=lambda pair: -pair[0])
             data = {"domain": str(found.get("domain", ""))[:80],
                     "topics": [str(t)[:40] for t in found.get("topics", [])][:8],
-                    "terms": [str(t)[:40] for t in found.get("terms", []) if str(t).strip()][:150],
+                    "terms": [term for _, term in terms[:150]],
                     "built_at": len(texts), "updated": time.strftime("%Y-%m-%d %H:%M")}
             with self.lock:
                 self.data = data
