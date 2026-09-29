@@ -15,7 +15,8 @@ import sounddevice as sd
 
 from .config import (APP_NAME, HOME, HOTKEYS, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
                      TAP_SECONDS, load_settings, log, save_settings)
-from .correction import ChatGPTAuth, Polisher
+from .account import Account, AccountError
+from .correction import Polisher
 from .editwatch import EditWatcher
 from .learning import Profile, TypoNotes
 from .overlay import BARS, run_overlay
@@ -60,7 +61,8 @@ class Session:
     async def run(self):
         s, notes, record = self.state.settings, self.state.notes, {"app": self.app}
         try:
-            raw = await transcribe(self.chunks(), s["soniox_api_key"],
+            temporary_key = await asyncio.to_thread(self.state.account.session_key)
+            raw = await transcribe(self.chunks(), temporary_key,
                                    lambda: self.state.profile.context(self.app, s["terms"] + notes.terms()),
                                    lambda heard: setattr(self, "preview", heard.strip()))
             record.update(raw=raw, stt_seconds=round(time.perf_counter() - self.released, 3))
@@ -68,6 +70,10 @@ class Session:
             if raw and s["polish"]:
                 try:
                     text = await asyncio.to_thread(self.state.polisher.polish, raw, self.app)
+                except AccountError as e:
+                    self.state.account.last_error = str(e)
+                    self.state.open_settings()
+                    record["polish_error"] = str(e)
                 except Exception as e:
                     log.warning("polish skipped: %s", e)
                     record["polish_error"] = str(e)
@@ -80,6 +86,11 @@ class Session:
                 if s["learn"]:
                     self.state.watcher.watch(text)
             record["total_seconds"] = round(time.perf_counter() - self.released, 3)
+        except AccountError as e:
+            record["error"] = str(e)
+            self.state.account.last_error = str(e)
+            self.state.flash_error()
+            self.state.open_settings()
         except Exception as e:
             log.exception("dictation failed")
             record["error"] = str(e)
@@ -102,11 +113,10 @@ class App:
     def __init__(self, settings):
         self.settings = settings
         self.notes = TypoNotes(HOME / "typo_notes.json")
-        self.auth = ChatGPTAuth(HOME / "chatgpt_auth.json")
+        self.account = Account()
         self.profile = Profile(HOME / "profile.json", HOME / "history.jsonl")
-        self.polisher = Polisher(settings, self.notes, self.auth, self.profile)
-        # Its own connection and lock: a slow profile build must never hold up a dictation's correction.
-        self.profile.complete = Polisher(settings, self.notes, self.auth, self.profile).complete
+        self.polisher = Polisher(settings, self.notes, self.account, self.profile)
+        self.profile.complete = lambda texts: self.account.complete("profile", {"texts": texts})
         self.watcher = EditWatcher(self.notes)
         self.active = set()
         self.recording = None
@@ -130,7 +140,7 @@ class App:
             if self.recording and self.toggle:
                 self._stop()
             elif not self.recording:
-                if not self.settings["soniox_api_key"]:
+                if not self.account.token:
                     self.flash_error()
                     self.open_settings()
                     return
@@ -196,24 +206,21 @@ class App:
 
     def public_settings(self):
         s = self.settings
-        hint = lambda key: f"••••{key[-4:]}" if key else ""  # noqa: E731
         return {"hotkey": s["hotkey"], "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
                 "sound_recording": s["sound_recording"], "sound_processing": s["sound_processing"],
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
                 "preview": s["preview"], "preview_font_ko": s["preview_font_ko"], "preview_font_en": s["preview_font_en"],
                 "preview_font_size": s["preview_font_size"], "preview_fonts": PREVIEW_FONTS,
                 "preview_font_sizes": list(PREVIEW_FONT_SIZES),
-                "notes": self.notes.listing(), "polish_provider": s["polish_provider"],
+                "notes": self.notes.listing(),
                 "profile": {**self.profile.data, "building": self.profile.building},
-                "chatgpt": {"signed_in": bool(self.auth.tokens), "email": self.auth.email(), **self.auth.login},
-                "soniox_key": hint(s["soniox_api_key"]), "openrouter_key": hint(s["openrouter_api_key"])}
+                "account": {"state": "signed_in" if self.account.token else "signed_out",
+                            "email": self.account.email, "error": self.account.last_error}}
 
     def update_settings(self, body):
         s = self.settings
         if body.get("hotkey") in HOTKEYS:
             s["hotkey"] = body["hotkey"]
-        if body.get("polish_provider") in ("chatgpt", "openrouter"):
-            s["polish_provider"] = body["polish_provider"]
         if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:
             s["sound_keyboard"] = body["sound_keyboard"]
         for flag in ("polish", "learn", "sound_recording", "sound_processing", "preview"):
@@ -226,9 +233,6 @@ class App:
             s["preview_font_size"] = body["preview_font_size"]
         if isinstance(body.get("terms"), list):
             s["terms"] = [t.strip() for t in body["terms"] if isinstance(t, str) and t.strip()][:500]
-        for key in ("soniox_api_key", "openrouter_api_key"):
-            if isinstance(body.get(key), str) and body[key].strip():
-                s[key] = body[key].strip()
         if "position" in body and body["position"] is None:
             s["position"] = None
         save_settings(s)
@@ -253,10 +257,8 @@ def main():
     threading.Thread(target=run_key_hook, args=(app.hotkey_vk, lambda e: loop.call_soon_threadsafe(app.on_key, e)),
                      daemon=True).start()
     log.info("started, hotkey=%s", app.settings["hotkey"])
-    s = app.settings
-    polish_ready = app.auth.tokens if s["polish_provider"] == "chatgpt" else s["openrouter_api_key"]
-    if not s["soniox_api_key"] or not polish_ready:
-        app.open_settings()  # first run: nothing works well until recognition and correction are connected
+    if not app.account.token:
+        app.open_settings()  # first run: connect the AI Shift account before dictating
     try:
         run_overlay(app)
     finally:

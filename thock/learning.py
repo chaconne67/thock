@@ -12,14 +12,6 @@ from .config import log
 from .correction import sentence_levels
 
 
-PROFILE_PROMPT = """You keep a short profile that helps a dictation app spell this user's words correctly.
-The user message is a JSON array of recent dictations, one string per dictation. Repeated entries are separate dictations. From those texts only:
-- "domain": the user's field or work, in a few words
-- "topics": up to 8 recurring subjects
-- "terms": up to 150 candidate names, product names, jargon and code words the user actually used, spelled exactly as in the texts. Prefer terms used in separate dictations; the app will count and keep only repeated terms.
-Do not guess beyond the texts. Write domain and topics in the language the user mostly writes in.
-Reply with JSON only: {"domain": "...", "topics": ["..."], "terms": ["..."]}"""
-
 
 def _norm(s):
     """Letters and digits only, lower-case: spacing, punctuation and case edits are not word fixes."""
@@ -138,7 +130,7 @@ class Profile:
     def __init__(self, path, history):
         self.path, self.history, self.lock, self.building = path, history, threading.Lock(), False
         self.data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        self.complete = None  # set to Polisher.complete once it exists
+        self.complete = None  # set to the AI Shift profile request
 
     def terms(self):
         return self.data.get("terms", [])
@@ -192,7 +184,7 @@ class Profile:
                 sample.append(text)
             if not sample:
                 return
-            answer = self.complete(PROFILE_PROMPT, json.dumps(sample, ensure_ascii=False))
+            answer = self.complete(sample)
             found = json.loads(answer[answer.find("{"):answer.rfind("}") + 1])
             terms, seen = [], set()
             for candidate in found.get("terms", []):

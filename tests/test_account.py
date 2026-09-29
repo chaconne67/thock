@@ -1,0 +1,76 @@
+"""AI Shift desktop sign-in and credential handling."""
+
+import hashlib
+import sys
+import unittest
+import urllib.parse
+import urllib.request
+from unittest.mock import patch
+
+from thock.account import Account, AccountError
+
+
+class AccountFlowTests(unittest.TestCase):
+    @patch("thock.account.read_token", return_value=None)
+    def test_pkce_callback_saves_only_app_token(self, _read):
+        account = Account()
+        url = urllib.parse.urlparse(account.begin(43123))
+        query = urllib.parse.parse_qs(url.query)
+        state = query["state"][0]
+        verifier = account.pending[1]
+        expected = __import__("base64").urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        self.assertEqual(url.scheme, "https")
+        self.assertEqual(url.hostname, "aishift.kr")
+        self.assertEqual(query["challenge"], [expected])
+        with patch.object(account, "_request", return_value={"token": "app-token", "email": "x@example.com"}),              patch("thock.account.write_token") as write:
+            self.assertEqual(account.finish("one-time-code", state), "x@example.com")
+        write.assert_called_once_with("app-token")
+        self.assertEqual(account.token, "app-token")
+        self.assertIsNone(account.pending)
+
+    @patch("thock.account.read_token", return_value=None)
+    def test_wrong_state_does_not_exchange(self, _read):
+        account = Account()
+        account.begin(43123)
+        with patch.object(account, "_request") as request:
+            with self.assertRaises(AccountError):
+                account.finish("code", "wrong-state")
+            request.assert_not_called()
+
+    @patch("thock.account.read_token", return_value=None)
+    def test_expired_sign_in_can_restart(self, _read):
+        account = Account()
+        account.begin(43123)
+        account.pending = (*account.pending[:2], 0)
+        self.assertEqual(account.status()["state"], "signed_out")
+        self.assertIsNone(account.pending)
+        self.assertIn("시간", account.last_error)
+
+    @patch("thock.account.read_token", return_value="app-token")
+    def test_revoked_app_token_is_removed(self, _read):
+        account = Account()
+        with patch.object(account, "_request", side_effect=AccountError("signed_out")),              patch("thock.account.delete_token") as delete:
+            with self.assertRaises(AccountError):
+                account.session_key()
+        delete.assert_called_once()
+        self.assertIsNone(account.token)
+
+
+@unittest.skipUnless(sys.platform == "win32", "Windows Credential Manager")
+class WindowsCredentialTests(unittest.TestCase):
+    def test_round_trip_under_isolated_test_name(self):
+        import secrets
+        from thock import account
+
+        target = "AIShift/Thock/Test/" + secrets.token_hex(8)
+        with patch.object(account, "CREDENTIAL_NAME", target):
+            try:
+                self.assertIsNone(account.read_token())
+                account.write_token("test-token")
+                self.assertEqual(account.read_token(), "test-token")
+            finally:
+                account.delete_token()
+
+
+if __name__ == "__main__":
+    unittest.main()

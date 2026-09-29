@@ -20,8 +20,8 @@ class ProfileTerms(unittest.TestCase):
             profile = Profile(root / "profile.json", history)
             request = {}
 
-            def complete(prompt, user):
-                request["prompt"], request["user"] = prompt, user
+            def complete(texts):
+                request["texts"] = texts
                 return json.dumps(
                     {"domain": "소프트웨어 개발", "topics": ["음성 입력"], "terms": candidates},
                     ensure_ascii=False,
@@ -43,7 +43,7 @@ class ProfileTerms(unittest.TestCase):
         data, request, context = self.build(
             texts, ["GBrain", "HTML", "TM", "Thock", "처음 보는 말"],
         )
-        self.assertEqual(json.loads(request["user"]), list(reversed(texts)))
+        self.assertEqual(request["texts"], list(reversed(texts)))
         self.assertEqual(data["terms"], ["Thock", "GBrain"])
         self.assertEqual(data["built_at"], len(texts))
         self.assertEqual(context["terms"], ["직접 등록", "Thock", "GBrain"])

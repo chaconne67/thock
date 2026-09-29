@@ -79,9 +79,7 @@
   .field { display: grid; gap: 6px; }
   .field > label { font-size: 14px; font-weight: 500; }
   .field .sub { color: var(--muted); font-size: 13px; font-weight: 400; }
-  .key { display: flex; gap: 6px; }
   .field .seg { justify-self: start; }
-  .panel { margin-top: 6px; }
   .count { color: var(--muted); font-size: 12px; text-align: right; }
 
   button { font: inherit; font-size: 14px; font-weight: 500; border-radius: 10px; cursor: pointer; min-height: 40px; padding: 0 16px; }
@@ -109,14 +107,9 @@
     .sound-picker { flex-wrap: wrap; }
     .sound-picker select { flex-basis: 100%; }
   }
-  .icon { width: 40px; padding: 0; display: grid; place-items: center; flex: none; }
-  .icon svg { width: 18px; height: 18px; }
   .primary { background: var(--primary); color: var(--on-primary); border: 0; min-width: 96px; font-weight: 700; }
   .primary:disabled { opacity: .35; cursor: default; }
   .checks { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .checks .result { margin-left: 6px; }
-  .result { font-size: 12px; font-weight: 500; }
-  .result.ok { color: var(--ok); } .result.bad { color: var(--bad); }
 
   .notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .notes:empty { display: none; }
@@ -132,8 +125,6 @@
   .notes button svg { width: 14px; height: 14px; }
   .add { display: flex; align-items: center; gap: 8px; }
   .add input { flex: 1; min-width: 0; }
-  .code { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--field); border: 1px dashed var(--line); }
-  .code b { font-size: 18px; letter-spacing: 0.08em; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chips span { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--field); border: 1px solid var(--line); }
   .me-domain { font-size: 14px; font-weight: 500; }
@@ -141,6 +132,12 @@
     padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   #status { color: var(--muted); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  .onboard { padding: 18px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
+  .onboard .primary { align-self: flex-start; padding: 11px 18px; }
+  .onboard p { margin: 0; }
+  .onboard #account-error { color: var(--bad); }
+  #account-connected textarea { min-height: 82px; }
+  #account-connected .label { display: block; }
 </style>
 </head>
 <body>
@@ -159,6 +156,34 @@
       <p>Voice Typing</p>
     </div>
   </header>
+
+  <section aria-labelledby="h-account">
+    <h2 id="h-account">AI Shift 계정</h2>
+    <div id="onboarding" class="group onboard">
+      <div class="label">말하면, 바로 쓰입니다.</div>
+      <p class="hint">Google 계정으로 로그인하고, 아래 체험 칸에서 CapsLock을 누른 채 한 문장을 말해 보세요.</p>
+      <button class="primary" type="button" id="account-login">Google로 시작하기</button>
+      <p class="hint" id="account-error" role="status"></p>
+    </div>
+    <div id="account-connected" class="group" hidden>
+      <div class="row">
+        <div><div class="label">연결된 계정</div><p class="hint" id="account-email"></p></div>
+        <button class="secondary" type="button" id="account-logout">로그아웃</button>
+      </div>
+      <p class="hint">음성은 Soniox로 전송되고, 인식된 글은 AI Shift를 거쳐 AI 교정에 사용됩니다. 받아쓰기 기록과 배운 내용은 이 PC에 저장됩니다.</p>
+      <label class="label" for="try">첫 받아쓰기 체험</label>
+      <p class="hint" id="beta-state"></p>
+      <textarea id="try" placeholder="여기를 클릭하고 CapsLock을 누른 채 한 문장을 말해 보세요."></textarea>
+      <button class="secondary" type="button" id="account-refresh">연결 확인</button>
+    </div>
+    <div class="row sep">
+      <div>
+        <label class="label" for="polish">AI 교정</label>
+        <p class="hint">"음, 어" 같은 군말을 지우고 띄어쓰기와 이름 표기를 바로잡습니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
+    </div>
+  </section>
 
   <section aria-labelledby="h-dictation">
     <h2 id="h-dictation">받아쓰기</h2>
@@ -244,50 +269,6 @@
     </div>
   </section>
 
-  <section aria-labelledby="h-keys">
-    <h2 id="h-keys">연결</h2>
-    <div class="field">
-      <label for="soniox">음성 인식 <span class="sub">· Soniox API 키</span></label>
-      <div class="key">
-        <input type="password" id="soniox" autocomplete="off" spellcheck="false">
-        <button class="secondary icon" type="button" data-reveal="soniox" aria-label="Soniox 키 보기"></button>
-      </div>
-    </div>
-    <div class="row sep">
-      <div>
-        <label class="label" for="polish">AI 교정</label>
-        <p class="hint">"음, 어" 같은 군말을 지우고 띄어쓰기와 이름 표기를 바로잡습니다.</p>
-      </div>
-      <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
-    </div>
-    <div class="field">
-      <div class="label" id="l-provider">교정에 쓸 계정</div>
-      <div class="seg" role="radiogroup" aria-labelledby="l-provider">
-        <input type="radio" name="provider" id="pv-chatgpt" value="chatgpt"><label for="pv-chatgpt">ChatGPT 구독</label>
-        <input type="radio" name="provider" id="pv-openrouter" value="openrouter"><label for="pv-openrouter">OpenRouter 키</label>
-      </div>
-      <div id="panel-chatgpt" class="group panel">
-        <div class="row">
-          <div>
-            <div class="label" id="gpt-status"></div>
-            <p class="hint" id="gpt-hint"></p>
-          </div>
-          <button class="secondary" type="button" id="gpt-login">ChatGPT로 로그인</button>
-        </div>
-        <p class="code" id="gpt-code" hidden></p>
-      </div>
-      <div id="panel-openrouter" class="key panel">
-        <input type="password" id="openrouter" autocomplete="off" spellcheck="false" aria-label="OpenRouter API 키">
-        <button class="secondary icon" type="button" data-reveal="openrouter" aria-label="OpenRouter 키 보기"></button>
-      </div>
-    </div>
-    <div class="checks sep">
-      <button class="secondary" type="button" id="check">연결 확인</button>
-      <span class="result" id="r-soniox" aria-live="polite"></span>
-      <span class="result" id="r-polish" aria-live="polite"></span>
-    </div>
-  </section>
-
   <section aria-labelledby="h-terms">
     <h2 id="h-terms">용어 사전</h2>
     <div class="field">
@@ -342,7 +323,6 @@
 <script>
 const TOKEN = "__TOKEN__";
 const $ = (id) => document.getElementById(id);
-const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 async function api(path, body) {
   const res = await fetch(path, {
@@ -356,29 +336,31 @@ async function api(path, body) {
 
 function termsList() { return $("terms").value.split("\n").map((t) => t.trim()).filter(Boolean); }
 function hotkey() { return document.querySelector("input[name=hotkey]:checked").value; }
-function provider() { return document.querySelector("input[name=provider]:checked").value; }
-let loginTimer = null;
+let accountTimer = null;
 let previewAudio = null;
 
-function renderProvider(s) {
-  $("panel-chatgpt").hidden = provider() !== "chatgpt";
-  $("panel-openrouter").hidden = provider() !== "openrouter";
-  if (!s) return;
-  const g = s.chatgpt;
-  $("gpt-status").textContent = g.signed_in ? `로그인됨${g.email ? " · " + g.email : ""}` : "로그인하지 않음";
-  $("gpt-hint").textContent = g.signed_in
-    ? "ChatGPT 구독 한도 안에서 교정합니다. Codex 로그인과는 따로 관리됩니다."
-    : "ChatGPT Plus 이상 구독으로 교정합니다. 따로 비용이 들지 않습니다.";
-  $("gpt-login").textContent = g.signed_in ? "로그아웃" : "ChatGPT로 로그인";
-  const waiting = g.state === "waiting" && !g.signed_in;
-  $("gpt-code").hidden = !waiting;
-  if (waiting) {
-    $("gpt-code").innerHTML = "";
-    $("gpt-code").append("브라우저에 열린 로그인 페이지에 이 코드를 입력하세요: ", Object.assign(document.createElement("b"), { textContent: g.user_code }));
+function renderAccount(a) {
+  clearTimeout(accountTimer);
+  const signedIn = a.state === "signed_in";
+  $("onboarding").hidden = signedIn;
+  $("account-connected").hidden = !signedIn;
+  $("account-email").textContent = a.email || "";
+  $("try").disabled = !a.beta_ready;
+  $("beta-state").textContent = a.beta_ready
+    ? "여기를 클릭하고 CapsLock을 누른 채 한 문장을 말해 보세요."
+    : "베타 음성입력 준비 중입니다. 사용이 열리면 여기서 한 문장을 시험할 수 있습니다.";
+  $("account-login").disabled = a.state === "waiting";
+  $("account-login").textContent = a.state === "waiting" ? "브라우저에서 로그인하는 중…" : "Google로 시작하기";
+  $("account-error").textContent = a.error || "";
+  if (a.state === "waiting") accountTimer = setTimeout(refreshAccount, 1500);
+}
+
+async function refreshAccount() {
+  try {
+    renderAccount(await api("/api/account/status"));
+  } catch (e) {
+    setStatus("AI Shift 연결을 확인하지 못했습니다. 인터넷 연결을 확인해 주세요.");
   }
-  if (g.state === "failed" || g.state === "expired") setStatus("로그인하지 못했습니다. 다시 시도해 주세요.");
-  clearTimeout(loginTimer);
-  if (waiting) loginTimer = setTimeout(async () => renderProvider(await api("/api/settings")), 2000);
 }
 function setStatus(text) { $("status").textContent = text; }
 function dirty() { $("save").disabled = false; setStatus(""); }
@@ -494,39 +476,27 @@ function fill(s) {
   }
   $("preview-size").replaceChildren(...s.preview_font_sizes.map((n) => new Option(n, n)));
   $("preview-size").value = s.preview_font_size;
-  document.querySelector(`input[name=provider][value=${s.polish_provider}]`).checked = true;
-  renderProvider(s);
+  renderAccount(s.account);
+  refreshAccount();
   renderNotes(s.notes);
   renderMe(s.profile);
   $("terms").value = s.terms.join("\n");
-  for (const k of ["soniox", "openrouter"]) {
-    $(k).value = "";
-    $(k).placeholder = s[`${k}_key`] ? `저장됨 ${s[`${k}_key`]}` : "여기에 붙여 넣기";
-  }
   renderHint();
 }
 
-document.querySelectorAll("[data-reveal]").forEach((btn) => {
-  btn.innerHTML = EYE;
-  btn.addEventListener("click", () => {
-    const input = $(btn.dataset.reveal);
-    input.type = input.type === "password" ? "text" : "password";
-  });
-});
 // The note inputs save through their own button; everything else waits for 저장.
-document.querySelectorAll("input:not(.add input), textarea, select").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
+document.querySelectorAll("input:not(.add input), textarea:not(#try), select").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
 
 $("save").addEventListener("click", async () => {
   $("save").disabled = true;
   setStatus("저장 중…");
   try {
     fill(await api("/api/settings", {
-      hotkey: hotkey(), polish: $("polish").checked, learn: $("learn").checked, terms: termsList(), polish_provider: provider(),
+      hotkey: hotkey(), polish: $("polish").checked, learn: $("learn").checked, terms: termsList(),
       sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
       sound_keyboard: $("sound-keyboard").value,
       preview: $("preview").checked, preview_font_ko: $("preview-font-ko").value,
       preview_font_en: $("preview-font-en").value, preview_font_size: Number($("preview-size").value),
-      soniox_api_key: $("soniox").value, openrouter_api_key: $("openrouter").value,
     }));
     setStatus("저장했습니다. 바로 적용됩니다.");
   } catch (e) {
@@ -535,41 +505,25 @@ $("save").addEventListener("click", async () => {
   }
 });
 
-function showResult(id, ok, good, bad) {
-  $(id).textContent = ok ? good : bad;
-  $(id).className = `result ${ok ? "ok" : "bad"}`;
-}
-
-$("check").addEventListener("click", async () => {
-  for (const id of ["r-soniox", "r-polish"]) { $(id).textContent = ""; $(id).className = "result"; }
-  $("check").disabled = true;
-  setStatus("확인 중…");
+$("account-login").addEventListener("click", async () => {
   try {
-    const r = await api("/api/check", { soniox_api_key: $("soniox").value, openrouter_api_key: $("openrouter").value,
-                                        polish_provider: provider() });
-    showResult("r-soniox", r.soniox, "음성 인식 ✓", "음성 인식 ✕ 키를 확인해 주세요");
-    if (!$("polish").checked) showResult("r-polish", true, "교정 꺼짐", "");
-    else showResult("r-polish", r.polish, "교정 ✓",
-      provider() === "chatgpt" ? "교정 ✕ ChatGPT 로그인이 필요합니다" : "교정 ✕ 키를 확인해 주세요");
-    setStatus("");
+    renderAccount(await api("/api/account/login", {}));
+    setStatus("기본 브라우저에서 Google 로그인을 완료해 주세요.");
   } catch (e) {
-    setStatus("확인하지 못했습니다. 인터넷 연결을 확인해 주세요.");
-  } finally {
-    $("check").disabled = false;
+    setStatus("로그인을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
   }
 });
 
-document.querySelectorAll("input[name=provider]").forEach((el) => el.addEventListener("change", () => renderProvider()));
-
-$("gpt-login").addEventListener("click", async () => {
-  const signedIn = $("gpt-login").textContent === "로그아웃";
+$("account-logout").addEventListener("click", async () => {
   try {
-    renderProvider(await api(signedIn ? "/api/chatgpt/logout" : "/api/chatgpt/login", {}));
-    setStatus(signedIn ? "로그아웃했습니다." : "브라우저에서 ChatGPT 로그인 페이지를 열었습니다.");
+    renderAccount(await api("/api/account/logout", {}));
+    setStatus("Thock에서 로그아웃했습니다.");
   } catch (e) {
-    setStatus("ChatGPT 로그인을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+    setStatus("연결을 해제하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.");
   }
 });
+
+$("account-refresh").addEventListener("click", refreshAccount);
 
 $("reset").addEventListener("click", async () => {
   await api("/api/settings", { position: null });

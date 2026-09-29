@@ -13,7 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from thock.config import HOME, SAMPLE_RATE, load_settings  # noqa: E402
-from thock.correction import ChatGPTAuth, Polisher  # noqa: E402
+from thock.account import Account  # noqa: E402
+from thock.correction import Polisher  # noqa: E402
 from thock.learning import Profile, TypoNotes  # noqa: E402
 from thock.speech import transcribe  # noqa: E402
 
@@ -33,10 +34,14 @@ async def main(paths):
     s = load_settings()
     notes = TypoNotes(HOME / "typo_notes.json")
     profile = Profile(HOME / "profile.json", HOME / "history.jsonl")
-    polisher = Polisher(s, notes, ChatGPTAuth(HOME / "chatgpt_auth.json"), profile)
+    account = Account()
+    if not account.token:
+        raise SystemExit("Thock에서 AI Shift에 먼저 로그인해 주세요.")
+    polisher = Polisher(s, notes, account, profile)
     for path in paths:
         marks, heard = {}, []
-        raw = await transcribe(realtime_chunks(path, marks), s["soniox_api_key"],
+        temporary_key = await asyncio.to_thread(account.session_key)
+        raw = await transcribe(realtime_chunks(path, marks), temporary_key,
                                lambda: profile.context("WindowsTerminal.exe", s["terms"] + notes.terms()),
                                lambda text: heard.append((time.perf_counter(), text.strip())))
         live = [(t, text) for t, text in heard if text and t < marks["released"]]

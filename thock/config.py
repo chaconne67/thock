@@ -6,18 +6,17 @@ import tomllib
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.1"
+APP_NAME, VERSION = "Thock", "0.2.0"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
 SONIOX_MODEL = "stt-rt-v5"
-POLISH_MODEL = "openai/gpt-6-luna"  # via OpenRouter; chosen by a 16+8 sentence comparison (docs)
 TAP_SECONDS = 0.35  # shorter press = toggle mode, longer press = push-to-talk
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
                    "hhkb": "HHKB Professional Hybrid", "leopold": "Leopold FC660M",
                    "technics": "Technics · Gateron Yellow", "keychron": "Keychron K10 · Linear"}
-DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # settings.json
+DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # keep old setting without using it
             "terms": [], "position": None, "learn": True,
             "sound_recording": False, "sound_processing": True, "sound_keyboard": "rainy75",
             "preview": True, "preview_font_ko": "Noto Sans KR", "preview_font_en": "Inter", "preview_font_size": 14}

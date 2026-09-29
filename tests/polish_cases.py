@@ -8,7 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from thock.config import HOME, load_settings  # noqa: E402
-from thock.correction import ChatGPTAuth, Polisher  # noqa: E402
+from thock.account import Account  # noqa: E402
+from thock.correction import Polisher  # noqa: E402
 from thock.learning import Profile, TypoNotes  # noqa: E402
 
 REGRESSION = [
@@ -41,7 +42,10 @@ REGISTER = [
 
 if __name__ == "__main__":
     s = load_settings()
-    polisher = Polisher(s, TypoNotes(HOME / "typo_notes.json"), ChatGPTAuth(HOME / "chatgpt_auth.json"),
+    account = Account()
+    if not account.token:
+        raise SystemExit("Thock에서 AI Shift에 먼저 로그인해 주세요.")
+    polisher = Polisher(s, TypoNotes(HOME / "typo_notes.json"), account,
                         Profile(HOME / "profile.json", HOME / "history.jsonl"))
     for case in (REGISTER if "--register" in sys.argv else REGRESSION):
         print(f"{case}\n   -> {polisher.polish(case, 'WindowsTerminal.exe')}")
