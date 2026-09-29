@@ -2,6 +2,8 @@ import json
 import urllib.error
 import urllib.request
 import unittest
+import threading
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -12,7 +14,7 @@ class LocalScreens(unittest.TestCase):
         self.app=SimpleNamespace(
             public_settings=lambda: {"input_mode":"hold"},
             account_status=lambda **kw:{"state":"signed_out","welcome_complete":False},
-            complete_welcome=Mock(), recovery=[], data_root=None, active=set(),
+            complete_welcome=Mock(), recovery=[], data_root=None, data_lock=threading.RLock(), active=set(),
             profile=SimpleNamespace(building=False))
         self.server=SettingsServer(self.app)
         self.base=f"http://127.0.0.1:{self.server.httpd.server_port}"
@@ -52,3 +54,18 @@ class LocalScreens(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.request("/api/notes",{"action":"add","old":"a","new":"b"})
         self.assertEqual(error.exception.code,401)
+
+    def test_previous_account_screen_cannot_write_new_account_terms(self):
+        self.app.data_root = Path("accounts/new-account")
+        self.app.update_settings = Mock()
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request("/api/settings", {"personal_key": "old-account", "terms": ["old words"]})
+        self.assertEqual(error.exception.code, 409)
+        self.app.update_settings.assert_not_called()
+
+    def test_current_account_screen_can_save(self):
+        self.app.data_root = Path("accounts/current-account")
+        self.app.update_settings = Mock(return_value={"saved": True})
+        result = json.load(self.request("/api/settings", {"personal_key": "current-account", "terms": ["my word"]}))
+        self.assertTrue(result["saved"])
+        self.app.update_settings.assert_called_once()

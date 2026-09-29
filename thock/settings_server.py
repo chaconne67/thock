@@ -93,7 +93,8 @@ class SettingsServer:
                     return self._send(200, page.replace("__TOKEN__", server.token).encode("utf-8"),
                                       "text/html; charset=utf-8")
                 if path == "/api/settings":
-                    return self._send(200, server.app.public_settings())
+                    with server.app.data_lock:
+                        return self._send(200, server.app.public_settings())
                 if path == "/api/account/status":
                     return self._send(200, server.app.account_status())
                 if path == "/api/recovery":
@@ -119,6 +120,15 @@ class SettingsServer:
                 except (ValueError, TypeError):
                     return self._send(400, {"error": "bad_request"})
                 path = urlparse(self.path).path
+                with server.app.data_lock:
+                    personal_write = path in {"/api/profile", "/api/notes", "/api/forget-learning"} or (
+                        path == "/api/settings" and "terms" in body)
+                    current = server.app.data_root.name if server.app.data_root else None
+                    if personal_write and body.get("personal_key") != current:
+                        return self._send(409, {"message": "계정이 바뀌었습니다. 설정을 새로 불러온 뒤 다시 저장해 주세요."})
+                    return self._dispatch_post(path, body)
+
+            def _dispatch_post(self, path, body):
                 if path == "/api/window":
                     action = {"welcome": server.open_welcome, "recovery": server.open_recovery}.get(body.get("name"))
                     if not action:

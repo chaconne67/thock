@@ -316,14 +316,16 @@ async function api(path, body) {
   const res = await fetch(path, {
     method: body ? "POST" : "GET",
     headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? JSON.stringify({...body, personal_key: personalKey}) : undefined,
   });
-  if (!res.ok) throw new Error(res.status);
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || "처리하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+  return data;
 }
 
 function termsList() { return $("terms").value.split("\n").map((t) => t.trim()).filter(Boolean); }
 function hotkey() { return document.querySelector("input[name=hotkey]:checked").value; }
+let personalKey = null;
 let accountTimer = null;
 let previewAudio = null;
 
@@ -344,7 +346,12 @@ function renderAccount(a) {
 
 async function refreshAccount() {
   try {
-    renderAccount(await api("/api/account/status"));
+    const a = await api("/api/account/status");
+    renderAccount(a);
+    if (a.personal_key !== personalKey) {
+      fillPersonal(await api("/api/settings"));
+      setStatus("연결된 계정의 개인 설정을 불러왔습니다.");
+    }
   } catch (e) {
     setStatus("AI Shift 연결을 확인하지 못했습니다. 인터넷 연결을 확인해 주세요.");
   }
@@ -471,6 +478,11 @@ function fill(s) {
   $("preview-size").value = s.preview_font_size;
   renderAccount(s.account);
   refreshAccount();
+  fillPersonal(s);
+}
+
+function fillPersonal(s) {
+  personalKey = s.personal_key;
   renderNotes(s.notes);
   renderMe(s.profile);
   $("terms").value = s.terms.join("\n");
@@ -496,7 +508,8 @@ $("save").addEventListener("click", async () => {
     setStatus("저장했습니다. 바로 적용됩니다.");
   } catch (e) {
     $("save").disabled = false;
-    setStatus("저장하지 못했습니다. Thock이 켜져 있는지 확인해 주세요.");
+    setStatus(e.message);
+    await refreshAccount();
   }
 });
 

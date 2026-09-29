@@ -61,3 +61,11 @@ class ProtectedStorage(unittest.TestCase):
             data=history_data(path)
             self.assertEqual(data["total"],1001)
             self.assertEqual([r["text"] for r in data["rows"]],["current"])
+
+    def test_expired_history_is_removed_on_read_without_a_new_dictation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/"history.protected"
+            write_data(path, {"total": 100, "rows": [{"text": "expired", "saved_at": 1}]})
+            with patch("thock.personal.time.time", return_value=31*86400):
+                self.assertEqual(history_data(path), {"total": 100, "rows": []})
+            self.assertEqual(read_data(path), {"total": 100, "rows": []})

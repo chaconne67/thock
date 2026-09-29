@@ -131,6 +131,7 @@ class Profile:
     def __init__(self, path, history):
         self.path, self.history, self.lock, self.building = path, history, threading.Lock(), False
         self.data = read_data(path, {})
+        history_data(history)  # Apply retention when this account is opened, including after a long absence.
         self.complete = None  # set to the AI Shift profile request
         self.last_error = ""
         self.can_store = lambda: True

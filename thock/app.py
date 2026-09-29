@@ -26,7 +26,7 @@ from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .win32 import foreground_app, capture_target, copy_text, kernel32, paste, run_key_hook, user32
-from .personal import append_history, read_data, write_data, import_legacy
+from .personal import append_history, read_data, write_data, import_legacy, history_data
 
 
 class Session:
@@ -260,11 +260,13 @@ class App:
                         self.last_session_id = None
                         self.data_root = root
         elif status["state"] == "signed_out" and not self.active:
-            self.watcher.configure(self.notes, False)
-            self.data_root = None
-            self.settings["terms"] = []
-            self.recovery = []
-        return {**status, "welcome_complete": self.settings["welcome_complete"],
+            with self.data_lock:
+                self.watcher.configure(self.notes, False)
+                self.data_root = None
+                self.settings["terms"] = []
+                self.recovery = []
+        return {**status, "personal_key": self.data_root.name if self.data_root else None,
+                "welcome_complete": self.settings["welcome_complete"],
                 "legacy_available": self.legacy_available()}
 
     def legacy_available(self):
@@ -356,6 +358,8 @@ class App:
                 self.account_refresh_needed = False
                 try:
                     await asyncio.to_thread(self.account_status, True)
+                    if self.data_root:
+                        await asyncio.to_thread(history_data, self.profile.history)
                 except Exception as error:
                     log.warning("account refresh failed: %s", type(error).__name__)
                 last_check = now
@@ -459,6 +463,7 @@ class App:
                 "profile": {**self.profile.data, "building": self.profile.building,
                             "error": self.profile.last_error} if self.data_root else {},
                 "personal_ready": self.data_root is not None,
+                "personal_key": self.data_root.name if self.data_root else None,
                 "recovery": self.recovery,
                 "account": self.account.cached}
 

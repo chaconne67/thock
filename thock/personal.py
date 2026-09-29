@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 MAGIC = b"THOCK1\0"
-_history_lock = threading.Lock()
+_history_lock = threading.RLock()
 
 
 class Blob(ctypes.Structure):
@@ -73,7 +73,14 @@ def write_data(path, value):
 
 def history_data(path):
     if path.suffix == ".protected":
-        return read_data(path, {"total": 0, "rows": []})
+        with _history_lock:
+            data = read_data(path, {"total": 0, "rows": []})
+            cutoff = time.time() - 30 * 86400
+            rows = [row for row in data["rows"] if row.get("saved_at", 0) > cutoff][-1000:]
+            if rows != data["rows"]:
+                data["rows"] = rows
+                write_data(path, data)
+            return data
     if not path.exists():
         return {"total": 0, "rows": []}
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
