@@ -34,6 +34,9 @@ from .personal import append_history, read_data, write_data, import_legacy, hist
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
 WAITING = "입력할 곳을 클릭해 주세요."
+# Account states the member settles in the account window, not faults: a black pill with 확인, not red.
+ACCOUNT_STATES = {"signed_out", "access_unavailable", "access_suspended", "access_not_started", "access_expired",
+                  "time_exhausted"}
 VOICE_LEVEL = 0.6  # microphone level (about -46 dBFS) taken as the start of speech, for diagnosis only
 
 
@@ -228,7 +231,10 @@ class Session:
         except AccountError as error:
             record["error"] = error.code
             self.state.account_refresh_needed = True
-            self.state.notify(str(error), error=True)
+            if error.code in ACCOUNT_STATES:
+                self.state.ask_account(str(error))
+            else:
+                self.state.notify(str(error), error=True)
         except asyncio.CancelledError:
             outcome = "cancelled"
             if text or self.preview:
@@ -298,6 +304,7 @@ class App:
         self.reports = {}
         self.notice = ""
         self.notice_until = 0.0
+        self.notice_action = None  # "account": the notice shows 확인, which opens the account window
         self.account_refresh_needed = True
         self.watcher = EditWatcher(self.notes)
         self.watcher.enabled = self.settings["learn"]
@@ -431,7 +438,7 @@ class App:
             log.info("error report not sent: %s", error.code)
 
     def notify(self, text, error=False, seconds=12):
-        self.notice, self.notice_until = text, time.perf_counter() + seconds
+        self.notice, self.notice_until, self.notice_action = text, time.perf_counter() + seconds, None
         if error:
             # Every red message the user sees is kept: in the app log and in the dictation it belongs to.
             log.warning("red notice: %s", text)
@@ -439,6 +446,17 @@ class App:
             if session is not None and session in self.active:
                 session.notices.append(text)
             self.flash_error()
+
+    def ask_account(self, text):
+        """Keep an account message on the pill until the member presses 확인 or dictates again."""
+        log.info("account notice: %s", text)
+        self.notice, self.notice_until, self.notice_action = text, float("inf"), "account"
+
+    def act_on_notice(self):
+        """확인 on the pill: put the message away and open the account window."""
+        action, self.notice_action, self.notice_until = self.notice_action, None, 0.0
+        if action == "account":
+            self.open_welcome()
 
     def recover(self, text, reason):
         if not text:
@@ -524,8 +542,10 @@ class App:
                     self.open_welcome()
                     return
                 if not self.account.token or not self.data_root:
-                    self.notify("계정을 연결해 주세요. 막대를 누르면 연결 화면이 열립니다.", error=True)
+                    self.ask_account("계정을 연결해 주세요.")
                     return
+                if self.notice_action:  # dictating again answers the account message
+                    self.notice_action, self.notice_until = None, 0.0
                 self.pressed_at, self.toggle = now, mode == "toggle"
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation

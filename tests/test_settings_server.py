@@ -43,6 +43,15 @@ class LocalScreens(unittest.TestCase):
         self.assertIn("문장 다듬기",settings)
         self.assertNotIn("Soniox",settings+welcome)
 
+    def test_only_the_newest_local_window_stays_open(self):
+        from unittest.mock import patch
+        with patch("thock.settings_server.subprocess.Popen"), patch("thock.settings_server.os.startfile", create=True):
+            self.server.open()
+            self.server.open_welcome()
+        page = urllib.request.urlopen(self.base + f"/welcome?t={self.server.token}&w=1", timeout=2).read().decode()
+        self.assertIn("if(d.window!==1)window.close()", page)
+        self.assertEqual(json.load(self.request("/api/window/current"))["window"], 2)
+
     def test_local_routes_require_instance_token(self):
         for path in ("/","/welcome","/recovery","/api/settings"):
             with self.assertRaises(urllib.error.HTTPError) as error:self.request(path,token=False)

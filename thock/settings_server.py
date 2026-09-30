@@ -27,6 +27,11 @@ h1{font-size:24px;letter-spacing:-1px;margin:0 0 10px}p{margin:0;color:var(--sub
 <script>if(__AUTO__)setTimeout(()=>{window.close();setTimeout(()=>{document.getElementById("close").textContent="이 탭은 닫아도 됩니다."},400)},2500)</script></body></html>"""
 
 
+# Settings, welcome and recovery share one window: a page closes itself once a newer one has opened.
+WINDOW_WATCH = """<script>setInterval(()=>fetch("/api/window/current",{headers:{"X-Token":"%s"}}).then(r=>r.json())
+.then(d=>{if(d.window!==%d)window.close()}).catch(()=>{}),1000)</script>"""
+
+
 def callback_page(title, message, done):
     return (CALLBACK_PAGE.replace("__MARK__", "\u2713" if done else "!").replace("__TITLE__", title)
             .replace("__MESSAGE__", message).replace("__CLOSE__", "이 탭은 잠시 뒤 닫힙니다." if done else "")
@@ -38,6 +43,7 @@ class SettingsServer:
 
     def __init__(self, app):
         self.app, self.token = app, secrets.token_urlsafe(24)
+        self.window = 0  # the newest local window; older ones close themselves
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
@@ -52,7 +58,8 @@ class SettingsServer:
 
     def _open(self, path):
         log.info("local window opened: %s", path)
-        url = f"http://127.0.0.1:{self.httpd.server_port}{path}?t={self.token}"
+        self.window += 1
+        url = f"http://127.0.0.1:{self.httpd.server_port}{path}?t={self.token}&w={self.window}"
         edge = next((p for p in (Path(os.environ.get("ProgramFiles(x86)", "")) / "Microsoft/Edge/Application/msedge.exe",
                                  Path(os.environ.get("ProgramFiles", "")) / "Microsoft/Edge/Application/msedge.exe")
                      if p.exists()), None)
@@ -110,8 +117,12 @@ class SettingsServer:
                 if path in {"/", "/welcome", "/recovery"}:
                     name = {"/": "settings", "/welcome": "welcome", "/recovery": "recovery"}[path]
                     page = (Path(__file__).parent / (name + ".html")).read_text(encoding="utf-8")
-                    return self._send(200, page.replace("__TOKEN__", server.token).encode("utf-8"),
-                                      "text/html; charset=utf-8")
+                    window = parse_qs(urlparse(self.path).query).get("w", ["0"])[0]
+                    page = page.replace("__TOKEN__", server.token) + WINDOW_WATCH % (
+                        server.token, int(window) if window.isdigit() else 0)
+                    return self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+                if path == "/api/window/current":
+                    return self._send(200, {"window": server.window})
                 if path == "/api/settings":
                     with server.app.data_lock:
                         return self._send(200, server.app.public_settings())

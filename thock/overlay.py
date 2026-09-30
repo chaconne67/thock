@@ -152,6 +152,7 @@ class Overlay:
     GEAR, GAP, MARGIN = 30, 8, 10
     TEXT_W, TEXT_H, PAD_X, PAD_Y, LINES = 600, 96, 20, 11, 2  # preview box: widest, tallest (largest font), padding, lines
     SIZE = 0.8
+    NOTICE_H, NOTICE_PAD, CHIP_PAD, CHIP_GAP = 44, 18, 14, 14  # a pill that carries a message and 확인
     MENU_SETTINGS, MENU_RESET, MENU_QUIT, MENU_RECOVERY, MENU_ACCOUNT, MENU_FLAG = 1, 2, 3, 4, 5, 6
 
     def __init__(self, app):
@@ -174,6 +175,11 @@ class Overlay:
         gdiplus.GdipSetSmoothingMode(self.g, 4)  # anti-alias
         gdiplus.GdipSetTextRenderingHint(self.g, 5)  # ClearType: the text always sits on the opaque preview box
         self.font, self.fonts, self.font_key, self.format = None, {}, None, _P()
+        self.action, self.notice_font = None, _P()  # (message, width, chip width, text height, shown text) of an account notice
+        family = _P()
+        gdiplus.GdipCreateFontFamilyFromName("Malgun Gothic", None, ctypes.byref(family))
+        gdiplus.GdipCreateFont(family, 14 * self.dpi, 0, 2, ctypes.byref(self.notice_font))
+        gdiplus.GdipDeleteFontFamily(family)
         gdiplus.GdipStringFormatGetGenericTypographic(ctypes.byref(self.format))  # the default adds loose letter spacing
         self.wndproc = WNDPROC(self._wndproc)
         wc = WNDCLASSW(lpfnWndProc=self.wndproc, hInstance=kernel32.GetModuleHandleW(None),
@@ -259,6 +265,8 @@ class Overlay:
                 save_settings(self.app.settings)
             elif target == "gear":
                 self.app.open_settings()
+            elif target == "pill" and self.action:
+                self.app.act_on_notice()
             elif target == "pill" and not self.app.active:
                 if self.app.recovery:
                     self.app.open_recovery()
@@ -311,7 +319,11 @@ class Overlay:
         elif self.w <= self.IDLE_W + 0.5:
             self.state = None  # keep the last look while shrinking back
         big = bool(state) or self.hover
-        tw, th = (self.FULL_W, self.FULL_H) if big else (self.IDLE_W, self.IDLE_H)
+        self._fit_action(self.app.notice if state == "notice" and self.app.notice_action else "")
+        if self.action:
+            tw, th = self.action[1], self.NOTICE_H
+        else:
+            tw, th = (self.FULL_W, self.FULL_H) if big else (self.IDLE_W, self.IDLE_H)
         self.w += (tw - self.w) * 0.3
         self.h += (th - self.h) * 0.3
         if abs(tw - self.w) < 0.5:
@@ -320,11 +332,12 @@ class Overlay:
         step = 40 if target_alpha > self.alpha else 16
         self.alpha = min(target_alpha, self.alpha + step) if target_alpha > self.alpha else max(target_alpha, self.alpha - step)
         self._update_font()
-        self._fit(self.app.preview() if state else "")
+        self._fit(self.app.preview() if state and not self.action else "")
 
         live = self.state == "recording" and tuple(self.app.levels)
         ripple = self.state == "processing" and int(time.perf_counter() * 60)
-        key = (self.state, self.locked, self.hover, self.w, self.h, self.alpha, live, ripple, self.preview, self.anchor())
+        key = (self.state, self.locked, self.hover, self.w, self.h, self.alpha, live, ripple, self.preview, self.action,
+               self.anchor())
         if key == self.drawn:
             return  # nothing changed: stay idle, no redraw
         self.drawn = key
@@ -349,7 +362,10 @@ class Overlay:
         _capsule(g, x0 + s, y0 + s, w - 2 * s, h - 2 * s, 0xFFB3261E if error else 0xFF0F0F0F)
 
         grown = (self.w - self.IDLE_W) / (self.FULL_W - self.IDLE_W)  # 0 = resting handle, 1 = full pill
-        if grown > 0.85:
+        if self.action:
+            if abs(self.w - self.action[1]) < 2:  # the message appears once the pill has opened
+                self._draw_action(x0, y0, w, h)
+        elif grown > 0.85:
             locked = self.locked and self.state == "recording"
             n = BARS - 3 if locked else BARS
             bar, gap, tallest = 3 * s, 2.4 * s, 20 * s
@@ -427,6 +443,45 @@ class Overlay:
         gdiplus.GdipCreateSolidFill(0xFFFFFFFF, ctypes.byref(brush))
         room = RectF(x + px, y + py, (self.TEXT_W - 2 * self.PAD_X) * s, th + s)  # same width as measured, same wrapping
         gdiplus.GdipDrawString(g, text, -1, self.font, ctypes.byref(room), self.format, brush)
+        gdiplus.GdipDeleteBrush(brush)
+
+    def _text_size(self, text):
+        box, fitted, lines = RectF(), _I(), _I()
+        gdiplus.GdipMeasureString(self.g, text, -1, self.notice_font, ctypes.byref(RectF(0, 0, 1e5, 1e5)), self.format,
+                                  ctypes.byref(box), ctypes.byref(fitted), ctypes.byref(lines))
+        return box.w, box.h
+
+    def _fit_action(self, message):
+        """self.action for an account message on one line, cut to the widest pill: (text, width, chip, height)."""
+        if (self.action[0] if self.action else "") == message:
+            return
+        if not message:
+            self.action = None
+            return
+        chip = self._text_size("확인")[0] / self.s + 2 * self.CHIP_PAD
+        room = self.TEXT_W - 2 * self.NOTICE_PAD - chip - self.CHIP_GAP
+        text = message
+        while len(text) > 1 and self._text_size(text)[0] / self.s > room:
+            text = text[:-2] + "…"
+        tw, th = self._text_size(text)
+        self.action = (message, 2 * self.NOTICE_PAD + tw / self.s + self.CHIP_GAP + chip, chip, th, text)
+
+    def _draw_action(self, x0, y0, w, h):
+        """Message on the left, a white 확인 on the right, inside the black pill."""
+        g, s = self.g, self.s
+        _, _, chip, th, text = self.action
+        brush = _P()
+        gdiplus.GdipCreateSolidFill(0xFFFFFFFF, ctypes.byref(brush))
+        gdiplus.GdipDrawString(g, text, -1, self.notice_font, ctypes.byref(RectF(x0 + self.NOTICE_PAD * s, y0 + (h - th) / 2,
+                               w, th + s)), self.format, brush)
+        cw, ch = chip * s, h - 12 * s
+        cx, cy = x0 + w - 6 * s - cw, y0 + 6 * s
+        _capsule(g, cx, cy, cw, ch, 0xFFFFFFFF)
+        gdiplus.GdipDeleteBrush(brush)
+        gdiplus.GdipCreateSolidFill(0xFF0F0F0F, ctypes.byref(brush))
+        lw = self._text_size("확인")[0]
+        gdiplus.GdipDrawString(g, "확인", -1, self.notice_font, ctypes.byref(RectF(cx + (cw - lw) / 2, cy + (ch - th) / 2,
+                               lw + s, th + s)), self.format, brush)
         gdiplus.GdipDeleteBrush(brush)
 
     def _draw_gear(self, cx, cy):

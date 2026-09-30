@@ -124,5 +124,20 @@ class FlagLastDictation(unittest.TestCase):
         self.assertIn("끝난 뒤", state.notice)
 
 
+@unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
+class AccountNotice(unittest.TestCase):
+    def test_an_account_state_waits_on_the_pill_and_confirm_opens_the_account_window(self):
+        from thock import app
+        state = app.App.__new__(app.App)
+        state.error_until, state.recording, state.active = 0.0, None, set()
+        state.open_welcome = Mock()
+        state.ask_account("이 계정의 Thock 이용권을 확인해 주세요.")
+        self.assertEqual(app.App.status(state)[0], "notice")  # black, not the red error pill
+        self.assertEqual(state.notice_action, "account")
+        state.act_on_notice()
+        state.open_welcome.assert_called_once()
+        self.assertIsNone(app.App.status(state)[0])
+
+
 if __name__ == "__main__":
     unittest.main()
