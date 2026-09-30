@@ -72,5 +72,22 @@ class WaitingGuide(unittest.TestCase):
         self.assertEqual(app.App.preview(state), "")  # the dictation ended
 
 
+@unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
+class RedNotices(unittest.TestCase):
+    def test_every_red_message_is_logged_and_kept_with_its_dictation(self):
+        from thock import app
+        session = type("Session", (), {})()
+        session.notices = []
+        state = app.App.__new__(app.App)
+        state.recording, state.last, state.active = session, session, {session}
+        state.error_until = 0.0
+        with self.assertLogs("voicetype", level="WARNING") as logs:
+            app.App.notify(state, "입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다.", error=True)
+        app.App.notify(state, "안내만 합니다.")  # not red: not an error
+        self.assertEqual(session.notices, ["입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다."])
+        self.assertIn("red notice", logs.output[0])
+        self.assertEqual(app.App.status(state)[0], "error")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -51,6 +51,7 @@ class Session:
         self.heard_at_release = ""  # what the field showed when recording stopped
         self.live, self.entered = None, False
         self.overflows = 0  # microphone buffer overruns, for error reports
+        self.notices = []  # every red message shown while this dictation was active
         self.sent_frames = 0
         self.captured_frames = 0
         self.max_frames = 300 * SAMPLE_RATE
@@ -194,13 +195,14 @@ class Session:
                 outcome = "recovered"  # the raw recognition was kept instead of a correction
             if self.entered:
                 record["ended"] = "enter"
-            elif raw and (live.blocked or field.stopped):
+            if raw and field.failure:
+                # Kept even when Enter ended the dictation: what was sent may have been cut short.
                 outcome = "recovered"
                 record["input_failure"] = field.failure
-                reason = "입력할 곳이 바뀌어 글을 보관했습니다."
+                reason = "입력하지 못한 글을 보관했습니다."
                 self.state.recover(text or raw, reason)
                 self.state.notify(reason + " 막대를 눌러 복사할 수 있습니다.", error=True)
-            elif text and s["learn"]:
+            elif text and s["learn"] and not self.entered:
                 self.state.watcher.watch(text)
             total_ms = max(0, round((time.perf_counter() - self.released) * 1000))
         except AccountError as error:
@@ -227,6 +229,8 @@ class Session:
                 self.stop()
                 if self.cleanup_failed and outcome == "delivered":
                     outcome = "recovered"
+                if self.notices:
+                    record["notices"] = list(self.notices)
                 record.update(recorded_seconds=self.sent_frames / SAMPLE_RATE, outcome=outcome,
                               stt_seconds=stt_ms / 1000 if stt_ms is not None else None,
                               total_seconds=total_ms / 1000 if total_ms is not None else None,
@@ -384,6 +388,11 @@ class App:
     def notify(self, text, error=False):
         self.notice, self.notice_until = text, time.perf_counter() + 12
         if error:
+            # Every red message the user sees is kept: in the app log and in the dictation it belongs to.
+            log.warning("red notice: %s", text)
+            session = self.recording or self.last
+            if session is not None and session in self.active:
+                session.notices.append(text)
             self.flash_error()
 
     def recover(self, text, reason):

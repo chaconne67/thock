@@ -38,7 +38,12 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         # The live input field: records what reached the target field; ok=False means it moved.
         self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None,
                                      restart=lambda: False)
-        self.field.update = lambda text: self.field.writes.append(text) or self.field.ok
+        def update(text):
+            self.field.writes.append(text)
+            if not self.field.ok:
+                self.field.failure, self.field.stopped = "delivery_unverified", True
+            return self.field.ok
+        self.field.update = update
         self.patch_field = patch("thock.app.InlineField", side_effect=lambda target: self.field)
         self.patch_field.start()
         self.addCleanup(self.patch_field.stop)
@@ -104,6 +109,23 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.state.recover.assert_called_once()
         self.assertEqual(self.state.recover.call_args.args[0], "보관할 글")
         self.assertFalse(self.state.active)
+
+    async def test_a_block_before_enter_is_recorded_and_the_text_kept(self):
+        self.field.ok = False
+        async def transcribe(chunks, api_key, context, heard, endpoint, **kwargs):
+            heard("보낸 뒤 잘린 글")
+            await asyncio.sleep(0.05)
+            session.enter()  # the user pressed Enter after the red notice
+            return "보낸 뒤 잘린 글"
+        with patch("thock.app.transcribe", side_effect=transcribe):
+            session = self.start()
+            session.stop()
+            await session.task
+        self.state.recover.assert_called_once()
+        self.assertEqual(self.state.recover.call_args.args[0], "보낸 뒤 잘린 글")
+        self.assertEqual(self.state.queue_report.call_args.args[2], "recovered")
+        record = self.state.report_error.call_args.args[1]
+        self.assertEqual((record["input_failure"], record["ended"]), ("delivery_unverified", "enter"))
 
     async def test_stream_failure_stops_mic_and_does_not_paste_partial_text(self):
         with patch("thock.app.transcribe", new_callable=AsyncMock, side_effect=TimeoutError):
