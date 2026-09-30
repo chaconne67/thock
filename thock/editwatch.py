@@ -317,11 +317,11 @@ class FieldReader:
                             _ok(_com(candidate, 16)(candidate))
                             # Select may post an asynchronous request to another process.
                             deadline = time.monotonic() + 0.5
-                            while time.monotonic() < deadline:
-                                if self.snapshot() == wanted:
-                                    return wanted
+                            while self.snapshot() != wanted:
+                                if time.monotonic() >= deadline:
+                                    return None
                                 time.sleep(0.015)
-                            return None
+                            return wanted
                         size = len(observed[1])
                         if size < len(tail):
                             low = count + 1
