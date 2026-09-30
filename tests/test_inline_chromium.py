@@ -71,9 +71,10 @@ class ChromiumInline(unittest.TestCase):
                             field.focus(); field.setSelectionRange(start, end);
                             field.addEventListener('input', rebuild);
                         });
+                        window.eventsAbort?.abort(); window.eventsAbort = new AbortController();
                         window.events = [];
                         for (const name of ['keydown', 'keyup', 'paste', 'input'])
-                            document.addEventListener(name, e => window.events.push([name, e.key]), {capture:true});
+                            document.body.addEventListener(name, e => window.events.push([name, e.key]), {capture:true, signal: window.eventsAbort.signal});
                         window.resetCaret = reset; reset();
                     """, kind, initial)
                     element = request('POST', route + '/element', {'using':'css selector', 'value':'body > :first-child'})

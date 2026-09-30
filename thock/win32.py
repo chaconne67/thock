@@ -191,7 +191,6 @@ class InlineField:
     def __init__(self, target):
         from .editwatch import field_reader
         self.target, self.current = target, None
-        self.revision = _input_revision
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
         self.stopped = self.initial is None
         self.failure = "range_unavailable" if self.stopped else None
@@ -201,7 +200,7 @@ class InlineField:
         text = normalize_newlines(text)
         if self.stopped:
             return False
-        if _input_revision != self.revision:
+        if _input_revision != self.target[-1]:
             self.failure, self.stopped = "user_input", True
             return False
         if capture_target() != self.target:
@@ -231,8 +230,8 @@ class InlineField:
         # Adopt that result only when it contains solely our text and no other input intervened.
         cue = (self.current is None and not before and not selected and bool(after)
                and _input_tracking and reader.native_selection() is not None)
-        actual = paste(text[common:], self.target, expected, desired, cue)
-        if actual is None or _input_revision != self.revision:
+        actual = self._paste(text[common:], expected, desired, cue)
+        if actual is None or _input_revision != self.target[-1]:
             self.failure, self.stopped = "delivery_unverified", True
             return False
         self.initial = before, selected, actual[2]
@@ -240,58 +239,60 @@ class InlineField:
         return True
 
 
-def paste(text, target, expected, desired, allow_cue=False):
-    """Paste at the verified range, wait for delivery, and restore an unchanged clipboard."""
-    from .editwatch import field_reader
-    revision = _input_revision
-    reader = field_reader()
-    def unchanged():
-        return (_input_revision == revision and target and capture_target() == target
-                and (expected is None or reader.snapshot() == expected))
-    if not unchanged():
-        return None
-    with _clipboard_lock:
-        _open_clipboard()
-        try:
-            saved, fmt = [], user32.EnumClipboardFormats(0)
-            while fmt:
-                handle = user32.GetClipboardData(fmt) if fmt not in GDI_FORMATS else None
-                if handle and (size := kernel32.GlobalSize(handle)):
-                    saved.append((fmt, ctypes.string_at(kernel32.GlobalLock(handle), size)))
-                    kernel32.GlobalUnlock(handle)
-                fmt = user32.EnumClipboardFormats(fmt)
-            user32.EmptyClipboard()
-            _set_clipboard(CF_UNICODETEXT, (text.replace("\n", "\r\n") + "\0").encode("utf-16-le"))
-            _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
-        finally:
-            user32.CloseClipboard()
-        sequence = user32.GetClipboardSequenceNumber()
-        keys = ([(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
-                if text else [(0x08, 0), (0x08, KEYEVENTF_KEYUP)])
-        inputs = (INPUT * len(keys))(*[
-            INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, OWN_INPUT))) for vk, flags in keys])
-        try:
-            if not unchanged():
-                return None
-            if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
-                raise ctypes.WinError(ctypes.get_last_error())
-            deadline = time.monotonic() + 0.5
-            while time.monotonic() < deadline:
-                time.sleep(0.015)
-                if _input_revision != revision or capture_target() != target:
-                    return None
-                observed = reader.snapshot()
-                if observed == desired:
-                    return observed
-                if allow_cue and observed == (text, "", ""):
-                    return observed
+    def _paste(self, text, expected, desired, allow_cue=False):
+        """Paste at the verified range, wait for delivery, and restore an unchanged clipboard."""
+        from .editwatch import field_reader
+        reader = field_reader()
+        def unchanged():
+            return (capture_target() == self.target and reader.snapshot() == expected)
+        if not unchanged():
             return None
-        finally:
+        with _clipboard_lock:
             _open_clipboard()
             try:
-                if user32.GetClipboardSequenceNumber() == sequence:
-                    user32.EmptyClipboard()
-                    for fmt, data in saved:
-                        _set_clipboard(fmt, data)
+                saved, fmt = [], user32.EnumClipboardFormats(0)
+                while fmt:
+                    handle = user32.GetClipboardData(fmt) if fmt not in GDI_FORMATS else None
+                    if handle and (size := kernel32.GlobalSize(handle)):
+                        saved.append((fmt, ctypes.string_at(kernel32.GlobalLock(handle), size)))
+                        kernel32.GlobalUnlock(handle)
+                    fmt = user32.EnumClipboardFormats(fmt)
+                user32.EmptyClipboard()
+                _set_clipboard(CF_UNICODETEXT, (text.replace("\n", "\r\n") + "\0").encode("utf-16-le"))
+                _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
             finally:
                 user32.CloseClipboard()
+            sequence = user32.GetClipboardSequenceNumber()
+            keys = ([(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
+                    if text else [(0x08, 0), (0x08, KEYEVENTF_KEYUP)])
+            inputs = (INPUT * len(keys))(*[
+                INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, OWN_INPUT))) for vk, flags in keys])
+            try:
+                if not unchanged():
+                    return None
+                if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                deadline = time.monotonic() + 0.5
+                while time.monotonic() < deadline:
+                    time.sleep(0.015)
+                    if (user32.GetForegroundWindow() != self.target[0]
+                            or _input_revision != self.target[-1]):
+                        return None
+                    target = capture_target()
+                    if target is None:
+                        continue
+                    observed = reader.snapshot()
+                    if ((observed == desired or allow_cue and observed == (text, "", ""))
+                            and capture_target() == target):
+                        self.target = target
+                        return observed
+                return None
+            finally:
+                _open_clipboard()
+                try:
+                    if user32.GetClipboardSequenceNumber() == sequence:
+                        user32.EmptyClipboard()
+                        for fmt, data in saved:
+                            _set_clipboard(fmt, data)
+                finally:
+                    user32.CloseClipboard()

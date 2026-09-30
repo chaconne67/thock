@@ -237,7 +237,12 @@ class FieldReader:
             return native[1]
         try:
             with self.selection() as (document, selected):
-                return _snapshot(document, selected)
+                result = _snapshot(document, selected)
+                # An empty editor can expose itself as an embedded object in TextPattern.
+                # Require both an empty caret and an independently empty field value.
+                if result == ("", "", "\ufffc") and self.read_focused() == "":
+                    return "", "", ""
+                return result
         except (OSError, RuntimeError):
             return None
 
@@ -310,7 +315,13 @@ class FieldReader:
                         observed = _snapshot(document, candidate)
                         if observed == wanted:
                             _ok(_com(candidate, 16)(candidate))
-                            return wanted
+                            # Select may post an asynchronous request to another process.
+                            deadline = time.monotonic() + 0.5
+                            while time.monotonic() < deadline:
+                                if self.snapshot() == wanted:
+                                    return wanted
+                                time.sleep(0.015)
+                            return None
                         size = len(observed[1])
                         if size < len(tail):
                             low = count + 1

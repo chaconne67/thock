@@ -90,14 +90,14 @@ async def verify(path, focused, report_path):
                 chunk = audio[offset:offset + step]
                 session._on_audio(chunk, len(chunk) // 2, None, None)
                 await asyncio.sleep(0.1)
-                current = field_reader().snapshot() if capture_target() == session.target else None
+                current = field_reader().snapshot() if capture_target() == (fields[0].target if fields else session.target) else None
                 if current != previous:
                     changes.append((time.perf_counter(), current))
                     previous = current
             session.stop()
             await asyncio.wait_for(session.task, 45)
             record = json.loads((Path(temporary) / "history.jsonl").read_text(encoding="utf-8").splitlines()[-1])
-            result = field_reader().snapshot() if capture_target() == session.target else None
+            result = field_reader().snapshot() if capture_target() == (fields[0].target if fields else session.target) else None
             report = {
                 "live_updates_before_release": sum(t < session.released for t, _ in changes),
                 "corrections_before_release": sum(t < session.released for t, _ in completions),
@@ -109,7 +109,7 @@ async def verify(path, focused, report_path):
                 "stt_seconds": record.get("stt_seconds"), "total_seconds": record.get("total_seconds"),
                 "error": record.get("error"), "polish_error": record.get("polish_error"),
                 "notice": state.notice, "field_failure": fields[0].failure if fields else None,
-                "target_still_focused": capture_target() == session.target,
+                "target_still_focused": capture_target() == (fields[0].target if fields else session.target),
             }
             if report_path:
                 report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
