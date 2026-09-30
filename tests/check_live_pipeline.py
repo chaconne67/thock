@@ -100,6 +100,13 @@ def main():
         from tests.test_inline_windows import WindowsInline
         fixture = WindowsInline
         fixture.setUpClass()
+        print("Waiting for the disposable test editor to be activated.", flush=True)
+        from thock.win32 import user32
+        deadline = time.monotonic() + 90
+        while user32.GetForegroundWindow() != fixture.window:
+            if time.monotonic() > deadline:
+                raise RuntimeError("test editor was not activated; no dictation was started")
+            time.sleep(0.1)
         fixture().setUp()
     try:
         asyncio.run(verify(args.wav, args.focused))
