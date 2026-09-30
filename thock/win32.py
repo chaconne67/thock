@@ -70,6 +70,7 @@ kernel32.CreateMutexW.restype = wt.HANDLE
 WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 13, 0x100, 0x101, 0x104, 0x105
 WM_TIMER = 0x113
 VK_SHIFT, VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x10, 0x11, 0x56, 2, 1
+VK_RETURN = 0x0D
 CF_UNICODETEXT, GMEM_MOVEABLE = 13, 2
 GDI_FORMATS = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}  # handles that are not global memory
 HOOK_REARM_MS = 30_000
@@ -89,6 +90,9 @@ def run_key_hook(get_vk, on_key):
             info = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
             if info.dwExtraInfo != OWN_INPUT and info.vkCode != get_vk():
                 _input_revision += 1
+                if (info.vkCode == VK_RETURN and wparam in (WM_KEYDOWN, WM_SYSKEYDOWN)
+                        and not user32.GetAsyncKeyState(VK_SHIFT) & 0x8000):
+                    on_key("enter")  # passed through: the app still receives Enter
             if info.vkCode == get_vk():
                 if wparam in (WM_KEYDOWN, WM_SYSKEYDOWN):
                     if not state["down"]:
@@ -239,7 +243,10 @@ class InlineField:
         cue = self.current is None and not before and not selected and bool(after) and _input_tracking
         actual = paste(text[common:], self.target, expected, desired, cue)
         if actual is None or _input_revision != self.revision:
-            self.failure, self.stopped = "delivery_unverified", True
+            self.failure = ("delivery_user_input" if _input_revision != self.revision
+                            else "delivery_focus_changed" if capture_target() != self.target
+                            else "delivery_unverified")
+            self.stopped = True
             return False
         self.initial = before, selected, actual[2]
         self.current = text

@@ -1,4 +1,4 @@
-"""A tap-started dictation ends by itself after speech stops."""
+"""Dictation also ends without a second hotkey press: after silence, or when Enter sends it."""
 import sys
 import types
 import unittest
@@ -32,6 +32,22 @@ class IdleStop(unittest.TestCase):
         count = len(scheduled)
         check(200.0)  # already stopped: the timer chain ends
         self.assertEqual((stopped, len(scheduled)), ([True], count))
+
+
+@unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
+class EnterEnds(unittest.TestCase):
+    def test_enter_ends_dictation_and_blocks_pending_writes(self):
+        from thock import app
+        live = types.SimpleNamespace(blocked=False)
+        session = types.SimpleNamespace(live=live, entered=False)
+        session.enter = lambda: app.Session.enter(session)
+        stopped = []
+        state = types.SimpleNamespace(recording=session, _stop=lambda: stopped.append(True))
+        app.App.on_key(state, "enter")
+        self.assertEqual((stopped, session.entered, live.blocked), ([True], True, True))
+        state.recording = None
+        app.App.on_key(state, "enter")  # Enter without dictation does nothing
+        self.assertEqual(stopped, [True])
 
 
 if __name__ == "__main__":

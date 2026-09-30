@@ -38,6 +38,7 @@ class Session:
         self.started = time.perf_counter()
         self.released = None
         self.heard_at = None
+        self.live, self.entered = None, False
         self.preview = ""  # last heard text, retained if recognition fails
         self.done = self.loop.create_future()
         self.stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
@@ -53,6 +54,12 @@ class Session:
         rms = math.sqrt(sum(s * s for s in samples) / max(len(samples), 1))
         # -72 dBFS -> flat, -28 dBFS -> full height (this PC's mic idles near -90 dBFS)
         self.state.levels.append(min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0))
+
+    def enter(self):
+        """Enter sent the dictated message: write nothing more, not even a pending correction."""
+        self.entered = True
+        if self.live:
+            self.live.blocked = True
 
     def _stop_when_idle(self):
         """A tap-started dictation ends like a second tap once speech has stopped for IDLE_STOP."""
@@ -92,7 +99,8 @@ class Session:
                 self.state.show_notice("이 입력창의 커서 위치를 확인할 수 없습니다. 다른 입력창을 선택해 주세요.")
                 raise RuntimeError("input range unavailable")
             polish = (lambda text: self.state.polisher.polish(text, self.app)) if s["polish"] else None
-            live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice, field.restart)
+            live = self.live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice,
+                                             field.restart)
             def heard(text):
                 if text.strip() != self.preview:
                     self.heard_at = time.perf_counter()
@@ -108,7 +116,9 @@ class Session:
             record["text"] = text
             if live.error:
                 record["polish_error"] = live.error
-            if live.blocked:
+            if self.entered:
+                record["ended"] = "enter"
+            elif live.blocked:
                 record["error"] = "input_changed"
                 record["input_failure"] = field.failure
             elif text and s["learn"]:
@@ -190,6 +200,9 @@ class App:
                 self.active.add(self.recording)
                 self.last = self.recording
                 self._sync_sound()
+        elif event == "enter" and self.recording:
+            self.recording.enter()
+            self._stop()
         elif event == "up" and self.recording and not self.toggle:
             if now - self.pressed_at < TAP_SECONDS:
                 self.toggle = True

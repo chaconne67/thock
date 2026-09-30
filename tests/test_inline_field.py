@@ -76,6 +76,24 @@ class InlineFieldContract(unittest.TestCase):
         self.assertEqual(field.failure, "focus_changed")
         self.assertFalse(field.restart())
 
+    def test_failed_delivery_names_what_changed(self):
+        import thock.win32 as win32
+        self.paste.side_effect = lambda *args: None
+        with patch("thock.win32._input_revision", 0):
+            field = self.field()
+            with patch("thock.win32.capture_target", side_effect=[self.target, (12, (99,))]):
+                self.assertFalse(field.update("글"))
+            self.assertEqual(field.failure, "delivery_focus_changed")
+            field = self.field()
+            self.paste.side_effect = lambda *args: win32.__dict__.__setitem__("_input_revision", 1)
+            self.assertFalse(field.update("글"))
+            self.assertEqual(field.failure, "delivery_user_input")
+            self.assertFalse(field.restart())  # only an edit before a write moves the range
+        field = self.field()
+        self.paste.side_effect = lambda *args: None
+        self.assertFalse(field.update("글"))
+        self.assertEqual(field.failure, "delivery_unverified")
+
     def test_lost_focus_cannot_paste_into_a_different_field(self):
         field = self.field()
         with patch("thock.win32.capture_target", return_value=(12, (99,))):
