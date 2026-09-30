@@ -422,7 +422,7 @@ class App:
                     " ".join(f"{name}={value}" for name, value in details.items()))
         if (self.account.cached.get("error_reports") or {}).get("enabled"):
             self._queue_error(session, "user_flag", code, details)
-        self.notify("방금 받아쓰기를 이상함으로 기록했습니다.")
+        self.notify("방금 받아쓰기를 이상함으로 기록했습니다.", seconds=3)  # a receipt, not something to act on
 
     def _send_error(self, report):
         try:
@@ -430,8 +430,8 @@ class App:
         except AccountError as error:
             log.info("error report not sent: %s", error.code)
 
-    def notify(self, text, error=False):
-        self.notice, self.notice_until = text, time.perf_counter() + 12
+    def notify(self, text, error=False, seconds=12):
+        self.notice, self.notice_until = text, time.perf_counter() + seconds
         if error:
             # Every red message the user sees is kept: in the app log and in the dictation it belongs to.
             log.warning("red notice: %s", text)

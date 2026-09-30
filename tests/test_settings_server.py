@@ -66,6 +66,21 @@ class LocalScreens(unittest.TestCase):
             self.request("/api/account/invite", {"code": "THK-AAAA-BBBB"})
         self.assertEqual(json.load(error.exception)["message"], "이미 사용한 초대 코드입니다.")
 
+    def test_sign_in_tab_shows_the_result_and_closes_itself(self):
+        from thock.account import AccountError
+        self.app.account = SimpleNamespace(finish=Mock(), last_error="")
+        self.app.account_status = lambda **kw: {"state": "signed_in", "ready": True}
+        page = urllib.request.urlopen(self.base + "/callback?code=c&state=s", timeout=2).read().decode()
+        self.assertIn("Thock에 연결됐습니다", page)
+        self.assertIn("CapsLock을 누르고", page)
+        self.assertIn("window.close()", page)
+        self.app.account.finish.side_effect = AccountError("sign_in")
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(self.base + "/callback?code=c&state=s", timeout=2)
+        failed = error.exception.read().decode()
+        self.assertIn("연결하지 못했습니다", failed)
+        self.assertIn("if(false)", failed)  # a failure stays on screen
+
     def test_signed_out_personal_data_writes_rejected(self):
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.request("/api/notes",{"action":"add","old":"a","new":"b"})

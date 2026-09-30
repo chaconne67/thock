@@ -15,6 +15,24 @@ from .config import HOME, log
 from .sound import SOUNDS
 
 
+# The browser tab the Google sign-in ends in. The tab closes itself where the browser allows it.
+CALLBACK_PAGE = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thock</title>
+<style>:root{color-scheme:light dark;--bg:#f4f4f6;--card:#fff;--text:#17171c;--sub:#656572;--line:#dedee5}
+@media(prefers-color-scheme:dark){:root{--bg:#121215;--card:#1c1c21;--text:#f6f6f8;--sub:#b2b2bd;--line:#34343e}}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font:15px/1.7 "Malgun Gothic",sans-serif}
+main{width:min(420px,calc(100% - 32px));border:1px solid var(--line);border-radius:18px;background:var(--card);padding:36px 32px;text-align:center}
+.icon{background:#15151a;color:#fff;border-radius:14px;width:52px;height:52px;display:grid;place-items:center;margin:0 auto 20px;font-size:24px;letter-spacing:-3px}
+h1{font-size:24px;letter-spacing:-1px;margin:0 0 10px}p{margin:0;color:var(--sub)}small{display:block;margin-top:22px;color:var(--sub);font-size:12px}</style></head>
+<body><main><div class="icon" aria-hidden="true">__MARK__</div><h1>__TITLE__</h1><p>__MESSAGE__</p><small id="close">__CLOSE__</small></main>
+<script>if(__AUTO__)setTimeout(()=>{window.close();setTimeout(()=>{document.getElementById("close").textContent="이 탭은 닫아도 됩니다."},400)},2500)</script></body></html>"""
+
+
+def callback_page(title, message, done):
+    return (CALLBACK_PAGE.replace("__MARK__", "\u2713" if done else "!").replace("__TITLE__", title)
+            .replace("__MESSAGE__", message).replace("__CLOSE__", "이 탭은 잠시 뒤 닫힙니다." if done else "")
+            .replace("__AUTO__", "true" if done else "false").encode("utf-8"))
+
+
 class SettingsServer:
     """The local page uses a per-run token; the Google return uses a separate random state."""
 
@@ -78,13 +96,15 @@ class SettingsServer:
                     try:
                         code, state = query["code"][0], query["state"][0]
                         server.app.account.finish(code, state)
-                        server.app.account_status(force=True)
+                        status = server.app.account_status(force=True)
                     except (KeyError, IndexError, AccountError, OSError):
                         server.app.account.last_error = "Google 로그인을 완료하지 못했습니다. Thock에서 다시 시도해 주세요."
-                        page = "<!doctype html><meta charset=utf-8><title>Thock</title><p>로그인을 완료하지 못했습니다. Thock에서 다시 시도해 주세요.</p>"
-                        return self._send(400, page.encode(), "text/html; charset=utf-8")
-                    page = "<!doctype html><meta charset=utf-8><title>Thock</title><p>Thock에 연결되었습니다. 이 창은 닫아도 됩니다.</p>"
-                    return self._send(200, page.encode(), "text/html; charset=utf-8")
+                        page = callback_page("연결하지 못했습니다", "Thock에서 다시 시도해 주세요.", False)
+                        return self._send(400, page, "text/html; charset=utf-8")
+                    message = ("준비됐습니다. 어느 입력칸에서나 CapsLock을 누르고 말해 보세요." if status.get("ready")
+                               else "Thock 창에서 이어서 진행해 주세요.")
+                    return self._send(200, callback_page("Thock에 연결됐습니다", message, True),
+                                      "text/html; charset=utf-8")
                 if not self._allowed():
                     return self._send(403, {"error": "forbidden"})
                 if path in {"/", "/welcome", "/recovery"}:

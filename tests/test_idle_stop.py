@@ -118,6 +118,7 @@ class FlagLastDictation(unittest.TestCase):
         with self.assertLogs("voicetype", level="WARNING"):
             app.App.flag_last(state)
         state._queue_error.assert_not_called()
+        self.assertLess(state.notice_until - __import__("time").perf_counter(), 4)  # a short receipt
         state.last.record = None
         app.App.flag_last(state)
         self.assertIn("끝난 뒤", state.notice)
