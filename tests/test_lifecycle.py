@@ -121,10 +121,10 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             session._on_audio(loud, 1600, None, status)
             await asyncio.sleep(0.02)
             heard("첫 단어")
+            session.stop()  # audio is only measured while recording
             return "첫 단어"
         with patch("thock.app.transcribe", side_effect=transcribe):
             session = self.start()
-            session.stop()
             await session.task
         record = self.state.report_error.call_args.args[1]
         self.assertGreaterEqual(record["idle_s"], 3599)
