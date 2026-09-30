@@ -66,7 +66,9 @@ class ContentEditableInline(unittest.TestCase):
                             getSelection().removeAllRanges(); getSelection().addRange(range);
                         }
                     """, kind)
-                    time.sleep(0.3)
+                    deadline = time.monotonic() + 5  # a freshly launched browser builds its accessibility tree late
+                    while reader.snapshot() is None and time.monotonic() < deadline:
+                        time.sleep(0.1)
                     with patch("thock.win32._input_tracking", True):
                         target = win32.capture_target()
                         initial = reader.snapshot()
