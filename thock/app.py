@@ -41,6 +41,7 @@ class Session:
         self.heard_at = None
         self.live, self.entered = None, False
         self.preview = ""  # last heard text, retained if recognition fails
+        self.heard_at_release = ""  # what the field showed when recording stopped
         self.done = self.loop.create_future()
         self.stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
                                         blocksize=SAMPLE_RATE // 20, callback=self._on_audio)
@@ -81,6 +82,7 @@ class Session:
         if self.released is not None:
             return
         self.released = time.perf_counter()
+        self.heard_at_release = self.preview
         self.stream.stop()
         self.stream.close()
         self.loop.call_soon(self.audio.put_nowait, None)  # queued after the last audio callbacks
@@ -111,6 +113,8 @@ class Session:
                                    lambda: self.state.profile.context(self.app, s["terms"] + notes.terms()),
                                    heard, live.endpoint)
             record.update(raw=raw, stt_seconds=round(time.perf_counter() - self.released, 3))
+            if not raw.startswith(self.heard_at_release):  # finalizing dropped or changed words
+                record["heard_at_release"] = self.heard_at_release
             text = await live.finish(raw)
             record["text"] = text
             if live.error:
