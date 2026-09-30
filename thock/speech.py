@@ -11,7 +11,7 @@ from .config import SAMPLE_RATE, SONIOX_MODEL, SONIOX_URL
 _background = set()  # keeps fire-and-forget tasks alive until they finish
 
 
-async def transcribe(chunks, api_key, get_context, on_text=lambda text: None):
+async def transcribe(chunks, api_key, get_context, on_text=lambda text: None, on_endpoint=lambda text: None):
     """Stream PCM chunks to Soniox; after the source ends, finalize and return the final text.
     get_context is called after connecting, so fixes learned while connecting are already included.
     on_text gets the text heard so far, words still being revised included, each time Soniox sends more."""
@@ -27,6 +27,7 @@ async def transcribe(chunks, api_key, get_context, on_text=lambda text: None):
         "api_key": api_key, "model": SONIOX_MODEL, "audio_format": "pcm_s16le",
         "sample_rate": SAMPLE_RATE, "num_channels": 1,
         "language_hints": ["ko", "en"], "context": get_context(),
+        "enable_endpoint_detection": True,
     }))
 
     async def send_audio():
@@ -43,10 +44,22 @@ async def transcribe(chunks, api_key, get_context, on_text=lambda text: None):
             if data.get("error_code"):
                 raise RuntimeError(f"Soniox {data['error_code']}: {data.get('error_message')}")
             tokens = data.get("tokens", [])
-            final = [t["text"] for t in tokens if t.get("is_final")]
-            done = "<fin>" in final
-            parts += final[: final.index("<fin>")] if done else final
-            on_text("".join(parts + [t["text"] for t in tokens if not t.get("is_final")]))
+            done = False
+            endpoints = []
+            for token in tokens:
+                if not token.get("is_final"):
+                    continue
+                if token["text"] == "<fin>":
+                    done = True
+                    break
+                if token["text"] == "<end>":
+                    endpoints.append("".join(parts))
+                else:
+                    parts.append(token["text"])
+            on_text("".join(parts + [t["text"] for t in tokens
+                                      if not t.get("is_final") and t["text"] not in ("<end>", "<fin>")]))
+            for endpoint in endpoints:
+                on_endpoint(endpoint)
             if done:
                 break
         else:

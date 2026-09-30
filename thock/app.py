@@ -22,12 +22,14 @@ from .overlay import BARS, run_overlay
 from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
-from .win32 import foreground_app, kernel32, paste, run_key_hook, user32
+from .live_input import LiveDictation
+from .win32 import foreground_app, capture_target, InlineField, kernel32, run_key_hook, user32
 
 
 class Session:
     def __init__(self, app_state, previous):
         self.app, self.state, self.previous = foreground_app(), app_state, previous
+        self.target = capture_target()
         self.loop = asyncio.get_running_loop()
         self.audio = asyncio.Queue()
         self.started = time.perf_counter()
@@ -48,6 +50,8 @@ class Session:
         self.state.levels.append(min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0))
 
     def stop(self):
+        if self.released is not None:
+            return
         self.released = time.perf_counter()
         self.stream.stop()
         self.stream.close()
@@ -58,34 +62,46 @@ class Session:
             yield chunk
 
     async def run(self):
-        s, notes, record = self.state.settings, self.state.notes, {"app": self.app}
+        s, notes, record = dict(self.state.settings), self.state.notes, {"app": self.app}
+        live = None
         try:
+            if self.previous:
+                await asyncio.shield(self.previous)
+            field = await asyncio.to_thread(InlineField, self.target)
+            if field.stopped:
+                self.state.show_notice("이 입력창의 커서 위치를 확인할 수 없습니다. 다른 입력창을 선택해 주세요.")
+                raise RuntimeError("input range unavailable")
+            polish = (lambda text: self.state.polisher.polish(text, self.app)) if s["polish"] else None
+            live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice)
+            def heard(text):
+                self.preview = text.strip()
+                live.update(text)
             raw = await transcribe(self.chunks(), s["soniox_api_key"],
                                    lambda: self.state.profile.context(self.app, s["terms"] + notes.terms()),
-                                   lambda heard: setattr(self, "preview", heard.strip()))
+                                   heard, live.endpoint)
             record.update(raw=raw, stt_seconds=round(time.perf_counter() - self.released, 3))
-            text = raw
-            if raw and s["polish"]:
-                try:
-                    text = await asyncio.to_thread(self.state.polisher.polish, raw, self.app)
-                except Exception as e:
-                    log.warning("polish skipped: %s", e)
-                    record["polish_error"] = str(e)
-            text = notes.apply(text)
+            text = await live.finish(raw)
             record["text"] = text
-            if self.previous:
-                await self.previous  # keep pastes in the order they were spoken
-            if text:
-                await asyncio.to_thread(paste, text)
-                if s["learn"]:
-                    self.state.watcher.watch(text)
+            if live.error:
+                record["polish_error"] = live.error
+            if live.blocked:
+                record["error"] = "input_changed"
+            elif text and s["learn"]:
+                self.state.watcher.watch(text)
             record["total_seconds"] = round(time.perf_counter() - self.released, 3)
-        except Exception as e:
-            log.exception("dictation failed")
-            record["error"] = str(e)
-            self.state.flash_error()
+        except Exception as error:
+            log.warning("dictation failed: %s", type(error).__name__)
+            record["error"] = type(error).__name__
+            record.setdefault("raw", self.preview)
+            if not self.state.notice:
+                self.state.show_notice("받아쓰기를 마치지 못했습니다. 입력된 글을 확인해 주세요.")
         finally:
             try:
+                self.stop()
+                if self.state.recording is self:
+                    self.state.recording = None
+                if live:
+                    await live.close()
                 record["recorded_seconds"] = round((self.released or time.perf_counter()) - self.started, 3)
                 record["time"] = time.strftime("%Y-%m-%d %H:%M:%S")
                 with open(HOME / "history.jsonl", "a", encoding="utf-8") as f:
@@ -95,7 +111,8 @@ class Session:
             finally:
                 self.state.active.discard(self)
                 self.state._sync_sound()
-                self.done.set_result(None)
+                if not self.done.done():
+                    self.done.set_result(None)
 
 
 class App:
@@ -113,6 +130,7 @@ class App:
         self.pressed_at = 0.0
         self.toggle = False
         self.error_until = 0.0
+        self.notice = ""
         self.last = None
         self.levels = deque([0.0] * BARS, maxlen=BARS)  # microphone loudness, newest last
         self.devices_changed = False
@@ -134,6 +152,7 @@ class App:
                     self.flash_error()
                     self.open_settings()
                     return
+                self.notice = ""
                 self.pressed_at, self.toggle = now, False
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation
@@ -189,10 +208,13 @@ class App:
             return "processing", False
         return None, False
 
+    def show_notice(self, text):
+        self.notice = text
+        self.error_until = time.perf_counter() + 8
+
     def preview(self):
-        """For the overlay: what the newest dictation has heard so far, until it is pasted (if shown at all)."""
-        session = self.last
-        return session.preview if self.settings["preview"] and session and session in self.active else ""
+        """The draft lives in the input field; the pill only shows an actionable failure."""
+        return self.notice if time.perf_counter() < self.error_until else ""
 
     def public_settings(self):
         s = self.settings

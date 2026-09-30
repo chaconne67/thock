@@ -1,6 +1,7 @@
 """After a paste, re-read the text field through UI Automation and record the words the user fixed."""
 
 import ctypes
+from contextlib import contextmanager
 import queue
 import threading
 import time
@@ -12,6 +13,19 @@ from .learning import fixes_in_field
 ole32, oleaut32 = ctypes.WinDLL("ole32"), ctypes.WinDLL("oleaut32")
 oleaut32.SysStringLen.argtypes = [ctypes.c_void_p]
 oleaut32.SysFreeString.argtypes = [ctypes.c_void_p]
+oleaut32.SafeArrayGetLBound.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_long)]
+oleaut32.SafeArrayGetUBound.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_long)]
+oleaut32.SafeArrayGetElement.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_long), ctypes.c_void_p]
+oleaut32.SafeArrayDestroy.argtypes = [ctypes.c_void_p]
+_local_reader = threading.local()
+
+
+def field_reader():
+    if not hasattr(_local_reader, "reader"):
+        _local_reader.reader = FieldReader()
+    return _local_reader.reader
+
+
 _PP = ctypes.POINTER(ctypes.c_void_p)
 
 
@@ -44,6 +58,46 @@ def _bstr(b):
         oleaut32.SysFreeString(b)
 
 
+
+def _ok(hr):
+    if hr < 0:
+        raise RuntimeError("text range unavailable")
+
+
+def _text(rng):
+    value = ctypes.c_void_p()
+    _ok(_com(rng, 12, ctypes.c_int, _PP)(rng, 200001, ctypes.byref(value)))
+    text = _bstr(value.value)
+    if len(text) > 200000:
+        raise RuntimeError("text range too large")
+    return text
+
+
+def _clone(rng):
+    result = ctypes.c_void_p()
+    _ok(_com(rng, 3, _PP)(rng, ctypes.byref(result)))
+    return result
+
+
+def _endpoint(rng, end, other, other_end):
+    _ok(_com(rng, 15, ctypes.c_int, ctypes.c_void_p, ctypes.c_int)(rng, end, other, other_end))
+
+
+def _snapshot(document, selected):
+    before, after = _clone(document), None
+    try:
+        after = _clone(document)
+        _endpoint(before, 1, selected, 0)
+        _endpoint(after, 0, selected, 1)
+        result = (_text(before), _text(selected), _text(after))
+        if "".join(result) != _text(document):
+            raise RuntimeError("inconsistent text range")
+        return result
+    finally:
+        _release(before)
+        _release(after)
+
+
 class FieldReader:
     """Reads the focused text field of any app through UI Automation (COM, one thread only)."""
     IID_VALUE, IID_TEXT = _guid("{a94cd8b1-0844-4cd6-9d2d-640537ab39e9}"), _guid("{32eba289-3583-42c9-9c59-3b6d9a1e9b6a}")
@@ -53,6 +107,34 @@ class FieldReader:
         self.uia = ctypes.c_void_p()
         ole32.CoCreateInstance(ctypes.byref(_guid("{ff48dba4-60ef-4201-aa87-54103eef594e}")), None, 1,
                                ctypes.byref(_guid("{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}")), ctypes.byref(self.uia))
+
+    def focus_id(self):
+        element, rid = ctypes.c_void_p(), ctypes.c_void_p()
+        try:
+            if not self.uia:
+                return None
+            if _com(self.uia, 8, _PP)(self.uia, ctypes.byref(element)) < 0 or not element:
+                return None
+            if _com(element, 4, _PP)(element, ctypes.byref(rid)) < 0 or not rid:
+                return None
+            lo, hi = ctypes.c_long(), ctypes.c_long()
+            if (oleaut32.SafeArrayGetLBound(rid, 1, ctypes.byref(lo)) < 0
+                    or oleaut32.SafeArrayGetUBound(rid, 1, ctypes.byref(hi)) < 0
+                    or not 0 <= hi.value - lo.value < 64):
+                return None
+            values = []
+            for i in range(lo.value, hi.value + 1):
+                index, value = ctypes.c_long(i), ctypes.c_long()
+                if oleaut32.SafeArrayGetElement(rid, ctypes.byref(index), ctypes.byref(value)) < 0:
+                    return None
+                values.append(value.value)
+            return tuple(values)
+        except OSError:
+            return None
+        finally:
+            if rid:
+                oleaut32.SafeArrayDestroy(rid)
+            _release(element)
 
     def read_focused(self):
         el = ctypes.c_void_p()
@@ -99,6 +181,76 @@ class FieldReader:
             finally:
                 _release(pattern)
         except OSError:
+            return None
+
+
+    @contextmanager
+    def selection(self):
+        """Fresh document and single selection; no COM pointer escapes this thread."""
+        element, pattern, document, ranges, selected = [ctypes.c_void_p() for _ in range(5)]
+        try:
+            _ok(_com(self.uia, 8, _PP)(self.uia, ctypes.byref(element)))
+            password = ctypes.c_int()
+            _ok(_com(element, 35, ctypes.POINTER(ctypes.c_int))(element, ctypes.byref(password)))
+            if password.value:
+                raise RuntimeError("password field")
+            _ok(_com(element, 14, ctypes.c_int, ctypes.POINTER(GUID), _PP)(
+                element, 10014, ctypes.byref(self.IID_TEXT), ctypes.byref(pattern)))
+            if not pattern:
+                raise RuntimeError("text ranges unavailable")
+            _ok(_com(pattern, 7, _PP)(pattern, ctypes.byref(document)))
+            _ok(_com(pattern, 5, _PP)(pattern, ctypes.byref(ranges)))
+            count = ctypes.c_int()
+            _ok(_com(ranges, 3, ctypes.POINTER(ctypes.c_int))(ranges, ctypes.byref(count)))
+            if count.value != 1:
+                raise RuntimeError("single caret required")
+            _ok(_com(ranges, 4, ctypes.c_int, _PP)(ranges, 0, ctypes.byref(selected)))
+            yield document, selected
+        finally:
+            for obj in (selected, ranges, document, pattern, element):
+                _release(obj)
+
+    def snapshot(self):
+        """Text before the selection, the selection, and text after it (including offscreen text)."""
+        try:
+            with self.selection() as (document, selected):
+                return _snapshot(document, selected)
+        except (OSError, RuntimeError):
+            return None
+
+    def select_tail(self, expected, tail):
+        """Select only the exact suffix immediately before the observed caret."""
+        try:
+            with self.selection() as (document, selected):
+                if _snapshot(document, selected) != expected:
+                    return None
+                if not tail:
+                    return expected
+                before, found = _clone(document), ctypes.c_void_p()
+                try:
+                    _endpoint(before, 1, selected, 0)
+                    oleaut32.SysAllocString.argtypes = [ctypes.c_wchar_p]
+                    oleaut32.SysAllocString.restype = ctypes.c_void_p
+                    needle = oleaut32.SysAllocString(tail)
+                    try:
+                        _ok(_com(before, 8, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, _PP)(
+                            before, needle, True, False, ctypes.byref(found)))
+                    finally:
+                        oleaut32.SysFreeString(needle)
+                    if not found:
+                        return None
+                    comparison = ctypes.c_int()
+                    _ok(_com(found, 5, ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
+                             ctypes.POINTER(ctypes.c_int))(found, 1, selected, 0, ctypes.byref(comparison)))
+                    wanted = (expected[0][:-len(tail)], tail, expected[2])
+                    if comparison.value or _snapshot(document, found) != wanted:
+                        return None
+                    _ok(_com(found, 16)(found))
+                    return wanted
+                finally:
+                    _release(found)
+                    _release(before)
+        except (OSError, RuntimeError):
             return None
 
 

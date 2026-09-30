@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds tests.test_profile
+      - run: uv run python -m unittest discover -s tests -p "test_*.py"
 
   installer:
     runs-on: windows-2022
@@ -31,7 +31,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Unit tests
-        run: uv run python -m unittest tests.test_fixes tests.test_speech_level tests.test_sounds tests.test_profile
+        run: uv run python -m unittest discover -s tests -p "test_*.py"
 
       - name: Build app
         run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/sounds;thock/sounds" --add-data "thock/fonts;thock/fonts" voicetype.py

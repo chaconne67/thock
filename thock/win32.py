@@ -1,6 +1,7 @@
 """Windows: key hook, foreground app, clipboard, paste."""
 
 import ctypes
+import threading
 import ctypes.wintypes as wt
 import time
 from pathlib import Path
@@ -142,38 +143,113 @@ def _set_clipboard(fmt, data):
     handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, max(len(data), 1))
     ctypes.memmove(kernel32.GlobalLock(handle), data, len(data))
     kernel32.GlobalUnlock(handle)
-    user32.SetClipboardData(fmt, handle)
+    if not user32.SetClipboardData(fmt, handle):
+        kernel32.GlobalFree(handle)
+        raise ctypes.WinError(ctypes.get_last_error())
 
 
-def paste(text):
-    """Paste text at the cursor, then put the previous clipboard contents back."""
-    _open_clipboard()
-    try:
-        saved, fmt = [], user32.EnumClipboardFormats(0)
-        while fmt:
-            handle = user32.GetClipboardData(fmt) if fmt not in GDI_FORMATS else None
-            if handle and (size := kernel32.GlobalSize(handle)):
-                saved.append((fmt, ctypes.string_at(kernel32.GlobalLock(handle), size)))
-                kernel32.GlobalUnlock(handle)
-            fmt = user32.EnumClipboardFormats(fmt)
-        user32.EmptyClipboard()
-        _set_clipboard(CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
-        # Keep dictated text out of clipboard history and clipboard managers.
-        _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
-    finally:
-        user32.CloseClipboard()
 
-    keys = [(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
-    inputs = (INPUT * len(keys))(*[INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, 0))) for vk, flags in keys])
-    try:
-        if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
-            raise ctypes.WinError(ctypes.get_last_error())
-        time.sleep(0.4)  # the target app reads the clipboard asynchronously
-    finally:
+_clipboard_lock = threading.Lock()
+
+
+def capture_target():
+    from .editwatch import field_reader
+    window = user32.GetForegroundWindow()
+    identity = field_reader().focus_id()
+    if not window or not identity or window != user32.GetForegroundWindow():
+        return None
+    return window, identity
+
+
+class InlineField:
+    """Own exactly the selected range and the text subsequently inserted there."""
+    def __init__(self, target):
+        from .editwatch import field_reader
+        self.target, self.current = target, None
+        self.initial = field_reader().snapshot() if target and capture_target() == target else None
+        self.stopped = self.initial is None
+
+    def update(self, text):
+        from .editwatch import field_reader
+        if self.stopped or capture_target() != self.target:
+            self.stopped = True
+            return False
+        before, selected, after = self.initial
+        expected = self.initial if self.current is None else (before + self.current, "", after)
+        reader = field_reader()
+        if reader.snapshot() != expected:
+            self.stopped = True
+            return False
+        common = 0
+        if self.current is not None:
+            for old, new in zip(self.current, text):
+                if old != new:
+                    break
+                common += 1
+            tail = self.current[common:]
+            if not tail and common == len(text):
+                return True
+            expected = reader.select_tail(expected, tail)
+            if expected is None:
+                self.stopped = True
+                return False
+        desired = (before + text, "", after)
+        if not paste(text[common:], self.target, expected, desired):
+            self.stopped = True
+            return False
+        self.current = text
+        return True
+
+
+def paste(text, target=None, expected=None, desired=None):
+    """Paste at the verified range, wait for delivery, and restore an unchanged clipboard."""
+    from .editwatch import field_reader
+    target = target or capture_target()
+    reader = field_reader()
+    def unchanged():
+        return (target and capture_target() == target
+                and (expected is None or reader.snapshot() == expected))
+    if not unchanged():
+        return False
+    with _clipboard_lock:
         _open_clipboard()
         try:
+            saved, fmt = [], user32.EnumClipboardFormats(0)
+            while fmt:
+                handle = user32.GetClipboardData(fmt) if fmt not in GDI_FORMATS else None
+                if handle and (size := kernel32.GlobalSize(handle)):
+                    saved.append((fmt, ctypes.string_at(kernel32.GlobalLock(handle), size)))
+                    kernel32.GlobalUnlock(handle)
+                fmt = user32.EnumClipboardFormats(fmt)
             user32.EmptyClipboard()
-            for fmt, data in saved:
-                _set_clipboard(fmt, data)
+            _set_clipboard(CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
+            _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
         finally:
             user32.CloseClipboard()
+        sequence = user32.GetClipboardSequenceNumber()
+        keys = ([(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
+                if text else [(0x08, 0), (0x08, KEYEVENTF_KEYUP)])
+        inputs = (INPUT * len(keys))(*[
+            INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, 0))) for vk, flags in keys])
+        try:
+            if not unchanged():
+                return False
+            if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
+                raise ctypes.WinError(ctypes.get_last_error())
+            deadline = time.monotonic() + 0.5
+            while time.monotonic() < deadline:
+                time.sleep(0.015)
+                if capture_target() != target:
+                    return False
+                if desired is not None and reader.snapshot() == desired:
+                    return True
+            return desired is None
+        finally:
+            _open_clipboard()
+            try:
+                if user32.GetClipboardSequenceNumber() == sequence:
+                    user32.EmptyClipboard()
+                    for fmt, data in saved:
+                        _set_clipboard(fmt, data)
+            finally:
+                user32.CloseClipboard()
