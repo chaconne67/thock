@@ -84,8 +84,11 @@ class InlineFieldContract(unittest.TestCase):
         self.assertFalse(field.update("글"))
         self.assertIsNone(field.restart())  # still nothing to write into
         self.reader.snapshot.return_value = ("", "", "")
-        self.assertTrue(field.restart())
-        self.assertTrue(field.update("글"))
+        self.assertIsNone(field.restart())  # the app focused a field by itself: not ours to write into
+        import thock.win32 as win32
+        with patch("thock.win32._input_revision", win32._input_revision + 1):  # the user clicked it
+            self.assertTrue(field.restart())
+            self.assertTrue(field.update("글"))
         self.assertEqual(self.paste.call_args.args[3], ("글", "", ""))
 
     def test_failed_delivery_names_what_changed(self):

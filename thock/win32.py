@@ -205,6 +205,8 @@ class InlineField:
         current caret. None: still no readable field, try again with the next words."""
         if self.failure not in ("user_input", "range_unavailable"):
             return False
+        if self.failure == "range_unavailable" and _input_revision == self.revision:
+            return None  # only a field the user picks, never one the app focuses by itself
         self.__init__(capture_target())
         return None if self.stopped else True
 
