@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 @unittest.skipUnless(sys.platform == "win32", "Windows input ranges")
 class InlineFieldContract(unittest.TestCase):
     def setUp(self):
-        self.target = (12, (34,))
+        self.target = (12, (34,), 0)
         self.reader = Mock()
         self.reader.snapshot.return_value = ("앞 ", "", " 뒤")
         self.reader.select_tail.side_effect = lambda expected, tail: (
@@ -16,7 +16,7 @@ class InlineFieldContract(unittest.TestCase):
                 patch("thock.editwatch.field_reader", return_value=self.reader)):
             item.start()
             self.addCleanup(item.stop)
-        self.paste_patch = patch("thock.win32.paste", side_effect=lambda text, target, expected, desired, cue: desired)
+        self.paste_patch = patch("thock.win32.InlineField._paste", side_effect=lambda text, expected, desired, cue: desired)
         self.paste = self.paste_patch.start()
         self.addCleanup(self.paste_patch.stop)
 
@@ -30,14 +30,14 @@ class InlineFieldContract(unittest.TestCase):
         self.reader.snapshot.return_value = ("앞 안녕 하세요", "", " 뒤")
         self.assertTrue(field.update("안녕하세요"))
         self.reader.select_tail.assert_called_once_with(("앞 안녕 하세요", "", " 뒤"), " 하세요")
-        self.paste.assert_called_with("하세요", self.target,
+        self.paste.assert_called_with("하세요",
                                      ("앞 안녕", " 하세요", " 뒤"), ("앞 안녕하세요", "", " 뒤"), False)
 
     def test_existing_user_selection_is_the_only_initial_replacement(self):
         self.reader.snapshot.return_value = ("앞 ", "선택한 글", " 뒤")
         field = self.field()
         self.assertTrue(field.update("새 글"))
-        self.paste.assert_called_once_with("새 글", self.target,
+        self.paste.assert_called_once_with("새 글",
                                           ("앞 ", "선택한 글", " 뒤"), ("앞 새 글", "", " 뒤"), False)
 
     def test_typing_or_moving_caret_permanently_stops_replacement(self):
@@ -69,12 +69,12 @@ class InlineFieldContract(unittest.TestCase):
         self.reader.native_selection.return_value = (123, ("", "", "editor cue"), 0, 0, "\r")
         with patch("thock.win32._input_tracking", True):
             field = self.field()
-            self.paste.side_effect = lambda text, target, expected, desired, cue: (text, "", "") if cue else desired
+            self.paste.side_effect = lambda text, expected, desired, cue: (text, "", "") if cue else desired
             self.assertTrue(field.update("first"))
             self.assertEqual(field.initial, ("", "", ""))
             self.reader.snapshot.return_value = ("first", "", "")
             self.assertTrue(field.update("first corrected"))
-            self.assertEqual(self.paste.call_args.args[3], ("first corrected", "", ""))
+            self.assertEqual(self.paste.call_args.args[2], ("first corrected", "", ""))
 
     def test_user_input_during_first_delivery_cannot_be_adopted_as_a_cue(self):
         import thock.win32 as win32

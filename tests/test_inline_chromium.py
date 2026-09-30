@@ -1,5 +1,6 @@
 """Windows Chromium text fields exercised through Thock's real input path."""
 import json
+from itertools import product
 import os
 from pathlib import Path
 import socket
@@ -43,22 +44,24 @@ class ChromiumInline(unittest.TestCase):
             request("POST", route + "/url", {"url": "about:blank"})
             def script(source, *args):
                 return request("POST", route + "/execute/sync", {"script": source, "args": list(args)})
-            for kind in ("input", "textarea", "contenteditable", "rebuilt-textarea"):
-                with self.subTest(kind=kind):
+            kinds = ("input", "textarea", "contenteditable", "rebuilt-textarea")
+            for kind, initial in product(kinds, ("", "앞  뒤")):
+                with self.subTest(kind=kind, initial=initial):
+                    before, after = ("앞 ", " 뒤") if initial else ("", "")
                     script("""
-                        const kind = arguments[0];
+                        const kind = arguments[0], initial = arguments[1], offset = initial ? 2 : 0;
                         document.body.innerHTML = kind === 'contenteditable'
-                            ? '<div contenteditable style="height:200px"></div>'
+                            ? '<div contenteditable style="height:200px;white-space:pre-wrap"></div>'
                             : kind === 'input' ? '<input>' : '<textarea></textarea>';
                         let field = document.body.firstElementChild;
                         const reset = () => {
                             if (kind === 'contenteditable') {
-                                field.textContent = '앞  뒤';
+                                field.append(document.createTextNode(initial));
                                 const range = document.createRange();
-                                range.setStart(field.firstChild, 2); range.collapse(true);
+                                range.setStart(field.firstChild, offset); range.collapse(true);
                                 getSelection().removeAllRanges(); getSelection().addRange(range);
                                 field.focus();
-                            } else { field.value = '앞  뒤'; field.focus(); field.setSelectionRange(2, 2); }
+                            } else { field.value = initial; field.focus(); field.setSelectionRange(offset, offset); }
                         };
                         if (kind === 'rebuilt-textarea') field.addEventListener('input', function rebuild(e) {
                             const old = e.target, start = old.selectionStart, end = old.selectionEnd;
@@ -67,17 +70,17 @@ class ChromiumInline(unittest.TestCase):
                             field.addEventListener('input', rebuild);
                         });
                         reset();
-                    """, kind)
+                    """, kind, initial)
                     time.sleep(0.2)
                     target = capture_target()
                     reader = field_reader()
-                    self.assertEqual(reader.snapshot(), ("앞 ", "", " 뒤"), (kind, target, reader.snapshot()))
+                    self.assertEqual(reader.snapshot(), (before, "", after), (kind, target, reader.snapshot()))
                     field = InlineField(target)
                     for text in ("소", "소리가 잘 들려", "소리가 잘 들려요.", "소리가 들립니다."):
                         delivered = field.update(text)
                         actual = script("const f=document.body.firstElementChild; return f.value ?? f.innerText;")
                         self.assertTrue(delivered, (kind, field.failure, target, capture_target(), reader.snapshot(), actual))
-                        self.assertEqual(actual, "앞 " + text + " 뒤")
+                        self.assertEqual(actual, before + text + after)
         finally:
             if session:
                 request("DELETE", f"/session/{session}")
