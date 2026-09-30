@@ -38,7 +38,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
             report_error=Mock(), idle_since=time.perf_counter() - 3600, ask_account=Mock())
         # The live input field: records what reached the target field; ok=False means it moved.
-        self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None,
+        self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None, mismatch=None,
                                      restart=lambda: False)
         def update(text):
             self.field.writes.append(text)
