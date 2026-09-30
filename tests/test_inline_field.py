@@ -57,6 +57,25 @@ class InlineFieldContract(unittest.TestCase):
         self.assertFalse(field.update("반복 교정"))
         self.assertEqual(self.paste.call_count, 1)
 
+    def test_only_a_user_edit_moves_the_owned_range_to_the_current_caret(self):
+        import thock.win32 as win32
+        with patch("thock.win32._input_revision", 0):
+            field = self.field()
+            self.assertTrue(field.update("초안"))
+            win32._input_revision += 1
+            self.reader.snapshot.return_value = ("", "", "")
+            self.assertFalse(field.update("초안 다음"))
+            self.assertEqual(field.failure, "user_input")
+            self.assertTrue(field.restart())
+            self.assertEqual((field.current, field.initial), (None, ("", "", "")))
+            self.assertTrue(field.update("다음"))
+            self.assertEqual(self.paste.call_args.args[3], ("다음", "", ""))
+        field = self.field()
+        with patch("thock.win32.capture_target", return_value=(12, (99,))):
+            self.assertFalse(field.update("글"))
+        self.assertEqual(field.failure, "focus_changed")
+        self.assertFalse(field.restart())
+
     def test_lost_focus_cannot_paste_into_a_different_field(self):
         field = self.field()
         with patch("thock.win32.capture_target", return_value=(12, (99,))):

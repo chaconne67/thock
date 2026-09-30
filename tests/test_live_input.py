@@ -74,6 +74,39 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, ["초안"])
         self.assertEqual(len(self.errors), 1)
 
+    async def test_after_a_user_edit_later_speech_starts_at_the_new_caret(self):
+        fields, started, release = [[]], threading.Event(), threading.Event()
+        def write(text):
+            if text.endswith("다시 말한다"):
+                if len(fields) == 1:
+                    return False  # the user edited the field since the last write
+            fields[-1].append(text)
+            return True
+        def restart():
+            fields.append([])
+            return True
+        def polish(text):
+            if text == "지울 문장.":
+                started.set()
+                release.wait(2)
+            return text.replace("말한다", "말한다.")
+        self.errors = []
+        live = LiveDictation(write, polish, lambda text: text, self.errors.append, restart)
+        self.addAsyncCleanup(live.close)
+        live.update("지울 문장.")
+        live.endpoint("지울 문장.")
+        await until(started.is_set)
+        await until(lambda: fields[0])
+        live.update("지울 문장. 다시 말한다")
+        await until(lambda: len(fields) == 2 and fields[1])
+        release.set()
+        self.assertEqual(await live.finish("지울 문장. 다시 말한다"), "다시 말한다.")
+        self.assertEqual(fields[0], ["지울 문장."])
+        self.assertEqual(fields[1][0], "다시 말한다")
+        self.assertEqual(fields[1][-1], "다시 말한다.")
+        self.assertFalse(live.blocked)
+        self.assertEqual(self.errors, [])
+
     async def test_polish_failure_preserves_raw_and_reports_failure(self):
         def fail(text):
             raise TimeoutError()

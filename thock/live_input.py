@@ -1,13 +1,17 @@
 """One dictation's live draft and ordered, endpoint-based corrections.
 
 The writer owns only its inserted text. Speech callbacks never wait for UI or a model.
+When the user edits during dictation, what was written stays as is and later speech starts
+again at their caret.
 """
 import asyncio
 
 
 class LiveDictation:
-    def __init__(self, write, polish, apply_notes, on_error):
+    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False):
         self.write, self.polish, self.apply_notes, self.on_error = write, polish, apply_notes, on_error
+        self.restart = restart
+        self.piece = 0  # bumped when later speech moves to the user's new caret
         self.heard = self.boundary = self.processed = self.corrected = ""
         self.changed, self.segment_ready = asyncio.Event(), asyncio.Event()
         self.ending = False
@@ -29,7 +33,7 @@ class LiveDictation:
         # Soniox final tokens are append-only; partial tokens may be replaced.
         if not self.heard.startswith(self.processed):
             raise RuntimeError("finalized speech changed")
-        return self.corrected + self.apply_notes(self.heard[len(self.processed):])
+        return (self.corrected + self.apply_notes(self.heard[len(self.processed):])).lstrip()
 
     async def _correct(self):
         while True:
@@ -39,6 +43,7 @@ class LiveDictation:
             if not boundary.startswith(self.processed):
                 raise RuntimeError("speech endpoint moved backwards")
             segment = boundary[len(self.processed):]
+            piece = self.piece
             if segment:
                 content = segment.strip()
                 corrected = content
@@ -48,11 +53,12 @@ class LiveDictation:
                     except Exception as error:
                         self.error = type(error).__name__
                         self.on_error("문장을 다듬지 못해 인식한 원문을 남겼습니다.")
-                leading = segment[:len(segment) - len(segment.lstrip())]
-                trailing = segment[len(segment.rstrip()):]
-                self.corrected += leading + self.apply_notes(corrected) + trailing
-                self.processed = boundary
-                self.changed.set()
+                if piece == self.piece:  # a correction for text the user already took over is dropped
+                    leading = segment[:len(segment) - len(segment.lstrip())]
+                    trailing = segment[len(segment.rstrip()):]
+                    self.corrected += leading + self.apply_notes(corrected) + trailing
+                    self.processed = boundary
+                    self.changed.set()
             if self.ending and self.processed == self.boundary:
                 return
 
@@ -67,7 +73,12 @@ class LiveDictation:
                         result = await asyncio.to_thread(self.write, text)
                     except Exception:
                         result = False
-                    if not result:
+                    if not result and await asyncio.to_thread(self.restart):
+                        # The user edited: keep what is written, continue after the last finished phrase.
+                        self.piece += 1
+                        self.processed, self.corrected, self.delivered = self.boundary, "", ""
+                        self.changed.set()
+                    elif not result:
                         self.blocked = True
                         self.on_error("입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다.")
                     else:

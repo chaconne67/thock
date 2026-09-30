@@ -80,7 +80,7 @@ class Session:
                 self.state.show_notice("이 입력창의 커서 위치를 확인할 수 없습니다. 다른 입력창을 선택해 주세요.")
                 raise RuntimeError("input range unavailable")
             polish = (lambda text: self.state.polisher.polish(text, self.app)) if s["polish"] else None
-            live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice)
+            live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice, field.restart)
             def heard(text):
                 if text.strip() != self.preview:
                     self.heard_at = time.perf_counter()
