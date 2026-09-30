@@ -52,6 +52,7 @@ class InlineFieldContract(unittest.TestCase):
         field = self.field()
         self.assertTrue(field.update("반복 반복"))
         self.reader.snapshot.return_value = ("앞 반복 반복", "", " 뒤")
+        self.reader.select_tail.side_effect = None
         self.reader.select_tail.return_value = None
         self.assertFalse(field.update("반복 교정"))
         self.assertEqual(self.paste.call_count, 1)

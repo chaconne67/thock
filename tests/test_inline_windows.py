@@ -58,6 +58,10 @@ class WindowsInline(unittest.TestCase):
         self.user32.SendMessageW(self.edit, 0x00B1, 2, 2)  # EM_SETSEL
         self.target = capture_target()
         self.assertIsNotNone(self.target, "test editor must own foreground focus")
+        self.assertEqual(self.target[0], self.window, "test editor must be foreground")
+        from thock.editwatch import field_reader, _snapshot
+        with field_reader().selection() as (document, selected):
+            self.assertEqual(_snapshot(document, selected), ("앞 ", "", " 뒤"))
 
     def content(self):
         buf = self.ctypes.create_unicode_buffer(1024)

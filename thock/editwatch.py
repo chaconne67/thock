@@ -61,7 +61,7 @@ def _bstr(b):
 
 def _ok(hr):
     if hr < 0:
-        raise RuntimeError("text range unavailable")
+        raise RuntimeError(f"text range unavailable: HRESULT {hr & 0xffffffff:08x}")
 
 
 def _text(rng):
