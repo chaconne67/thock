@@ -76,6 +76,16 @@ class InlineFieldContract(unittest.TestCase):
             self.assertTrue(field.update("first corrected"))
             self.assertEqual(self.paste.call_args.args[3], ("first corrected", "", ""))
 
+    def test_first_input_can_remove_a_web_editor_cue(self):
+        # Chromium and Electron editors expose their empty-field cue through UI Automation too.
+        self.reader.snapshot.return_value = ("", "", "\nplaceholder")
+        self.reader.native_selection.return_value = None
+        with patch("thock.win32._input_tracking", True):
+            field = self.field()
+            self.paste.side_effect = lambda text, target, expected, desired, cue: (text, "", "") if cue else None
+            self.assertTrue(field.update("first"), field.failure)
+            self.assertEqual(field.initial, ("", "", ""))
+
     def test_user_input_during_first_delivery_cannot_be_adopted_as_a_cue(self):
         import thock.win32 as win32
         self.reader.snapshot.return_value = ("", "", "existing text")

@@ -227,10 +227,9 @@ class InlineField:
                 self.failure, self.stopped = "selection_unavailable", True
                 return False
         desired = (before + text, "", after)
-        # Some native editors expose a cue as document text, then remove it on first input.
+        # Many editors expose an empty-field cue as document text, then remove it on first input.
         # Adopt that result only when it contains solely our text and no other input intervened.
-        cue = (self.current is None and not before and not selected and bool(after)
-               and _input_tracking and reader.native_selection() is not None)
+        cue = self.current is None and not before and not selected and bool(after) and _input_tracking
         actual = paste(text[common:], self.target, expected, desired, cue)
         if actual is None or _input_revision != self.revision:
             self.failure, self.stopped = "delivery_unverified", True
