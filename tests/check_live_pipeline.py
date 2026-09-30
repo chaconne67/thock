@@ -78,7 +78,7 @@ async def verify(path, focused, report_path):
         with patch.object(app_module, "HOME", Path(temporary)), patch.object(
                 app_module.sd, "RawInputStream", RecordedMicrophone), patch.object(
                     app_module.sd, "RawOutputStream", ObservedOutput), patch.object(app_module, "InlineField", field):
-            session = app_module.Session(state, None)
+            session = app_module.Session(state, None, capture_target())
             state.recording = session
             state.active.add(session)
             changes = []

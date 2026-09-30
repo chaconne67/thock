@@ -86,20 +86,16 @@ class InlineFieldContract(unittest.TestCase):
         self.assertEqual(field.failure, "focus_changed")
         self.assertFalse(field.restart())
 
-    def test_a_field_without_a_readable_caret_waits_for_one(self):
-        from thock.win32 import InlineField
+    def test_a_field_without_a_readable_caret_stops_and_is_not_ready(self):
+        from thock.win32 import InlineField, ready_target
         self.reader.snapshot.return_value = None
         field = InlineField(self.target)
         self.assertEqual((field.stopped, field.failure), (True, "range_unavailable"))
         self.assertFalse(field.update("글"))
-        self.assertIsNone(field.restart())  # still nothing to write into
+        self.assertFalse(field.restart())  # only the user's edit moves the range
+        self.assertIsNone(ready_target())  # CapsLock is answered with a guide, not a recording
         self.reader.snapshot.return_value = ("", "", "")
-        self.assertIsNone(field.restart())  # the app focused a field by itself: not ours to write into
-        import thock.win32 as win32
-        with patch("thock.win32._input_revision", win32._input_revision + 1):  # the user clicked it
-            self.assertTrue(field.restart())
-            self.assertTrue(field.update("글"))
-        self.assertEqual(self.paste.call_args.args[3], ("글", "", ""))
+        self.assertEqual(ready_target(), self.target)
 
     def test_failed_delivery_names_what_changed(self):
         import thock.win32 as win32

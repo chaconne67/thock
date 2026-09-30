@@ -53,24 +53,16 @@ class EnterEnds(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
-class WaitingGuide(unittest.TestCase):
-    def test_waiting_guide_stays_until_a_field_is_picked_and_is_not_an_error(self):
+class RunningNotice(unittest.TestCase):
+    def test_a_running_dictation_shows_notices_above_the_waveform(self):
         from thock import app
-        live = types.SimpleNamespace(waiting=True)
         session = type("Session", (), {})()  # hashable, like a real session
-        session.live = live
-        state = types.SimpleNamespace(notice_until=0.0, notice="", last=session, active={session})
-        self.assertEqual(app.App.preview(state), app.WAITING)
+        state = types.SimpleNamespace(notice_until=float("inf"), notice="문장을 다듬지 못해 인식한 원문을 남겼습니다.")
+        self.assertEqual(app.App.preview(state), state.notice)
         self.assertEqual(app.App.status(types.SimpleNamespace(recording=session, toggle=True,
                                                                active={session}, notice_until=0.0)), ("recording", True))
-        state.notice_until, state.notice = float("inf"), "입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다."
-        self.assertEqual(app.App.preview(state), state.notice)  # a notice still takes the pill
         state.notice_until = 0.0
-        live.waiting = False
         self.assertEqual(app.App.preview(state), "")
-        live.waiting = True
-        state.active = set()
-        self.assertEqual(app.App.preview(state), "")  # the dictation ended
 
 
 @unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")

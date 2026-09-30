@@ -219,6 +219,13 @@ def capture_target():
     return window, identity, revision
 
 
+def ready_target():
+    """The focused text field to dictate into, or None when no readable field has the caret."""
+    from .editwatch import field_reader
+    target = capture_target()
+    return target if target and field_reader().snapshot() is not None else None
+
+
 class InlineField:
     """Own exactly the selected range and the text subsequently inserted there."""
     def __init__(self, target):
@@ -232,14 +239,11 @@ class InlineField:
         self.failure = "range_unavailable" if self.stopped else None
 
     def restart(self):
-        """After the user's own edit, or while no text field had the caret, own the range at the
-        current caret. None: still no readable field, try again with the next words."""
-        if self.failure not in ("user_input", "range_unavailable"):
+        """After the user's own edit, own the range at the current caret."""
+        if self.failure != "user_input":
             return False
-        if self.failure == "range_unavailable" and _input_revision == self.revision:
-            return None  # only a field the user picks, never one the app focuses by itself
         self.__init__(capture_target())
-        return None if self.stopped else True
+        return not self.stopped
 
     def update(self, text):
         from .editwatch import field_reader, normalize_newlines

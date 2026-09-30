@@ -20,9 +20,6 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.patch_mic = patch("thock.app.sd.RawInputStream", return_value=self.mic)
         self.patch_mic.start()
         self.addCleanup(self.patch_mic.stop)
-        self.patch_target = patch("thock.app.capture_target", return_value=(1, (2,), 0))
-        self.patch_target.start()
-        self.addCleanup(self.patch_target.stop)
         self.patch_app = patch("thock.app.foreground_app", return_value="test-editor")
         self.patch_app.start()
         self.addCleanup(self.patch_app.stop)
@@ -51,7 +48,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.patch_field.stop)
 
     def start(self):
-        session = self.Session(self.state, None)
+        session = self.Session(self.state, None, (1, (2,), 0))
         self.state.recording = session
         self.state.active.add(session)
         return session
@@ -164,6 +161,11 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
 
 @unittest.skipUnless(sys.platform == "win32", "Windows hotkey integration")
 class InputModes(unittest.TestCase):
+    def setUp(self):
+        ready = patch("thock.app.ready_target", return_value=(1, (2,), 0))
+        self.ready = ready.start()
+        self.addCleanup(ready.stop)
+
     def fake_app(self, mode):
         from thock.app import App
         from thock.config import DEFAULTS
@@ -185,6 +187,18 @@ class InputModes(unittest.TestCase):
         session.stop.side_effect = lambda: setattr(app, "recording", None)
         app._start_session = Mock(return_value=session)
         return app, session
+
+    def test_no_text_field_leads_there_on_the_pill_without_recording(self):
+        from thock.app import WAITING
+        app, _ = self.fake_app("hold")
+        self.ready.return_value = None
+        app.on_key("down")
+        app._start_session.assert_not_called()
+        self.assertEqual((app.notice, app.notice_action), (WAITING, "dismiss"))  # 확인 folds the pill back
+        self.ready.return_value = (1, (2,), 0)
+        app.on_key("down")
+        app._start_session.assert_called_once_with((1, (2,), 0))
+        self.assertIsNone(app.notice_action)  # the press answered the guide
 
     def test_preflight_says_why_on_the_pill_without_opening_the_microphone(self):
         app, _ = self.fake_app("hold")

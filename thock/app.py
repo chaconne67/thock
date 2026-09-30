@@ -28,12 +28,12 @@ from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .live_input import LiveDictation
-from .win32 import foreground_app, capture_target, copy_text, InlineField, kernel32, run_key_hook, user32
+from .win32 import foreground_app, copy_text, InlineField, kernel32, ready_target, run_key_hook, user32
 from .personal import append_history, read_data, write_data, import_legacy, history_data
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
-WAITING = "입력할 곳을 클릭해 주세요."
+WAITING = "입력할 곳을 클릭해 주세요."  # CapsLock with no text field to write into
 # Account states the member settles in the account window: the pill's 확인 opens it.
 ACCOUNT_STATES = {"signed_out", "access_unavailable", "access_suspended", "access_not_started", "access_expired",
                   "time_exhausted"}
@@ -41,9 +41,9 @@ VOICE_LEVEL = 0.6  # microphone level (about -46 dBFS) taken as the start of spe
 
 
 class Session:
-    def __init__(self, app_state, previous):
+    def __init__(self, app_state, previous, target):
         self.app, self.state, self.previous = foreground_app(), app_state, previous
-        self.target = capture_target()
+        self.target = target
         self.settings = dict(app_state.settings)
         self.notes, self.profile = app_state.notes, app_state.profile
         self.loop = asyncio.get_running_loop()
@@ -191,7 +191,6 @@ class Session:
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
                                              lambda message: self.state.notify(message, fault=live.blocked),
                                              field.restart)
-            live.waiting = field.stopped
             if self.entered:
                 live.blocked = True
 
@@ -558,11 +557,15 @@ class App:
                     self.account_refresh_needed = True  # an access given meanwhile clears this message
                     self.notify(cached.get("error") or MESSAGES["access_unavailable"], action="account")
                     return
+                target = ready_target()
+                if target is None:  # nothing to write into: lead there instead of recording
+                    self.notify(WAITING, action="dismiss")
+                    return
                 self.pressed_at, self.toggle = now, mode == "toggle"
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation
                 try:
-                    self.recording = self._start_session()
+                    self.recording = self._start_session(target)
                 except Exception:
                     log.warning("microphone unavailable")
                     self.notify("마이크를 확인해 주세요. Windows의 마이크 접근 허용과 입력 장치를 확인하세요.",
@@ -580,15 +583,15 @@ class App:
             else:
                 self._stop()
 
-    def _start_session(self):
+    def _start_session(self, target):
         if self.devices_changed and not self.active:
             self._rescan_audio()
         try:
-            return Session(self, self.last.done if self.last else None)
+            return Session(self, self.last.done if self.last else None, target)
         except sd.PortAudioError:
             # The default microphone may have been unplugged or switched; rescan once and retry.
             self._rescan_audio()
-            return Session(self, self.last.done if self.last else None)
+            return Session(self, self.last.done if self.last else None, target)
 
     def _rescan_audio(self):
         sd._terminate()
@@ -616,12 +619,8 @@ class App:
         return None, False
 
     def preview(self):
-        """The draft lives in the input field; while a dictation runs, the box above the pill shows notices
-        and, while it waits for a text field, the prompt to click one."""
-        if time.perf_counter() < self.notice_until:
-            return self.notice
-        live = getattr(self.last, "live", None)
-        return WAITING if live and live.waiting and self.last in self.active else ""
+        """The draft lives in the input field; while a dictation runs, the box above the pill shows notices."""
+        return self.notice if time.perf_counter() < self.notice_until else ""
 
     def public_settings(self):
         s = self.settings
