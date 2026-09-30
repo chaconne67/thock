@@ -34,7 +34,7 @@ class Session:
         self.audio = asyncio.Queue()
         self.started = time.perf_counter()
         self.released = None
-        self.preview = ""  # what has been heard so far, shown above the pill until the paste
+        self.preview = ""  # last heard text, retained if recognition fails
         self.done = self.loop.create_future()
         self.stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
                                         blocksize=SAMPLE_RATE // 20, callback=self._on_audio)

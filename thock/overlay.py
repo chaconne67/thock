@@ -304,7 +304,7 @@ class Overlay:
         step = 40 if target_alpha > self.alpha else 16
         self.alpha = min(target_alpha, self.alpha + step) if target_alpha > self.alpha else max(target_alpha, self.alpha - step)
         self._update_font()
-        self._fit(self.app.preview() if state in ("recording", "processing") else "")
+        self._fit(self.app.preview())
 
         live = self.state == "recording" and tuple(self.app.levels)
         ripple = self.state == "processing" and int(time.perf_counter() * 60)
