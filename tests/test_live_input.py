@@ -117,7 +117,7 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         def restart():
             return True if chosen[0] else None
         self.errors = []
-        live = LiveDictation(write, None, lambda text: text, self.errors.append, restart, "입력칸을 클릭")
+        live = LiveDictation(write, None, lambda text: text, self.errors.append, restart)
         self.addAsyncCleanup(live.close)
         live.update("먼저 한 말")
         await until(lambda: live.waiting)
@@ -127,7 +127,7 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         live.update("먼저 한 말 계속 이어서")
         self.assertEqual(await live.finish("먼저 한 말 계속 이어서"), "먼저 한 말 계속 이어서")
         self.assertEqual(fields[-1], "먼저 한 말 계속 이어서")
-        self.assertEqual((live.blocked, live.waiting, self.errors), (False, False, ["입력칸을 클릭"]))
+        self.assertEqual((live.blocked, live.waiting, self.errors), (False, False, []))  # waiting is no error
 
     async def test_polish_failure_preserves_raw_and_reports_failure(self):
         def fail(text):

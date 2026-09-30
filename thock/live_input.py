@@ -8,10 +8,10 @@ import asyncio
 
 
 class LiveDictation:
-    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False, waiting_notice=""):
+    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False):
         self.write, self.polish, self.apply_notes, self.on_error = write, polish, apply_notes, on_error
-        self.restart, self.waiting_notice = restart, waiting_notice
-        self.waiting = False
+        self.restart = restart
+        self.waiting = False  # no text field has the caret yet; words are kept until one does
         self.piece = 0  # bumped when later speech moves to the user's new caret
         self.heard = self.boundary = self.processed = self.corrected = ""
         self.changed, self.segment_ready = asyncio.Event(), asyncio.Event()
@@ -83,9 +83,7 @@ class LiveDictation:
                         self.waiting = False
                         self.changed.set()
                     elif not result and restarted is None:
-                        if not self.waiting:
-                            self.waiting = True
-                            self.on_error(self.waiting_notice)
+                        self.waiting = True
                     elif not result:
                         self.blocked = True
                         self.on_error("입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다.")

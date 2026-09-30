@@ -27,6 +27,7 @@ from .win32 import foreground_app, capture_target, InlineField, kernel32, run_ke
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
+WAITING = "입력칸을 클릭하면 그 자리에 받아씁니다."
 
 
 class Session:
@@ -95,12 +96,10 @@ class Session:
             if self.previous:
                 await asyncio.shield(self.previous)
             field = await asyncio.to_thread(InlineField, self.target)
-            waiting = "입력칸을 클릭하면 그 자리에 받아씁니다."
-            if field.stopped:
-                self.state.show_notice(waiting)
             polish = (lambda text: self.state.polisher.polish(text, self.app)) if s["polish"] else None
             live = self.live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice,
-                                             field.restart, waiting)
+                                             field.restart)
+            live.waiting = field.stopped
             def heard(text):
                 if text.strip() != self.preview:
                     self.heard_at = time.perf_counter()
@@ -251,8 +250,12 @@ class App:
         self.error_until = time.perf_counter() + 8
 
     def preview(self):
-        """The draft lives in the input field; the pill only shows an actionable failure."""
-        return self.notice if time.perf_counter() < self.error_until else ""
+        """The draft lives in the input field; the pill shows a failure (red, briefly) or, for as long
+        as the dictation waits for one, that the user should click a text field."""
+        if time.perf_counter() < self.error_until:
+            return self.notice
+        live = getattr(self.last, "live", None)
+        return WAITING if live and live.waiting and self.last in self.active else ""
 
     def public_settings(self):
         s = self.settings
