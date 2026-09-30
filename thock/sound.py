@@ -21,9 +21,13 @@ RATE, BLOCK_FRAMES, FADE_FRAMES = 48000, 480, 10560  # 10 ms blocks; 220 ms stop
 
 
 def selected_mode(recording, active, settings):
-    """Recording takes precedence if an older session is still processing."""
+    """The current session owns audio; recognized live text is already processing."""
     if recording is not None and recording in active:
-        return "recording" if settings["sound_recording"] else None
+        if settings["sound_recording"]:
+            return "recording"
+        if getattr(recording, "preview", "") and settings["sound_processing"]:
+            return "processing"
+        return None
     if active:
         return "processing" if settings["sound_processing"] else None
     return None

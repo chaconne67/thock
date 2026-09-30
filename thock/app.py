@@ -76,6 +76,7 @@ class Session:
             def heard(text):
                 self.preview = text.strip()
                 live.update(text)
+                self.state._sync_sound()
             raw = await transcribe(self.chunks(), s["soniox_api_key"],
                                    lambda: self.state.profile.context(self.app, s["terms"] + notes.terms()),
                                    heard, live.endpoint)

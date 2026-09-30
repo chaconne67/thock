@@ -84,7 +84,7 @@ def _endpoint(rng, end, other, other_end):
 
 
 def normalize_newlines(text):
-    return text.replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\u2028", "\n").replace("\u2029", "\n")
 
 
 def _snapshot(document, selected):
@@ -295,38 +295,33 @@ class FieldReader:
                     return None
                 if not tail:
                     return expected
-                before, found = _clone(document), ctypes.c_void_p()
-                try:
-                    _endpoint(before, 1, selected, 0)
-                    oleaut32.SysAllocString.argtypes = [ctypes.c_wchar_p]
-                    oleaut32.SysAllocString.restype = ctypes.c_void_p
-                    # Map the canonical suffix back to the provider's literal newline spelling.
-                    raw = _text(before)
-                    start = len(raw)
-                    for char in reversed(tail):
-                        start -= 2 if char == "\n" and raw[:start].endswith("\r\n") else 1
-                    literal = raw[start:]
-                    if normalize_newlines(literal) != tail:
-                        return None
-                    needle = oleaut32.SysAllocString(literal)
+                wanted = (expected[0][:-len(tail)], tail, expected[2])
+                # Providers may group Unicode characters into different text units. Locate the
+                # suffix with their own units, then require exact text on both sides before Select.
+                low, high = 1, len(tail.encode("utf-16-le")) // 2
+                count = min(len(tail), high)
+                while low <= high:
+                    candidate = _clone(selected)
                     try:
-                        _ok(_com(before, 8, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, _PP)(
-                            before, needle, True, False, ctypes.byref(found)))
+                        moved = ctypes.c_int()
+                        _ok(_com(candidate, 14, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                 ctypes.POINTER(ctypes.c_int))(
+                                     candidate, 0, 0, -count, ctypes.byref(moved)))
+                        observed = _snapshot(document, candidate)
+                        if observed == wanted:
+                            _ok(_com(candidate, 16)(candidate))
+                            return wanted
+                        size = len(observed[1])
+                        if size < len(tail):
+                            low = count + 1
+                        elif size > len(tail):
+                            high = count - 1
+                        else:
+                            return None
                     finally:
-                        oleaut32.SysFreeString(needle)
-                    if not found:
-                        return None
-                    comparison = ctypes.c_int()
-                    _ok(_com(found, 5, ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
-                             ctypes.POINTER(ctypes.c_int))(found, 1, selected, 0, ctypes.byref(comparison)))
-                    wanted = (expected[0][:-len(tail)], tail, expected[2])
-                    if comparison.value or _snapshot(document, found) != wanted:
-                        return None
-                    _ok(_com(found, 16)(found))
-                    return wanted
-                finally:
-                    _release(found)
-                    _release(before)
+                        _release(candidate)
+                    count = (low + high) // 2
+                return None
         except (OSError, RuntimeError):
             return None
 

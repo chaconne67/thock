@@ -2,6 +2,7 @@
 import sys
 import threading
 import unittest
+from unittest.mock import patch
 
 
 @unittest.skipUnless(sys.platform == "win32", "Windows desktop")
@@ -123,3 +124,12 @@ class WindowsRichEdit(WindowsInline):
 class WindowsRichEdit20(WindowsInline):
     control_class = "RichEdit20W"
     control_dll = "Riched20.dll"
+
+
+class WindowsUIAInline(WindowsRichEdit):
+    def setUp(self):
+        super().setUp()
+        from thock.editwatch import field_reader
+        native = patch.object(field_reader(), "native_selection", return_value=None)
+        native.start()
+        self.addCleanup(native.stop)

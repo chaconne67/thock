@@ -54,6 +54,20 @@ async def verify(path, focused, report_path):
             pass
         def close(self):
             pass
+    output_blocks = {"nonzero_before_release": 0}
+    original_output = app_module.sd.RawOutputStream
+    class ObservedOutput:
+        def __init__(self, **kwargs):
+            self.stream = original_output(**kwargs)
+        def __enter__(self):
+            self.stream.__enter__()
+            return self
+        def __exit__(self, *args):
+            return self.stream.__exit__(*args)
+        def write(self, data):
+            self.stream.write(data)
+            if state.recording and state.recording.released is None and any(data):
+                output_blocks["nonzero_before_release"] += 1
     fields = []
     original_field = app_module.InlineField
     def field(target):
@@ -62,7 +76,8 @@ async def verify(path, focused, report_path):
         return result
     with tempfile.TemporaryDirectory(prefix="thock-session-check-") as temporary:
         with patch.object(app_module, "HOME", Path(temporary)), patch.object(
-                app_module.sd, "RawInputStream", RecordedMicrophone), patch.object(app_module, "InlineField", field):
+                app_module.sd, "RawInputStream", RecordedMicrophone), patch.object(
+                    app_module.sd, "RawOutputStream", ObservedOutput), patch.object(app_module, "InlineField", field):
             session = app_module.Session(state, None)
             state.recording = session
             state.active.add(session)
@@ -87,6 +102,7 @@ async def verify(path, focused, report_path):
                 "live_updates_before_release": sum(t < session.released for t, _ in changes),
                 "corrections_before_release": sum(t < session.released for t, _ in completions),
                 "correction_calls": len(completions),
+                "sound_nonzero_blocks_before_release": output_blocks["nonzero_before_release"],
                 "preserved_surrounding_text": bool(result and result[0].startswith("앞 ") and result[2] == " 뒤"),
                 "final_text_delivered": bool(result and result == ("앞 " + record.get("text", ""), "", " 뒤")),
                 "raw": record.get("raw"), "text": record.get("text"),
@@ -101,6 +117,8 @@ async def verify(path, focused, report_path):
             if (report["error"] or report["polish_error"] or not report["final_text_delivered"]
                     or not report["preserved_surrounding_text"] or not report["live_updates_before_release"]):
                 raise RuntimeError("live session verification failed")
+            if (settings["sound_recording"] or settings["sound_processing"]) and not output_blocks["nonzero_before_release"]:
+                raise RuntimeError("live typing sound did not reach the output device")
     state.sounds.set_mode(None)
 
 

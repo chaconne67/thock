@@ -49,6 +49,19 @@ class SoundPhases(unittest.TestCase):
         settings["sound_recording"] = True
         self.assertEqual(selected_mode(current, {current, older}, settings), "recording")
 
+    def test_live_input_starts_processing_sound_without_enabling_recording_sound(self):
+        class Session:
+            preview = ""
+        session = Session()
+        settings = {"sound_recording": False, "sound_processing": True}
+        self.assertIsNone(selected_mode(session, {session}, settings))
+        session.preview = "첫 글자"
+        self.assertEqual(selected_mode(session, {session}, settings), "processing")
+        settings["sound_processing"] = False
+        self.assertIsNone(selected_mode(session, {session}, settings))
+        settings["sound_recording"] = True
+        self.assertEqual(selected_mode(session, {session}, settings), "recording")
+
     def test_processing_and_silence_follow_session_completion(self):
         session = object()
         settings = {"sound_recording": True, "sound_processing": True}
