@@ -418,7 +418,7 @@ class App:
         details = {**session.timing(), "overflow_count": session.overflows}
         if record.get("late_ms") is not None:
             details["late_ms"] = record["late_ms"]
-        log.warning("flagged dictation %s: code=%s %s", record["time"], code,
+        log.warning("flagged dictation %s: code=%s %s", record.get("time", "(unfinished)"), code,
                     " ".join(f"{name}={value}" for name, value in details.items()))
         if (self.account.cached.get("error_reports") or {}).get("enabled"):
             self._queue_error(session, "user_flag", code, details)
