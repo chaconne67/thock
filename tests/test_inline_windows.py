@@ -6,12 +6,17 @@ import unittest
 
 @unittest.skipUnless(sys.platform == "win32", "Windows desktop")
 class WindowsInline(unittest.TestCase):
+    control_class = "EDIT"
+    control_dll = None
+
     @classmethod
     def setUpClass(cls):
         import ctypes
         from ctypes import wintypes as wt
         from thock.win32 import user32, kernel32
         cls.ctypes, cls.user32 = ctypes, user32
+        if cls.control_dll:
+            cls.loaded_control = ctypes.WinDLL(cls.control_dll)
         user32.CreateWindowExW.argtypes = [wt.DWORD, wt.LPCWSTR, wt.LPCWSTR, wt.DWORD,
                                           ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                                           wt.HWND, wt.HMENU, wt.HINSTANCE, ctypes.c_void_p]
@@ -29,7 +34,7 @@ class WindowsInline(unittest.TestCase):
             try:
                 cls.window = user32.CreateWindowExW(0, "STATIC", "Thock input verification",
                                                     0x10CF0000, 200, 200, 640, 220, None, None, None, None)
-                cls.edit = user32.CreateWindowExW(0, "EDIT", "", 0x50801004,
+                cls.edit = user32.CreateWindowExW(0, cls.control_class, "", 0x50801004,
                                                   15, 15, 590, 150, cls.window, None, None, None)
                 if not cls.window or not cls.edit:
                     raise RuntimeError("test editor creation failed")
@@ -95,3 +100,26 @@ class WindowsInline(unittest.TestCase):
         self.user32.SendMessageW(self.edit, 0x00B1, 0, 0)
         self.assertFalse(field.update("교정"))
         self.assertEqual(self.content(), "앞 초안 뒤")
+
+
+    def test_empty_field_first_word_and_revision(self):
+        from thock.win32 import InlineField, capture_target
+        self.user32.SetWindowTextW(self.edit, "")
+        self.user32.SendMessageW(self.edit, 0x00B1, 0, 0)
+        field = InlineField(capture_target())
+        self.assertFalse(field.stopped)
+        self.assertTrue(field.update("지"), field.failure)
+        self.assertEqual(self.content(), "지")
+        self.assertTrue(field.update("지금 시작"), field.failure)
+        self.assertTrue(field.update("지금 시작하자."), field.failure)
+        self.assertEqual(self.content(), "지금 시작하자.")
+
+
+class WindowsRichEdit(WindowsInline):
+    control_class = "RICHEDIT50W"
+    control_dll = "Msftedit.dll"
+
+
+class WindowsRichEdit20(WindowsInline):
+    control_class = "RichEdit20W"
+    control_dll = "Riched20.dll"
