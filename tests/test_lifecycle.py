@@ -36,7 +36,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             polisher=SimpleNamespace(polish=Mock(return_value="다듬은 글")),
             watcher=SimpleNamespace(watch=Mock()), levels=deque(maxlen=18), recording=None, active=set(),
             last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
-            report_error=Mock(), idle_since=time.perf_counter() - 3600)
+            report_error=Mock(), idle_since=time.perf_counter() - 3600, ask_account=Mock())
         # The live input field: records what reached the target field; ok=False means it moved.
         self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None,
                                      restart=lambda: False)
@@ -69,7 +69,8 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(session.done.done())
         speech.assert_not_called()
         self.assertEqual(self.field.writes, [])
-        self.state.notify.assert_called_once()
+        self.state.ask_account.assert_called_once()  # an account state: the black pill with 확인
+        self.state.notify.assert_not_called()
 
     async def test_stop_is_idempotent_and_buffer_is_capped_to_grant(self):
         from thock.config import SAMPLE_RATE
@@ -178,6 +179,7 @@ class InputModes(unittest.TestCase):
         app.watcher = SimpleNamespace(flush=Mock())
         app._sync_sound = Mock()
         app.last = None
+        app.notice_action = None
         session = Mock()
         session.settings = dict(app.settings)
         session.stop.side_effect = lambda: setattr(app, "recording", None)
