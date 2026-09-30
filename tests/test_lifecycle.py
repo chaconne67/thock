@@ -36,7 +36,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             polisher=SimpleNamespace(polish=Mock(return_value="다듬은 글")),
             watcher=SimpleNamespace(watch=Mock()), levels=deque(maxlen=18), recording=None, active=set(),
             last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
-            report_error=Mock(), idle_since=time.perf_counter() - 3600, ask_account=Mock())
+            report_error=Mock(), idle_since=time.perf_counter() - 3600)
         # The live input field: records what reached the target field; ok=False means it moved.
         self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None, mismatch=None,
                                      restart=lambda: False)
@@ -69,8 +69,8 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(session.done.done())
         speech.assert_not_called()
         self.assertEqual(self.field.writes, [])
-        self.state.ask_account.assert_called_once()  # an account state: the black pill with 확인
-        self.state.notify.assert_not_called()
+        self.state.notify.assert_called_once()
+        self.assertEqual(self.state.notify.call_args.kwargs, {"action": "account"})  # 확인 opens the account window
 
     async def test_stop_is_idempotent_and_buffer_is_capped_to_grant(self):
         from thock.config import SAMPLE_RATE
@@ -139,7 +139,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         async def transcribe(chunks, api_key, context, heard, endpoint, **kwargs):
             heard("보낸 뒤 잘린 글")
             await asyncio.sleep(0.05)
-            session.enter()  # the user pressed Enter after the red notice
+            session.enter()  # the user pressed Enter after the notice
             return "보낸 뒤 잘린 글"
         with patch("thock.app.transcribe", side_effect=transcribe):
             session = self.start()
@@ -172,19 +172,27 @@ class InputModes(unittest.TestCase):
         app.recording = None
         app.toggle = False
         app.pressed_at = 0
-        app.account = SimpleNamespace(token="test")
+        app.account = SimpleNamespace(token="test", cached={"state": "signed_in", "ready": True})
         app.data_root = Path("unused")
         app.active = set()
         app.levels = deque(maxlen=18)
         app.watcher = SimpleNamespace(flush=Mock())
         app._sync_sound = Mock()
         app.last = None
-        app.account_notice = False
+        app.notice_action, app.notice_until = None, 0.0
         session = Mock()
         session.settings = dict(app.settings)
         session.stop.side_effect = lambda: setattr(app, "recording", None)
         app._start_session = Mock(return_value=session)
         return app, session
+
+    def test_preflight_says_why_on_the_pill_without_opening_the_microphone(self):
+        app, _ = self.fake_app("hold")
+        app.account.cached = {"state": "signed_in", "ready": False, "error": "이 계정의 Thock 이용권을 확인해 주세요."}
+        app.on_key("down")
+        app._start_session.assert_not_called()
+        self.assertEqual((app.notice, app.notice_action), ("이 계정의 Thock 이용권을 확인해 주세요.", "account"))
+        self.assertTrue(app.account_refresh_needed)
 
     def test_hold_releases_even_after_short_press(self):
         app, session = self.fake_app("hold")

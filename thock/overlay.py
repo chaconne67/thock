@@ -144,7 +144,7 @@ def _circle(g, cx, cy, r, argb):
 
 class Overlay:
     """A small handle above the taskbar that grows into the pill: live waveform while listening,
-    ripple while processing, red on error. While a dictation is on its way, a box above the pill shows
+    ripple while processing, a message with its button (복사, 확인) otherwise. While a dictation is on its way, a box above the pill shows
     what has been heard so far. Hover shows a settings button above it, right-click shows a menu,
     dragging moves it. It never takes keyboard focus away from the text being written."""
     FULL_W, FULL_H = 132, 36   # pill while listening or hovered, in 96-dpi pixels before SIZE
@@ -152,7 +152,8 @@ class Overlay:
     GEAR, GAP, MARGIN = 30, 8, 10
     TEXT_W, TEXT_H, PAD_X, PAD_Y, LINES = 600, 96, 20, 11, 2  # preview box: widest, tallest (largest font), padding, lines
     SIZE = 0.8
-    NOTICE_H, NOTICE_PAD, CHIP_PAD, CHIP_GAP = 44, 18, 14, 14  # a pill that carries a message and 확인
+    NOTICE_H, NOTICE_PAD, CHIP_PAD, CHIP_GAP = 44, 18, 14, 14  # a pill that carries a message and its button
+    CHIPS = {"dismiss": "확인", "account": "확인", "copy": "복사"}
     MENU_SETTINGS, MENU_RESET, MENU_QUIT, MENU_RECOVERY, MENU_ACCOUNT, MENU_FLAG = 1, 2, 3, 4, 5, 6
 
     def __init__(self, app):
@@ -175,7 +176,7 @@ class Overlay:
         gdiplus.GdipSetSmoothingMode(self.g, 4)  # anti-alias
         gdiplus.GdipSetTextRenderingHint(self.g, 5)  # ClearType: the text always sits on the opaque preview box
         self.font, self.fonts, self.font_key, self.format = None, {}, None, _P()
-        self.action, self.notice_font = None, _P()  # (message, width, chip width, text height, shown text) of an account notice
+        self.message, self.notice_font = None, _P()  # layout of the notice shown inside the pill
         family = _P()
         gdiplus.GdipCreateFontFamilyFromName("Malgun Gothic", None, ctypes.byref(family))
         gdiplus.GdipCreateFont(family, 14 * self.dpi, 0, 2, ctypes.byref(self.notice_font))
@@ -265,7 +266,7 @@ class Overlay:
                 save_settings(self.app.settings)
             elif target == "gear":
                 self.app.open_settings()
-            elif target == "pill" and self.action:
+            elif target == "pill" and self.message and self.message[0][1]:
                 self.app.act_on_notice()
             elif target == "pill" and not self.app.active:
                 if self.app.recovery:
@@ -319,9 +320,9 @@ class Overlay:
         elif self.w <= self.IDLE_W + 0.5:
             self.state = None  # keep the last look while shrinking back
         big = bool(state) or self.hover
-        self._fit_action(self.app.notice if state == "notice" and self.app.account_notice else "")
-        if self.action:
-            tw, th = self.action[1], self.NOTICE_H
+        self._fit_message((self.app.notice, self.CHIPS.get(self.app.notice_action)) if state == "notice" else None)
+        if self.message:
+            tw, th = self.message[1], self.NOTICE_H
         else:
             tw, th = (self.FULL_W, self.FULL_H) if big else (self.IDLE_W, self.IDLE_H)
         self.w += (tw - self.w) * 0.3
@@ -332,11 +333,11 @@ class Overlay:
         step = 40 if target_alpha > self.alpha else 16
         self.alpha = min(target_alpha, self.alpha + step) if target_alpha > self.alpha else max(target_alpha, self.alpha - step)
         self._update_font()
-        self._fit(self.app.preview() if state and not self.action else "")
+        self._fit(self.app.preview() if state and not self.message else "")
 
         live = self.state == "recording" and tuple(self.app.levels)
         ripple = self.state == "processing" and int(time.perf_counter() * 60)
-        key = (self.state, self.locked, self.hover, self.w, self.h, self.alpha, live, ripple, self.preview, self.action,
+        key = (self.state, self.locked, self.hover, self.w, self.h, self.alpha, live, ripple, self.preview, self.message,
                self.anchor())
         if key == self.drawn:
             return  # nothing changed: stay idle, no redraw
@@ -357,14 +358,13 @@ class Overlay:
         x0, y0 = (self.bw - w) / 2, self.bh - self.MARGIN * s - h
         for i in range(4, 0, -1):  # soft shadow, slightly lower than the pill
             _capsule(g, x0 - i * s, y0 - i * s + 2 * s, w + 2 * i * s, h + 2 * i * s, (0x1C - 5 * i) << 24)
-        error = self.state == "error"
-        _capsule(g, x0, y0, w, h, 0xFF5A2320 if error else 0xFF3A3A3A)  # hairline edge
-        _capsule(g, x0 + s, y0 + s, w - 2 * s, h - 2 * s, 0xFFB3261E if error else 0xFF0F0F0F)
+        _capsule(g, x0, y0, w, h, 0xFF3A3A3A)  # hairline edge
+        _capsule(g, x0 + s, y0 + s, w - 2 * s, h - 2 * s, 0xFF0F0F0F)
 
         grown = (self.w - self.IDLE_W) / (self.FULL_W - self.IDLE_W)  # 0 = resting handle, 1 = full pill
-        if self.action:
-            if abs(self.w - self.action[1]) < 2:  # the message appears once the pill has opened
-                self._draw_action(x0, y0, w, h)
+        if self.message:
+            if abs(self.w - self.message[1]) < 2:  # the message appears once the pill has opened
+                self._draw_message(x0, y0, w, h)
         elif grown > 0.85:
             locked = self.locked and self.state == "recording"
             n = BARS - 3 if locked else BARS
@@ -451,38 +451,40 @@ class Overlay:
                                   ctypes.byref(box), ctypes.byref(fitted), ctypes.byref(lines))
         return box.w, box.h
 
-    def _fit_action(self, message):
-        """self.action for an account message on one line, cut to the widest pill:
-        (message, pill width, chip width, text height, shown text)."""
-        if (self.action[0] if self.action else "") == message:
+    def _fit_message(self, notice):
+        """self.message for (text, button label or None) on one line, cut to the widest pill:
+        (notice, pill width, button width, text height, shown text)."""
+        if (self.message[0] if self.message else None) == notice:
             return
-        if not message:
-            self.action = None
+        if not notice:
+            self.message = None
             return
-        chip = self._text_size("확인")[0] / self.s + 2 * self.CHIP_PAD
-        room = self.TEXT_W - 2 * self.NOTICE_PAD - chip - self.CHIP_GAP
-        text = message
-        while len(text) > 1 and self._text_size(text)[0] / self.s > room:
-            text = text[:-2] + "…"
-        tw, th = self._text_size(text)
-        self.action = (message, 2 * self.NOTICE_PAD + tw / self.s + self.CHIP_GAP + chip, chip, th, text)
+        text, label = notice
+        chip = self._text_size(label)[0] / self.s + 2 * self.CHIP_PAD if label else 0
+        room = self.TEXT_W - 2 * self.NOTICE_PAD - (chip + self.CHIP_GAP if label else 0)
+        shown = text
+        while len(shown) > 1 and self._text_size(shown)[0] / self.s > room:
+            shown = shown[:-2] + "…"
+        tw, th = self._text_size(shown)
+        self.message = (notice, 2 * self.NOTICE_PAD + tw / self.s + (self.CHIP_GAP + chip if label else 0), chip, th, shown)
 
-    def _draw_action(self, x0, y0, w, h):
-        """Message on the left, a white 확인 on the right, inside the black pill."""
+    def _draw_message(self, x0, y0, w, h):
+        """The message on the left and, when there is one, its white button on the right, inside the black pill."""
         g, s = self.g, self.s
-        _, _, chip, th, text = self.action
+        (_, label), _, chip, th, shown = self.message
         brush = _P()
         gdiplus.GdipCreateSolidFill(0xFFFFFFFF, ctypes.byref(brush))
-        gdiplus.GdipDrawString(g, text, -1, self.notice_font, ctypes.byref(RectF(x0 + self.NOTICE_PAD * s, y0 + (h - th) / 2,
+        gdiplus.GdipDrawString(g, shown, -1, self.notice_font, ctypes.byref(RectF(x0 + self.NOTICE_PAD * s, y0 + (h - th) / 2,
                                w, th + s)), self.format, brush)
-        cw, ch = chip * s, h - 12 * s
-        cx, cy = x0 + w - 6 * s - cw, y0 + 6 * s
-        _capsule(g, cx, cy, cw, ch, 0xFFFFFFFF)
-        gdiplus.GdipDeleteBrush(brush)
-        gdiplus.GdipCreateSolidFill(0xFF0F0F0F, ctypes.byref(brush))
-        lw = self._text_size("확인")[0]
-        gdiplus.GdipDrawString(g, "확인", -1, self.notice_font, ctypes.byref(RectF(cx + (cw - lw) / 2, cy + (ch - th) / 2,
-                               lw + s, th + s)), self.format, brush)
+        if label:
+            cw, ch = chip * s, h - 12 * s
+            cx, cy = x0 + w - 6 * s - cw, y0 + 6 * s
+            _capsule(g, cx, cy, cw, ch, 0xFFFFFFFF)
+            gdiplus.GdipDeleteBrush(brush)
+            gdiplus.GdipCreateSolidFill(0xFF0F0F0F, ctypes.byref(brush))
+            lw = self._text_size(label)[0]
+            gdiplus.GdipDrawString(g, label, -1, self.notice_font, ctypes.byref(RectF(cx + (cw - lw) / 2, cy + (ch - th) / 2,
+                                   lw + s, th + s)), self.format, brush)
         gdiplus.GdipDeleteBrush(brush)
 
     def _draw_gear(self, cx, cy):

@@ -61,7 +61,7 @@ class WaitingGuide(unittest.TestCase):
         session.live = live
         state = types.SimpleNamespace(notice_until=0.0, notice="", last=session, active={session})
         self.assertEqual(app.App.preview(state), app.WAITING)
-        self.assertEqual(app.App.status(types.SimpleNamespace(error_until=0.0, recording=session, toggle=True,
+        self.assertEqual(app.App.status(types.SimpleNamespace(recording=session, toggle=True,
                                                                active={session}, notice_until=0.0)), ("recording", True))
         state.notice_until, state.notice = float("inf"), "입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다."
         self.assertEqual(app.App.preview(state), state.notice)  # a notice still takes the pill
@@ -74,20 +74,38 @@ class WaitingGuide(unittest.TestCase):
 
 
 @unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
-class RedNotices(unittest.TestCase):
-    def test_every_red_message_is_logged_and_kept_with_its_dictation(self):
+class PillNotices(unittest.TestCase):
+    def state(self):
         from thock import app
         session = type("Session", (), {})()
         session.notices = []
         state = app.App.__new__(app.App)
-        state.recording, state.last, state.active = session, session, {session}
-        state.error_until = 0.0
+        state.recording, state.last, state.active = None, session, {session}
+        return app, state, session
+
+    def test_a_fault_is_logged_kept_with_its_dictation_and_shown_on_the_black_pill(self):
+        app, state, session = self.state()
         with self.assertLogs("voicetype", level="WARNING") as logs:
-            app.App.notify(state, "입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다.", error=True)
-        app.App.notify(state, "안내만 합니다.")  # not red: not an error
-        self.assertEqual(session.notices, ["입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다."])
-        self.assertIn("red notice", logs.output[0])
-        self.assertEqual(app.App.status(state)[0], "error")
+            state.notify("입력하지 못한 글을 보관했습니다.", action="copy", fault=True)
+        self.assertIn("fault notice", logs.output[0])
+        self.assertEqual(session.notices, ["입력하지 못한 글을 보관했습니다."])
+        state.active = set()
+        self.assertEqual(app.App.status(state)[0], "notice")  # no red pill any more
+        self.assertEqual(state.notice_action, "copy")  # it stays with its button until pressed
+        state.notify("안내만 합니다.")
+        self.assertEqual(session.notices, ["입력하지 못한 글을 보관했습니다."])  # not a fault
+        self.assertIsNone(state.notice_action)
+
+    def test_copy_on_the_pill_copies_the_kept_text(self):
+        app, state, _ = self.state()
+        state.active = set()
+        state.recovery = [{"id": "old", "text": "a"}, {"id": "new", "text": "b"}]
+        state.recovery_action = Mock()
+        state.notify("입력하지 못한 글을 보관했습니다.", action="copy")
+        state.act_on_notice()
+        state.recovery_action.assert_called_once_with("new", "copy")
+        self.assertIn("복사했습니다", state.notice)
+        self.assertIsNone(state.notice_action)
 
 
 @unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
@@ -97,7 +115,7 @@ class FlagLastDictation(unittest.TestCase):
         session = SimpleNamespace(record=record, overflows=0, app="claude.exe", session_id=None,
                                   timing=lambda: {"idle_s": 7200, "first_audio_ms": 1400, "first_text_ms": 2100})
         state = app.App.__new__(app.App)
-        state.last, state.recording, state.active, state.error_until = session, None, set(), 0.0
+        state.last, state.recording, state.active = session, None, set()
         state.account = SimpleNamespace(cached={"error_reports": {"enabled": consent}})
         state._queue_error = Mock()
         return app, state
@@ -129,11 +147,11 @@ class AccountNotice(unittest.TestCase):
     def test_an_account_state_waits_on_the_pill_and_confirm_opens_the_account_window(self):
         from thock import app
         state = app.App.__new__(app.App)
-        state.error_until, state.recording, state.active = 0.0, None, set()
+        state.recording, state.active = None, set()
         state.open_welcome = Mock()
-        state.ask_account("이 계정의 Thock 이용권을 확인해 주세요.")
-        self.assertEqual(app.App.status(state)[0], "notice")  # black, not the red error pill
-        self.assertTrue(state.account_notice)
+        state.notify("이 계정의 Thock 이용권을 확인해 주세요.", action="account")
+        self.assertEqual(app.App.status(state)[0], "notice")
+        self.assertEqual(state.notice_action, "account")
         state.act_on_notice()
         state.open_welcome.assert_called_once()
         self.assertIsNone(app.App.status(state)[0])
@@ -142,12 +160,12 @@ class AccountNotice(unittest.TestCase):
         from pathlib import Path
         from thock import app
         state = app.App.__new__(app.App)
-        state.error_until, state.recording, state.active = 0.0, None, set()
+        state.recording, state.active = None, set()
         state.settings = {"welcome_complete": True}
         state.data_root = Path("unused")
         state.account = SimpleNamespace(status=lambda force=False: {"state": "offline", "ready": True})
         state.legacy_available = lambda: False
-        state.ask_account("이 계정의 Thock 이용권을 확인해 주세요.")
+        state.notify("이 계정의 Thock 이용권을 확인해 주세요.", action="account")
         app.App.account_status(state)
         self.assertIsNone(app.App.status(state)[0])
 

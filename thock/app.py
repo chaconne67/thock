@@ -19,7 +19,7 @@ import sounddevice as sd
 
 from .config import (APP_NAME, HOME, HOTKEYS, INPUT_MODES, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
                      TAP_SECONDS, VERSION, load_settings, log, save_settings)
-from .account import Account, AccountError
+from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
 from .editwatch import EditWatcher
 from .learning import Profile, TypoNotes
@@ -34,7 +34,7 @@ from .personal import append_history, read_data, write_data, import_legacy, hist
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
 WAITING = "입력할 곳을 클릭해 주세요."
-# Account states the member settles in the account window, not faults: a black pill with 확인, not red.
+# Account states the member settles in the account window: the pill's 확인 opens it.
 ACCOUNT_STATES = {"signed_out", "access_unavailable", "access_suspended", "access_not_started", "access_expired",
                   "time_exhausted"}
 VOICE_LEVEL = 0.6  # microphone level (about -46 dBFS) taken as the start of speech, for diagnosis only
@@ -152,7 +152,7 @@ class Session:
                 log.warning("microphone close failed: %s", type(error).__name__)
                 self.cleanup_failed = True
                 self.state.microphone_fault = True
-                self.state.notify("마이크를 닫지 못했습니다. Thock을 다시 실행해 주세요.", error=True)
+                self.state.notify("마이크를 닫지 못했습니다. Thock을 다시 실행해 주세요.", action="dismiss", fault=True)
             finally:
                 self.loop.call_soon(self.audio.put_nowait, None)
                 if self.state.recording is self:
@@ -189,7 +189,7 @@ class Session:
             field = await asyncio.to_thread(InlineField, self.target)
             polish = (lambda words: self.state.polisher.polish(words, self.app)) if s["polish"] else None
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
-                                             lambda message: self.state.notify(message, error=live.blocked),
+                                             lambda message: self.state.notify(message, fault=live.blocked),
                                              field.restart)
             live.waiting = field.stopped
             if self.entered:
@@ -226,7 +226,7 @@ class Session:
                     log.warning("input not verified: %s", field.mismatch)
                 reason = "입력하지 못한 글을 보관했습니다."
                 self.state.recover(text or raw, reason)
-                self.state.notify(reason + " 막대를 눌러 복사할 수 있습니다.", error=True)
+                self.state.notify(reason, action="copy", fault=True)
             elif text and s["learn"] and not self.entered:
                 self.state.watcher.watch(text)
             total_ms = max(0, round((time.perf_counter() - self.released) * 1000))
@@ -234,9 +234,9 @@ class Session:
             record["error"] = error.code
             self.state.account_refresh_needed = True
             if error.code in ACCOUNT_STATES:
-                self.state.ask_account(str(error))
+                self.state.notify(str(error), action="account")
             else:
-                self.state.notify(str(error), error=True)
+                self.state.notify(str(error), action="dismiss", fault=True)
         except asyncio.CancelledError:
             outcome = "cancelled"
             if text or self.preview:
@@ -247,9 +247,11 @@ class Session:
             record["trace"] = [f"{frame.filename.rsplit(chr(92), 1)[-1].rsplit('/', 1)[-1]}:{frame.lineno} {frame.name}"
                                for frame in traceback.extract_tb(error.__traceback__)][-8:]
             log.warning("dictation failed: %s", type(error).__name__)
-            if text or self.preview:
+            kept = bool(text or self.preview)
+            if kept:
                 self.state.recover(text or self.preview, "완료하지 못한 받아쓰기입니다. 내용을 확인해 주세요.")
-            self.state.notify("받아쓰기를 마치지 못했습니다. 연결을 확인해 주세요.", error=True)
+            self.state.notify("받아쓰기를 마치지 못했습니다. 연결을 확인해 주세요.", action="copy" if kept else "dismiss",
+                              fault=True)
         finally:
             try:
                 if live:
@@ -277,7 +279,7 @@ class Session:
                                             outcome, input_mode=s["input_mode"], stt_ms=stt_ms, total_ms=total_ms)
             except Exception as error:
                 log.warning("dictation cleanup failed: %s", type(error).__name__)
-                self.state.notify("글 보관 상태를 확인하지 못했습니다. 설정에서 확인해 주세요.", error=True)
+                self.state.notify("글 보관 상태를 확인하지 못했습니다. 설정에서 확인해 주세요.", action="dismiss", fault=True)
             finally:
                 self.finished = True
                 self.record = record
@@ -308,7 +310,7 @@ class App:
         self.reports = {}
         self.notice = ""
         self.notice_until = 0.0
-        self.account_notice = False  # the notice asks to settle the account: 확인 opens the account window
+        self.notice_action = None  # what the pill's button does: "dismiss", "account" or "copy"; None has no button
         self.account_refresh_needed = True
         self.watcher = EditWatcher(self.notes)
         self.watcher.enabled = self.settings["learn"]
@@ -316,7 +318,6 @@ class App:
         self.recording = None
         self.pressed_at = 0.0
         self.toggle = False
-        self.error_until = 0.0
         self.last = None
         self.levels = deque([0.0] * BARS, maxlen=BARS)  # microphone loudness, newest last
         self.devices_changed = False
@@ -361,8 +362,8 @@ class App:
                 self.data_root = None
                 self.settings["terms"] = []
                 self.recovery = []
-        if status.get("ready") and self.account_notice:
-            self.account_notice, self.notice_until = False, 0.0  # settled: the account message goes away
+        if status.get("ready") and self.notice_action == "account":
+            self.notice_action, self.notice_until = None, 0.0  # settled: the account message goes away
         return {**status, "personal_key": self.data_root.name if self.data_root else None,
                 "welcome_complete": self.settings["welcome_complete"],
                 "legacy_available": self.legacy_available()}
@@ -444,26 +445,25 @@ class App:
         except AccountError as error:
             log.info("error report not sent: %s", error.code)
 
-    def notify(self, text, error=False, seconds=12):
-        self.notice, self.notice_until, self.account_notice = text, time.perf_counter() + seconds, False
-        if error:
-            # Every red message the user sees is kept: in the app log and in the dictation it belongs to.
-            log.warning("red notice: %s", text)
+    def notify(self, text, seconds=12, action=None, fault=False):
+        """Show text inside the pill. With an action it stays, with its button, until pressed or the next
+        dictation; without one it goes after seconds. A fault is kept in the app log and its dictation."""
+        self.notice, self.notice_action = text, action
+        self.notice_until = float("inf") if action else time.perf_counter() + seconds
+        if fault:
+            log.warning("fault notice: %s", text)
             session = self.recording or self.last
             if session is not None and session in self.active:
                 session.notices.append(text)
-            self.flash_error()
-
-    def ask_account(self, text):
-        """Keep an account message on the pill until the member presses 확인 or dictates again."""
-        log.info("account notice: %s", text)
-        self.notice, self.notice_until, self.account_notice = text, float("inf"), True
 
     def act_on_notice(self):
-        """확인 on the pill: put the message away and open the account window."""
-        if self.account_notice:
-            self.account_notice, self.notice_until = False, 0.0
+        """The pill's button: 복사 copies the kept text, 확인 on an account message opens the account window."""
+        action, self.notice_action, self.notice_until = self.notice_action, None, 0.0
+        if action == "account":
             self.open_welcome()
+        elif action == "copy" and self.recovery:
+            self.recovery_action(self.recovery[-1]["id"], "copy")
+            self.notify("복사했습니다. 원하는 곳에 붙여 넣으세요.", seconds=3)
 
     def recover(self, text, reason):
         if not text:
@@ -542,17 +542,22 @@ class App:
             if self.recording and self.toggle:
                 self._stop()
             elif not self.recording:
+                self.notice_action, self.notice_until = None, 0.0  # a new press answers the last message
+                # Preflight: a state that cannot dictate is said on the pill before the microphone opens.
                 if getattr(self, "microphone_fault", False):
-                    self.notify("마이크를 닫지 못했습니다. Thock을 다시 실행해 주세요.", error=True)
+                    self.notify("마이크를 닫지 못했습니다. Thock을 다시 실행해 주세요.", action="dismiss", fault=True)
                     return
                 if not self.settings["welcome_complete"]:
                     self.open_welcome()
                     return
                 if not self.account.token or not self.data_root:
-                    self.ask_account("계정을 연결해 주세요.")
+                    self.notify("계정을 연결해 주세요.", action="account")
                     return
-                if self.account_notice:  # dictating again answers the account message
-                    self.account_notice, self.notice_until = False, 0.0
+                cached = self.account.cached
+                if cached.get("state") == "signed_in" and not cached.get("ready"):
+                    self.account_refresh_needed = True  # an access given meanwhile clears this message
+                    self.notify(cached.get("error") or MESSAGES["access_unavailable"], action="account")
+                    return
                 self.pressed_at, self.toggle = now, mode == "toggle"
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation
@@ -560,7 +565,8 @@ class App:
                     self.recording = self._start_session()
                 except Exception:
                     log.warning("microphone unavailable")
-                    self.notify("마이크를 확인해 주세요. Windows의 마이크 접근 허용과 입력 장치를 확인하세요.", error=True)
+                    self.notify("마이크를 확인해 주세요. Windows의 마이크 접근 허용과 입력 장치를 확인하세요.",
+                                action="dismiss", fault=True)
                     return
                 self.active.add(self.recording)
                 self.last = self.recording
@@ -599,13 +605,8 @@ class App:
     def _sync_sound(self):
         self.sounds.set_mode(selected_mode(self.recording, self.active, self.settings), self.settings["sound_keyboard"])
 
-    def flash_error(self):
-        self.error_until = time.perf_counter() + 12
-
     def status(self):
         """(state, locked) for the overlay; locked means toggle mode is keeping the mic on."""
-        if time.perf_counter() < self.error_until:
-            return "error", False
         if self.recording:
             return "recording", self.toggle
         if self.active:
@@ -615,8 +616,8 @@ class App:
         return None, False
 
     def preview(self):
-        """The draft lives in the input field; the pill shows notices and, while a dictation waits for a
-        text field, the prompt to click one."""
+        """The draft lives in the input field; while a dictation runs, the box above the pill shows notices
+        and, while it waits for a text field, the prompt to click one."""
         if time.perf_counter() < self.notice_until:
             return self.notice
         live = getattr(self.last, "live", None)
