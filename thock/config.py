@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.0.dev6"
+APP_NAME, VERSION = "Thock", "0.4.0.dev7"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"

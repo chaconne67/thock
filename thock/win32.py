@@ -226,6 +226,7 @@ class InlineField:
         self.target, self.current = target, None
         self.revision = _input_revision
         self.late_ms = None  # diagnosis: an unverified paste that showed up later
+        self.mismatch = None  # diagnosis: how the field differed when it never showed the paste (lengths only)
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
         self.stopped = self.initial is None
         self.failure = "range_unavailable" if self.stopped else None
@@ -290,10 +291,24 @@ class InlineField:
                         self.late_ms = round((time.monotonic() - started) * 1000)
                         break
                     time.sleep(0.05)
+                else:
+                    self.mismatch = mismatch(reader.snapshot(), desired)
             return False
         self.initial = before, selected, actual[2]
         self.current = text
         return True
+
+
+def mismatch(actual, desired):
+    """Where a field differs from what the paste should have made, in lengths only: before/selected/after
+    wanted and seen, and how many characters agree from the start and from the end."""
+    if actual is None:
+        return "unreadable"
+    seen, want = "".join(actual), "".join(desired)
+    start = next((i for i, (a, b) in enumerate(zip(seen, want)) if a != b), min(len(seen), len(want)))
+    end = next((i for i, (a, b) in enumerate(zip(reversed(seen), reversed(want))) if a != b), min(len(seen), len(want)))
+    return ("want %d/%d/%d seen %d/%d/%d same_start %d same_end %d"
+            % (*map(len, desired), *map(len, actual), start, end))
 
 
 def paste(text, target, expected, desired, allow_cue=False):

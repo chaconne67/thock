@@ -4,6 +4,16 @@ from unittest.mock import Mock, patch
 
 
 @unittest.skipUnless(sys.platform == "win32", "Windows input ranges")
+class Mismatch(unittest.TestCase):
+    def test_the_shape_of_a_field_that_never_showed_the_paste_has_lengths_only(self):
+        from thock.win32 import mismatch
+        shape = mismatch(("비밀 앞", "", "\n"), ("비밀 앞글", "", ""))
+        self.assertEqual(shape, "want 5/0/0 seen 4/0/1 same_start 4 same_end 0")
+        self.assertNotIn("비밀", shape)
+        self.assertEqual(mismatch(None, ("a", "", "")), "unreadable")
+
+
+@unittest.skipUnless(sys.platform == "win32", "Windows input ranges")
 class InlineFieldContract(unittest.TestCase):
     def setUp(self):
         self.target = (12, (34,))

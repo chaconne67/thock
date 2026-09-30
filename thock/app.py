@@ -222,6 +222,8 @@ class Session:
                 # Kept even when Enter ended the dictation: what was sent may have been cut short.
                 outcome = "recovered"
                 record["input_failure"] = field.failure
+                if field.mismatch:
+                    log.warning("input not verified: %s", field.mismatch)
                 reason = "입력하지 못한 글을 보관했습니다."
                 self.state.recover(text or raw, reason)
                 self.state.notify(reason + " 막대를 눌러 복사할 수 있습니다.", error=True)
@@ -259,6 +261,8 @@ class Session:
                     record["notices"] = list(self.notices)
                 if field is not None and field.late_ms is not None:
                     record["late_ms"] = field.late_ms
+                if field is not None and field.mismatch:
+                    record["mismatch"] = field.mismatch
                 record.update(self.timing())
                 record.update(recorded_seconds=self.sent_frames / SAMPLE_RATE, outcome=outcome,
                               stt_seconds=stt_ms / 1000 if stt_ms is not None else None,
@@ -427,8 +431,9 @@ class App:
         details = {**session.timing(), "overflow_count": session.overflows}
         if record.get("late_ms") is not None:
             details["late_ms"] = record["late_ms"]
-        log.warning("flagged dictation %s: code=%s %s", record.get("time", "(unfinished)"), code,
-                    " ".join(f"{name}={value}" for name, value in details.items()))
+        log.warning("flagged dictation %s: code=%s %s%s", record.get("time", "(unfinished)"), code,
+                    " ".join(f"{name}={value}" for name, value in details.items()),
+                    f" mismatch={record['mismatch']}" if record.get("mismatch") else "")
         if (self.account.cached.get("error_reports") or {}).get("enabled"):
             self._queue_error(session, "user_flag", code, details)
         self.notify("방금 받아쓰기를 이상함으로 기록했습니다.", seconds=3)  # a receipt, not something to act on
