@@ -49,14 +49,17 @@ class SoundPhases(unittest.TestCase):
         settings["sound_recording"] = True
         self.assertEqual(selected_mode(current, {current, older}, settings), "recording")
 
-    def test_live_input_starts_processing_sound_without_enabling_recording_sound(self):
+    def test_live_typing_sound_follows_speech_while_recording(self):
         class Session:
-            preview = ""
+            typing = False
         session = Session()
         settings = {"sound_recording": False, "sound_processing": True}
         self.assertIsNone(selected_mode(session, {session}, settings))
-        session.preview = "첫 글자"
+        session.typing = True
         self.assertEqual(selected_mode(session, {session}, settings), "processing")
+        session.typing = False  # speech paused while the key is still down
+        self.assertIsNone(selected_mode(session, {session}, settings))
+        session.typing = True
         settings["sound_processing"] = False
         self.assertIsNone(selected_mode(session, {session}, settings))
         settings["sound_recording"] = True

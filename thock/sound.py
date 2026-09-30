@@ -21,11 +21,11 @@ RATE, BLOCK_FRAMES, FADE_FRAMES = 48000, 480, 10560  # 10 ms blocks; 220 ms stop
 
 
 def selected_mode(recording, active, settings):
-    """The current session owns audio; recognized live text is already processing."""
+    """The current session owns audio; while recording, typing plays only as speech turns into text."""
     if recording is not None and recording in active:
         if settings["sound_recording"]:
             return "recording"
-        if getattr(recording, "preview", "") and settings["sound_processing"]:
+        if getattr(recording, "typing", False) and settings["sound_processing"]:
             return "processing"
         return None
     if active:

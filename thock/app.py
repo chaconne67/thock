@@ -25,6 +25,8 @@ from .speech import transcribe
 from .live_input import LiveDictation
 from .win32 import foreground_app, capture_target, InlineField, kernel32, run_key_hook, user32
 
+TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
+
 
 class Session:
     def __init__(self, app_state, previous):
@@ -34,6 +36,7 @@ class Session:
         self.audio = asyncio.Queue()
         self.started = time.perf_counter()
         self.released = None
+        self.heard_at = None
         self.preview = ""  # last heard text, retained if recognition fails
         self.done = self.loop.create_future()
         self.stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
@@ -48,6 +51,11 @@ class Session:
         rms = math.sqrt(sum(s * s for s in samples) / max(len(samples), 1))
         # -72 dBFS -> flat, -28 dBFS -> full height (this PC's mic idles near -90 dBFS)
         self.state.levels.append(min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0))
+
+    @property
+    def typing(self):
+        """Speech is still arriving as text; the typing sound follows it, not the held key."""
+        return self.heard_at is not None and time.perf_counter() - self.heard_at < TYPING_HOLD
 
     def stop(self):
         if self.released is not None:
@@ -74,6 +82,9 @@ class Session:
             polish = (lambda text: self.state.polisher.polish(text, self.app)) if s["polish"] else None
             live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice)
             def heard(text):
+                if text.strip() != self.preview:
+                    self.heard_at = time.perf_counter()
+                    self.loop.call_later(TYPING_HOLD, self.state._sync_sound)
                 self.preview = text.strip()
                 live.update(text)
                 self.state._sync_sound()
