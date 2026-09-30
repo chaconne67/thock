@@ -20,7 +20,7 @@ class AccountFlowTests(unittest.TestCase):
         verifier = account.pending[1]
         expected = __import__("base64").urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
         self.assertEqual(url.scheme, "https")
-        self.assertEqual(url.hostname, "aishift.kr")
+        self.assertEqual(url.hostname, "thock.cloud")
         self.assertEqual(query["challenge"], [expected])
         with patch.object(account, "_request", return_value={"token": "app-token", "email": "x@example.com"}),              patch("thock.account.write_token") as write:
             self.assertEqual(account.finish("one-time-code", state), "x@example.com")

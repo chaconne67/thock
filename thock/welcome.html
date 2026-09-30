@@ -5,14 +5,14 @@
 :root{color-scheme:light dark;--bg:#f4f4f6;--card:#fff;--text:#17171c;--sub:#656572;--line:#dedee5;--button:#17171c;--on:#fff}
 @media(prefers-color-scheme:dark){:root{--bg:#121215;--card:#1c1c21;--text:#f6f6f8;--sub:#b2b2bd;--line:#34343e;--button:#f6f6f8;--on:#17171c}}
 *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 "Malgun Gothic",sans-serif}
-main{max-width:480px;margin:auto;padding:44px 32px 28px}.mark{display:flex;align-items:center;gap:12px;font-size:21px;font-weight:700;letter-spacing:-1px}.icon{background:#15151a;color:white;border-radius:14px;width:52px;height:52px;display:grid;place-items:center;font-size:26px;letter-spacing:-3px}
+main{max-width:480px;margin:auto;padding:44px 32px 28px}.mark{display:flex;align-items:center;gap:12px;font-size:21px;font-weight:700;letter-spacing:-1px}.icon i{display:block;width:4px;border-radius:2px;background:#fff}.icon i:nth-child(1){height:10px}.icon i:nth-child(2){height:18px}.icon i:nth-child(3){height:24px}.icon i:nth-child(4){height:14px}.icon{background:#15151a;border-radius:14px;width:52px;height:52px;display:flex;align-items:center;justify-content:center;gap:3px}
 .eyebrow{font-size:12px;letter-spacing:2px;color:var(--sub);margin:36px 0 12px}h1{font-size:32px;line-height:1.4;letter-spacing:-1.5px;margin:0 0 16px}p{margin:0 0 20px;color:var(--sub)}
 .card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:22px;margin:24px 0}.card p:last-child{margin:0}
 button{width:100%;min-height:50px;font:700 15px "Malgun Gothic",sans-serif;border-radius:11px;border:0;background:var(--button);color:var(--on);padding:12px;cursor:pointer}button:disabled{opacity:.45;cursor:wait}.secondary{background:transparent;color:var(--text);border:1px solid var(--line);margin-top:10px}
 button:focus-visible,a:focus-visible{outline:3px solid #4d89ff;outline-offset:3px}a{color:var(--text)}.links{font-size:12px;display:flex;justify-content:center;gap:16px;margin-top:28px}.status{font-size:14px;min-height:24px;overflow-wrap:anywhere}.account{font-weight:700;color:var(--text)}label{font-size:13px;display:flex;gap:10px;margin:16px 0}input{margin-top:5px}small{color:var(--sub);display:block}.foot{text-align:center;font-size:12px;margin-top:28px}
 #code{display:block;width:100%;min-height:48px;margin:0 0 10px;padding:10px 14px;border:1px solid var(--line);border-radius:11px;background:var(--bg);color:var(--text);font:600 17px Consolas,monospace;letter-spacing:1px;text-transform:uppercase}#invite label{display:block;margin:4px 0 8px}
 </style></head><body><main>
-<div class="mark"><div class="icon" aria-hidden="true">▂▅▇▃</div>Thock</div>
+<div class="mark"><div class="icon" aria-hidden="true"><i></i><i></i><i></i><i></i></div>Thock</div>
 <p class="eyebrow">VOICE TYPING BY AI SHIFT</p>
 <h1 id="title">말하면,<br>바로 쓰입니다.</h1>
 <p id="intro">Google 계정을 연결하면 준비가 끝납니다.</p>
@@ -26,7 +26,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #4d89ff;outline-offset:3p
 <button id="switch" class="secondary" hidden>다른 계정으로 연결</button>
 <button id="refresh" class="secondary" hidden>연결 다시 확인</button>
 </div>
-<div class="links"><a href="https://aishift.kr/#thock-beta" target="_blank" rel="noopener noreferrer">무료 베타 안내</a><a href="https://aishift.kr/privacy/" target="_blank" rel="noopener noreferrer">개인정보 처리</a><a href="https://aishift.kr/terms/" target="_blank" rel="noopener noreferrer">이용약관</a></div>
+<div class="links"><a href="https://thock.cloud/" target="_blank" rel="noopener noreferrer">Thock 안내</a><a href="https://thock.cloud/privacy/" target="_blank" rel="noopener noreferrer">개인정보 처리</a><a href="https://thock.cloud/terms/" target="_blank" rel="noopener noreferrer">이용약관</a></div>
 <p class="foot">카드 등록 없이 시작 · 자동 결제 없음</p>
 </main><script>
 const TOKEN="__TOKEN__", $=id=>document.getElementById(id);let timer, busy=false, finishing=false;

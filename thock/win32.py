@@ -72,13 +72,23 @@ kernel32.CreateMutexW.restype = wt.HANDLE
 WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 13, 0x100, 0x101, 0x104, 0x105
 WM_TIMER = 0x113
 VK_SHIFT, VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x10, 0x11, 0x56, 2, 1
-VK_RETURN = 0x0D
+VK_RETURN, VK_MENU = 0x0D, 0x12
 CF_UNICODETEXT, GMEM_MOVEABLE = 13, 2
 GDI_FORMATS = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}  # handles that are not global memory
 HOOK_REARM_MS = 30_000
 OWN_INPUT = 0x54484F434B
 _input_revision = 0
 _input_tracking = False
+
+
+def allow_next_to_front():
+    """Let the next window that asks come to the front, such as the browser opened for sign-in.
+    Windows only lets the app in front hand the front on; a moment of Alt lifts that, as Alt-Tab does."""
+    alt = [INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(VK_MENU, 0, flags, 0, OWN_INPUT)))
+           for flags in (0, KEYEVENTF_KEYUP)]
+    user32.SendInput(1, (INPUT * 1)(alt[0]), ctypes.sizeof(INPUT))
+    user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
+    user32.SendInput(1, (INPUT * 1)(alt[1]), ctypes.sizeof(INPUT))
 
 
 def run_key_hook(get_vk, on_key):

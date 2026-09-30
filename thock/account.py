@@ -17,7 +17,7 @@ from datetime import datetime
 
 from .config import VERSION
 
-SITE = "https://aishift.kr"
+SITE = "https://thock.cloud"  # Thock's own address for AI Shift accounts
 CREDENTIAL_NAME = "AIShift/Thock"
 MESSAGES = {
     "signed_out": "AI Shift에 다시 로그인해 주세요.",

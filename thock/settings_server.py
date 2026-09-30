@@ -194,6 +194,8 @@ class SettingsServer:
                     server.app.account_status()
                     url = server.app.account.begin(server.httpd.server_port)
                     try:
+                        from .win32 import allow_next_to_front  # Windows only, loaded when used
+                        allow_next_to_front()  # the browser comes over the Thock window
                         os.startfile(url)
                     except OSError:
                         server.app.account.pending = None
