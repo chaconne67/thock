@@ -14,7 +14,7 @@ import urllib.request
 @unittest.skipUnless(sys.platform == "win32", "Windows browser input")
 class ChromiumInline(unittest.TestCase):
     def test_native_input_across_web_field_types_and_rebuilt_controls(self):
-        from thock.editwatch import field_reader
+        from thock.editwatch import field_reader, _snapshot
         from thock.win32 import InlineField, capture_target
         executable = Path(os.environ["CHROMEWEBDRIVER"]) / "chromedriver.exe"
         with socket.socket() as listener:
@@ -69,17 +69,27 @@ class ChromiumInline(unittest.TestCase):
                             field.focus(); field.setSelectionRange(start, end);
                             field.addEventListener('input', rebuild);
                         });
+                        window.events = [];
+                        for (const name of ['keydown', 'keyup', 'paste', 'input'])
+                            document.addEventListener(name, e => window.events.push([name, e.key]), {capture:true});
                         reset();
                     """, kind, initial)
                     time.sleep(0.2)
                     target = capture_target()
                     reader = field_reader()
+                    try:
+                        with reader.selection() as (document, selected):
+                            raw = _snapshot(document, selected)
+                    except Exception as error:
+                        raw = repr(error)
+                    print('initial', kind, repr(initial), 'snapshot', repr(reader.snapshot()),
+                          'value', repr(reader.read_focused()), 'raw', repr(raw), flush=True)
                     self.assertEqual(reader.snapshot(), (before, "", after), (kind, target, reader.snapshot()))
                     field = InlineField(target)
                     for text in ("소", "소리가 잘 들려", "소리가 잘 들려요.", "소리가 들립니다."):
                         delivered = field.update(text)
                         actual = script("const f=document.body.firstElementChild; return f.value ?? f.innerText;")
-                        self.assertTrue(delivered, (kind, field.failure, target, capture_target(), reader.snapshot(), actual))
+                        self.assertTrue(delivered, (kind, field.failure, target, capture_target(), reader.snapshot(), actual, script("return window.events;")))
                         self.assertEqual(actual, before + text + after)
         finally:
             if session:
