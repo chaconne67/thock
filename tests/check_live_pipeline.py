@@ -17,7 +17,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
-async def verify(path, focused):
+async def verify(path, focused, report_path):
     from thock import app as app_module
     from thock.config import SAMPLE_RATE, load_settings
     from thock.editwatch import field_reader
@@ -48,9 +48,15 @@ async def verify(path, focused):
             pass
         def close(self):
             pass
+    fields = []
+    original_field = app_module.InlineField
+    def field(target):
+        result = original_field(target)
+        fields.append(result)
+        return result
     with tempfile.TemporaryDirectory(prefix="thock-session-check-") as temporary:
         with patch.object(app_module, "HOME", Path(temporary)), patch.object(
-                app_module.sd, "RawInputStream", RecordedMicrophone):
+                app_module.sd, "RawInputStream", RecordedMicrophone), patch.object(app_module, "InlineField", field):
             session = app_module.Session(state, None)
             state.recording = session
             state.active.add(session)
@@ -63,14 +69,14 @@ async def verify(path, focused):
                 chunk = audio[offset:offset + step]
                 session._on_audio(chunk, len(chunk) // 2, None, None)
                 await asyncio.sleep(0.1)
-                current = field_reader().snapshot()
+                current = field_reader().snapshot() if capture_target() == session.target else None
                 if current != previous:
                     changes.append((time.perf_counter(), current))
                     previous = current
             session.stop()
             await asyncio.wait_for(session.task, 45)
             record = json.loads((Path(temporary) / "history.jsonl").read_text(encoding="utf-8").splitlines()[-1])
-            result = field_reader().snapshot()
+            result = field_reader().snapshot() if capture_target() == session.target else None
             report = {
                 "live_updates_before_release": sum(t < session.released for t, _ in changes),
                 "corrections_before_release": sum(t < session.released for t, _ in completions),
@@ -80,8 +86,11 @@ async def verify(path, focused):
                 "raw": record.get("raw"), "text": record.get("text"),
                 "stt_seconds": record.get("stt_seconds"), "total_seconds": record.get("total_seconds"),
                 "error": record.get("error"), "polish_error": record.get("polish_error"),
-                "notice": state.notice,
+                "notice": state.notice, "field_failure": fields[0].failure if fields else None,
+                "target_still_focused": capture_target() == session.target,
             }
+            if report_path:
+                report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
             if (report["error"] or report["polish_error"] or not report["final_text_delivered"]
                     or not report["preserved_surrounding_text"] or not report["live_updates_before_release"]):
@@ -94,6 +103,7 @@ def main():
     parser.add_argument("wav", type=Path)
     parser.add_argument("--focused", action="store_true")
     parser.add_argument("--hold", type=int, default=0)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     fixture = None
     if not args.focused:
@@ -109,7 +119,7 @@ def main():
             time.sleep(0.1)
         fixture().setUp()
     try:
-        asyncio.run(verify(args.wav, args.focused))
+        asyncio.run(verify(args.wav, args.focused, args.report))
         if args.hold:
             time.sleep(args.hold)
     finally:

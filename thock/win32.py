@@ -168,17 +168,20 @@ class InlineField:
         self.target, self.current = target, None
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
         self.stopped = self.initial is None
+        self.failure = "range_unavailable" if self.stopped else None
 
     def update(self, text):
         from .editwatch import field_reader
-        if self.stopped or capture_target() != self.target:
-            self.stopped = True
+        if self.stopped:
+            return False
+        if capture_target() != self.target:
+            self.failure, self.stopped = "focus_changed", True
             return False
         before, selected, after = self.initial
         expected = self.initial if self.current is None else (before + self.current, "", after)
         reader = field_reader()
         if reader.snapshot() != expected:
-            self.stopped = True
+            self.failure, self.stopped = "content_or_caret_changed", True
             return False
         common = 0
         if self.current is not None:
@@ -191,11 +194,11 @@ class InlineField:
                 return True
             expected = reader.select_tail(expected, tail)
             if expected is None:
-                self.stopped = True
+                self.failure, self.stopped = "selection_unavailable", True
                 return False
         desired = (before + text, "", after)
         if not paste(text[common:], self.target, expected, desired):
-            self.stopped = True
+            self.failure, self.stopped = "delivery_unverified", True
             return False
         self.current = text
         return True
