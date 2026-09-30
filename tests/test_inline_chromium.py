@@ -45,11 +45,14 @@ class ChromiumInline(unittest.TestCase):
             def script(source, *args):
                 return request("POST", route + "/execute/sync", {"script": source, "args": list(args)})
             kinds = ("input", "textarea", "contenteditable", "rebuilt-textarea")
-            for kind, initial in product(kinds, ("", "앞  뒤", "앞 \ufffc 뒤", "앞 😀 뒤")):
+            for kind, initial in product(kinds, ("", "앞  뒤", "앞 \ufffc 뒤", "앞 😀 뒤", "\ufffc", "\n")):
+                if kind == "input" and initial == "\n":
+                    continue  # A single-line input cannot contain a newline.
                 with self.subTest(kind=kind, initial=initial):
-                    before, after = initial[:2], initial[2:]
+                    offset = 2 if initial.startswith("앞 ") else 0
+                    before, after = initial[:offset], initial[offset:]
                     script("""
-                        const kind = arguments[0], initial = arguments[1], offset = initial ? 2 : 0;
+                        const kind = arguments[0], initial = arguments[1], offset = arguments[2];
                         document.body.innerHTML = kind === 'contenteditable'
                             ? '<div contenteditable style="height:200px;white-space:pre-wrap"></div>'
                             : kind === 'input' ? '<input>' : '<textarea></textarea>';
@@ -76,7 +79,7 @@ class ChromiumInline(unittest.TestCase):
                         for (const name of ['keydown', 'keyup', 'paste', 'input'])
                             document.body.addEventListener(name, e => window.events.push([name, e.key]), {capture:true, signal: window.eventsAbort.signal});
                         window.resetCaret = reset; reset();
-                    """, kind, initial)
+                    """, kind, initial, offset)
                     element = request('POST', route + '/element', {'using':'css selector', 'value':'body > :first-child'})
                     element_id = element['element-6066-11e4-a52e-4f735466cecf']
                     request('POST', route + f'/element/{element_id}/click', {})
