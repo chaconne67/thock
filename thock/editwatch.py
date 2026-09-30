@@ -284,6 +284,8 @@ class FieldReader:
 
     def select_tail(self, expected, tail):
         """Select only the exact suffix immediately before the observed caret."""
+        if not tail:
+            return expected if self.snapshot() == expected else None
         native = self.native_selection()
         if native:
             if native[1] != expected or expected[1] or not expected[0].endswith(tail):
@@ -291,15 +293,13 @@ class FieldReader:
             try:
                 size = len(tail.replace("\n", native[4]).encode("utf-16-le")) // 2
                 _message(native[0], 0x00B1, native[2] - size, native[3])
-                return (expected[0][:-len(tail)], tail, expected[2]) if tail else expected
+                return expected[0][:-len(tail)], tail, expected[2]
             except (OSError, RuntimeError):
                 return None
         try:
             with self.selection() as (document, selected):
                 if _snapshot(document, selected) != expected:
                     return None
-                if not tail:
-                    return expected
                 wanted = (expected[0][:-len(tail)], tail, expected[2])
                 # Providers may group Unicode characters into different text units. Locate the
                 # suffix with their own units, then require exact text on both sides before Select.
