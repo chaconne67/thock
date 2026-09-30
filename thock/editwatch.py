@@ -98,6 +98,22 @@ def _snapshot(document, selected):
         _release(after)
 
 
+_native_user32 = ctypes.WinDLL("user32", use_last_error=True)
+_native_user32.SendMessageTimeoutW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t,
+                                              ctypes.c_ssize_t, ctypes.c_uint, ctypes.c_uint,
+                                              ctypes.POINTER(ctypes.c_size_t)]
+_native_user32.SendMessageTimeoutW.restype = ctypes.c_ssize_t
+_native_user32.GetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+_native_user32.GetClassNameW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+
+
+def _message(window, message, wparam=0, lparam=0):
+    result = ctypes.c_size_t()
+    if not _native_user32.SendMessageTimeoutW(window, message, wparam, lparam, 2, 250, ctypes.byref(result)):
+        raise RuntimeError("native editor unavailable")
+    return result.value
+
+
 class FieldReader:
     """Reads the focused text field of any app through UI Automation (COM, one thread only)."""
     IID_VALUE, IID_TEXT = _guid("{a94cd8b1-0844-4cd6-9d2d-640537ab39e9}"), _guid("{32eba289-3583-42c9-9c59-3b6d9a1e9b6a}")
@@ -216,7 +232,40 @@ class FieldReader:
             with self.selection() as (document, selected):
                 return _snapshot(document, selected)
         except (OSError, RuntimeError):
+            native = self.native_selection()
+            return native[1] if native else None
+
+    def native_selection(self):
+        """Classic Edit controls expose caret offsets through their native Windows contract."""
+        element = ctypes.c_void_p()
+        try:
+            _ok(_com(self.uia, 8, _PP)(self.uia, ctypes.byref(element)))
+            window = ctypes.c_void_p()
+            _ok(_com(element, 36, _PP)(element, ctypes.byref(window)))
+            if not window:
+                return None
+            name = ctypes.create_unicode_buffer(128)
+            _native_user32.GetClassNameW(window, name, len(name))
+            if name.value.lower() != "edit" and not name.value.lower().startswith("richedit"):
+                return None
+            if _native_user32.GetWindowLongW(window, -16) & (0x20 | 0x800):  # ES_PASSWORD / ES_READONLY
+                return None
+            size = _message(window, 0x000E)  # WM_GETTEXTLENGTH
+            if size > 200000:
+                return None
+            buffer = ctypes.create_unicode_buffer(size + 1)
+            _message(window, 0x000D, size + 1, ctypes.addressof(buffer))  # WM_GETTEXT
+            start, end = ctypes.c_ulong(), ctypes.c_ulong()
+            _message(window, 0x00B0, ctypes.addressof(start), ctypes.addressof(end))  # EM_GETSEL
+            encoded = buffer.value.encode("utf-16-le")
+            if not 0 <= start.value <= end.value <= len(encoded) // 2:
+                return None
+            parts = (encoded[:start.value * 2], encoded[start.value * 2:end.value * 2], encoded[end.value * 2:])
+            return window.value, tuple(part.decode("utf-16-le") for part in parts), start.value, end.value
+        except (OSError, RuntimeError, UnicodeError):
             return None
+        finally:
+            _release(element)
 
     def select_tail(self, expected, tail):
         """Select only the exact suffix immediately before the observed caret."""
@@ -251,7 +300,14 @@ class FieldReader:
                     _release(found)
                     _release(before)
         except (OSError, RuntimeError):
-            return None
+            native = self.native_selection()
+            if not native or native[1] != expected or expected[1] or not expected[0].endswith(tail):
+                return None
+            try:
+                _message(native[0], 0x00B1, native[2] - len(tail.encode("utf-16-le")) // 2, native[3])
+                return (expected[0][:-len(tail)], tail, expected[2]) if tail else expected
+            except (OSError, RuntimeError):
+                return None
 
 
 class EditWatcher:
