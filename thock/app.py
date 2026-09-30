@@ -304,7 +304,7 @@ class App:
         self.reports = {}
         self.notice = ""
         self.notice_until = 0.0
-        self.notice_action = None  # "account": the notice shows 확인, which opens the account window
+        self.account_notice = False  # the notice asks to settle the account: 확인 opens the account window
         self.account_refresh_needed = True
         self.watcher = EditWatcher(self.notes)
         self.watcher.enabled = self.settings["learn"]
@@ -357,8 +357,8 @@ class App:
                 self.data_root = None
                 self.settings["terms"] = []
                 self.recovery = []
-        if status.get("ready") and getattr(self, "notice_action", None) == "account":
-            self.notice_action, self.notice_until = None, 0.0  # settled: the account message goes away
+        if status.get("ready") and self.account_notice:
+            self.account_notice, self.notice_until = False, 0.0  # settled: the account message goes away
         return {**status, "personal_key": self.data_root.name if self.data_root else None,
                 "welcome_complete": self.settings["welcome_complete"],
                 "legacy_available": self.legacy_available()}
@@ -440,7 +440,7 @@ class App:
             log.info("error report not sent: %s", error.code)
 
     def notify(self, text, error=False, seconds=12):
-        self.notice, self.notice_until, self.notice_action = text, time.perf_counter() + seconds, None
+        self.notice, self.notice_until, self.account_notice = text, time.perf_counter() + seconds, False
         if error:
             # Every red message the user sees is kept: in the app log and in the dictation it belongs to.
             log.warning("red notice: %s", text)
@@ -452,12 +452,12 @@ class App:
     def ask_account(self, text):
         """Keep an account message on the pill until the member presses 확인 or dictates again."""
         log.info("account notice: %s", text)
-        self.notice, self.notice_until, self.notice_action = text, float("inf"), "account"
+        self.notice, self.notice_until, self.account_notice = text, float("inf"), True
 
     def act_on_notice(self):
         """확인 on the pill: put the message away and open the account window."""
-        action, self.notice_action, self.notice_until = self.notice_action, None, 0.0
-        if action == "account":
+        if self.account_notice:
+            self.account_notice, self.notice_until = False, 0.0
             self.open_welcome()
 
     def recover(self, text, reason):
@@ -546,8 +546,8 @@ class App:
                 if not self.account.token or not self.data_root:
                     self.ask_account("계정을 연결해 주세요.")
                     return
-                if self.notice_action:  # dictating again answers the account message
-                    self.notice_action, self.notice_until = None, 0.0
+                if self.account_notice:  # dictating again answers the account message
+                    self.account_notice, self.notice_until = False, 0.0
                 self.pressed_at, self.toggle = now, mode == "toggle"
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation

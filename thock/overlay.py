@@ -319,7 +319,7 @@ class Overlay:
         elif self.w <= self.IDLE_W + 0.5:
             self.state = None  # keep the last look while shrinking back
         big = bool(state) or self.hover
-        self._fit_action(self.app.notice if state == "notice" and self.app.notice_action else "")
+        self._fit_action(self.app.notice if state == "notice" and self.app.account_notice else "")
         if self.action:
             tw, th = self.action[1], self.NOTICE_H
         else:
@@ -452,7 +452,8 @@ class Overlay:
         return box.w, box.h
 
     def _fit_action(self, message):
-        """self.action for an account message on one line, cut to the widest pill: (text, width, chip, height)."""
+        """self.action for an account message on one line, cut to the widest pill:
+        (message, pill width, chip width, text height, shown text)."""
         if (self.action[0] if self.action else "") == message:
             return
         if not message:

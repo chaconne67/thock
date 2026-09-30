@@ -133,7 +133,7 @@ class AccountNotice(unittest.TestCase):
         state.open_welcome = Mock()
         state.ask_account("이 계정의 Thock 이용권을 확인해 주세요.")
         self.assertEqual(app.App.status(state)[0], "notice")  # black, not the red error pill
-        self.assertEqual(state.notice_action, "account")
+        self.assertTrue(state.account_notice)
         state.act_on_notice()
         state.open_welcome.assert_called_once()
         self.assertIsNone(app.App.status(state)[0])

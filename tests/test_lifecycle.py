@@ -179,7 +179,7 @@ class InputModes(unittest.TestCase):
         app.watcher = SimpleNamespace(flush=Mock())
         app._sync_sound = Mock()
         app.last = None
-        app.notice_action = None
+        app.account_notice = False
         session = Mock()
         session.settings = dict(app.settings)
         session.stop.side_effect = lambda: setattr(app, "recording", None)
