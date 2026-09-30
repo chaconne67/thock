@@ -56,9 +56,11 @@ class ChromiumInline(unittest.TestCase):
                         let field = document.body.firstElementChild;
                         const reset = () => {
                             if (kind === 'contenteditable') {
-                                field.append(document.createTextNode(initial));
+                                field.textContent = initial; field.focus();
                                 const range = document.createRange();
-                                range.setStart(field.firstChild, offset); range.collapse(true);
+                                range.selectNodeContents(field);
+                                if (initial) range.setStart(field.firstChild, offset);
+                                range.collapse(true);
                                 getSelection().removeAllRanges(); getSelection().addRange(range);
                                 field.focus();
                             } else { field.value = initial; field.focus(); field.setSelectionRange(offset, offset); }
@@ -72,8 +74,12 @@ class ChromiumInline(unittest.TestCase):
                         window.events = [];
                         for (const name of ['keydown', 'keyup', 'paste', 'input'])
                             document.addEventListener(name, e => window.events.push([name, e.key]), {capture:true});
-                        reset();
+                        window.resetCaret = reset; reset();
                     """, kind, initial)
+                    element = request('POST', route + '/element', {'using':'css selector', 'value':'body > :first-child'})
+                    element_id = element['element-6066-11e4-a52e-4f735466cecf']
+                    request('POST', route + f'/element/{element_id}/click', {})
+                    script('window.resetCaret();')
                     time.sleep(0.2)
                     target = capture_target()
                     reader = field_reader()
@@ -82,8 +88,8 @@ class ChromiumInline(unittest.TestCase):
                             raw = _snapshot(document, selected)
                     except Exception as error:
                         raw = repr(error)
-                    print('initial', kind, repr(initial), 'snapshot', repr(reader.snapshot()),
-                          'value', repr(reader.read_focused()), 'raw', repr(raw), flush=True)
+                    print('initial', kind, ascii(initial), 'snapshot', ascii(reader.snapshot()),
+                          'value', ascii(reader.read_focused()), 'raw', ascii(raw), flush=True)
                     self.assertEqual(reader.snapshot(), (before, "", after), (kind, target, reader.snapshot()))
                     field = InlineField(target)
                     for text in ("소", "소리가 잘 들려", "소리가 잘 들려요.", "소리가 들립니다."):
