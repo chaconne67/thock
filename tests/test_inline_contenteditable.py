@@ -51,18 +51,21 @@ class ContentEditableInline(unittest.TestCase):
 
             steps = ("이게 말소리와", "이게 말소리와 함께 타이핑 소리도 끝나야",
                      "이게 말소리와 함께 타이핑 소리도 끝나야 한다.", "이게 말소리와 함께 타이핑도 끝나야 한다.")
-            for kind in ("pre-wrap-paragraph", "plain", "textarea"):
+            for kind in ("pre-wrap-paragraph", "list-new-item", "plain", "textarea"):
                 with self.subTest(kind=kind):
                     script("""
                         const kind = arguments[0];
                         document.body.innerHTML = kind === 'textarea' ? '<textarea></textarea>'
                             : kind === 'plain' ? '<div contenteditable style="height:200px"></div>'
+                            : kind === 'list-new-item'
+                            ? '<div contenteditable style="white-space:pre-wrap;height:200px"><ol><li>앞 문장</li><li><br></li></ol></div>'
                             : '<div contenteditable style="white-space:pre-wrap;height:200px"><p><br></p></div>';
                         const field = document.body.firstElementChild;
                         field.focus();
-                        if (kind === 'pre-wrap-paragraph') {
+                        if (kind === 'pre-wrap-paragraph' || kind === 'list-new-item') {
                             const range = document.createRange();
-                            range.setStart(field.firstChild, 0); range.collapse(true);
+                            range.setStart(kind === 'list-new-item' ? field.querySelector('li:last-child') : field.firstChild, 0);
+                            range.collapse(true);
                             getSelection().removeAllRanges(); getSelection().addRange(range);
                         }
                     """, kind)
@@ -77,7 +80,8 @@ class ContentEditableInline(unittest.TestCase):
                         for text in steps:
                             results.append((text, field.update(text), field.failure))
                             time.sleep(0.3)
-                    dom = script("const f=document.body.firstElementChild; return f.value ?? f.innerText;")
+                    dom = script("const f=document.body.firstElementChild, last=f.querySelector('li:last-child');"
+                                 " return f.value ?? (last ? last.innerText : f.innerText);")
                     report = json.dumps({"kind": kind, "initial": initial, "results": results, "dom": dom},
                                         ensure_ascii=True)
                     self.assertTrue(all(ok for _, ok, _ in results), report)

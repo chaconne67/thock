@@ -27,7 +27,7 @@ from .win32 import foreground_app, capture_target, InlineField, kernel32, run_ke
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
-WAITING = "입력칸을 클릭하면 그 자리에 받아씁니다."
+WAITING = "입력할 곳을 클릭해 주세요."
 
 
 class Session:

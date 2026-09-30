@@ -138,6 +138,20 @@ class InlineFieldContract(unittest.TestCase):
             self.assertTrue(field.update("first"), field.failure)
             self.assertEqual(field.initial, ("", "", ""))
 
+    def test_first_input_on_an_empty_last_line_drops_its_line_break(self):
+        self.reader.snapshot.return_value = ("1. 앞 문장\n", "", "\n")
+        self.reader.native_selection.return_value = None
+        with patch("thock.win32._input_tracking", True):
+            field = self.field()
+            self.paste.side_effect = lambda text, target, expected, desired, cue: (desired[0], "", "") if cue else None
+            self.assertTrue(field.update("지금"), field.failure)
+            self.assertEqual(field.initial, ("1. 앞 문장\n", "", ""))
+        self.reader.snapshot.return_value = ("앞 ", "", "뒤에 남은 글")
+        with patch("thock.win32._input_tracking", True):
+            field = self.field()
+            self.assertFalse(field.update("지금"))  # real text after the caret is never treated as a cue
+        self.assertFalse(self.paste.call_args.args[4])
+
     def test_user_input_during_first_delivery_cannot_be_adopted_as_a_cue(self):
         import thock.win32 as win32
         self.reader.snapshot.return_value = ("", "", "existing text")

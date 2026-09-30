@@ -241,9 +241,11 @@ class InlineField:
                 self.failure, self.stopped = "selection_unavailable", True
                 return False
         desired = (before + text, "", after)
-        # Many editors expose an empty-field cue as document text, then remove it on first input.
-        # Adopt that result only when it contains solely our text and no other input intervened.
-        cue = self.current is None and not before and not selected and bool(after) and _input_tracking
+        # Many editors expose an empty-field cue, or an empty last line's break, as text after the caret
+        # and remove it on first input. Adopt that only if no other input intervened and, when text
+        # precedes the caret, only blank text followed it.
+        cue = (self.current is None and not selected and bool(after) and _input_tracking
+               and (not before or not after.strip()))
         actual = paste(text[common:], self.target, expected, desired, cue)
         if actual is None or _input_revision != self.revision:
             self.failure = ("delivery_user_input" if _input_revision != self.revision
@@ -299,7 +301,7 @@ def paste(text, target, expected, desired, allow_cue=False):
                 observed = reader.snapshot()
                 if observed == desired:
                     return observed
-                if allow_cue and observed == (text, "", ""):
+                if allow_cue and observed == (desired[0], "", ""):
                     return observed
             return None
         finally:
