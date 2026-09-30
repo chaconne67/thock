@@ -178,28 +178,6 @@
       </div>
       <button class="secondary" type="button" id="reset">처음 위치로</button>
     </div>
-    <div class="row sep">
-      <div>
-        <label class="label" for="preview">말하는 동안 글 보여 주기</label>
-        <p class="hint">막대 위에 받아 적히는 글이 바로 보입니다. 화면을 공유 중이면 다른 사람에게도 보입니다.</p>
-      </div>
-      <span class="switch"><input type="checkbox" id="preview" role="switch"></span>
-    </div>
-    <div class="row">
-      <label class="label" for="preview-font-ko">국문 글꼴</label>
-      <select id="preview-font-ko"></select>
-    </div>
-    <div class="row">
-      <div>
-        <label class="label" for="preview-font-en">영문 글꼴</label>
-        <p class="hint">한글이 없는 영어 받아쓰기에 씁니다. 한글과 섞인 영어는 국문 글꼴로 보입니다.</p>
-      </div>
-      <select id="preview-font-en"></select>
-    </div>
-    <div class="row">
-      <label class="label" for="preview-size">글자 크기</label>
-      <select id="preview-size"></select>
-    </div>
   </section>
 
   <section aria-labelledby="h-sounds">
@@ -237,7 +215,7 @@
     <div class="row sep">
       <div>
         <label class="label" for="sound-processing">글로 바꾸는 동안</label>
-        <p class="hint">녹음을 끝낸 뒤 글이 들어갈 때까지 자연스러운 연속 타건음이 이어집니다.</p>
+        <p class="hint">첫 글자가 입력될 때부터 받아쓰기를 마칠 때까지 타건음이 이어집니다.</p>
       </div>
       <span class="switch"><input type="checkbox" id="sound-processing" role="switch"></span>
     </div>
@@ -299,6 +277,14 @@
       <button class="secondary" type="button" id="account-refresh">연결 확인</button>
       <a href="https://aishift.kr/account/" target="_blank" rel="noopener noreferrer">내 계정 ↗</a>
     </div>
+    <div class="row sep">
+      <div>
+        <label class="label" for="error-reports">오류 정보 보내기</label>
+        <p class="hint">문제가 생기면 앱 버전, 실패한 단계, 입력하던 프로그램 이름 같은 정보만 AI Shift로 보냅니다. 말한 내용과 음성은 보내지 않습니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="error-reports" role="switch"></span>
+    </div>
+    <p class="hint" id="version"></p>
   </section>
   <section aria-labelledby="h-recovery"><h2 id="h-recovery">글 복구</h2><p class="hint">입력하지 못했거나 입력 여부를 확인하지 못한 글을 최근 5건까지 보호해 보관합니다.</p><button class="secondary" id="open-recovery" type="button">보관한 글 열기</button></section>
 </main>
@@ -310,6 +296,7 @@
 
 <script>
 const TOKEN = "__TOKEN__";
+let reportsShown = null;
 const $ = (id) => document.getElementById(id);
 
 async function api(path, body) {
@@ -342,6 +329,9 @@ function renderAccount(a) {
       + (x.period_end ? " · " + new Date(x.period_end).toLocaleDateString("ko-KR") + "까지" : "")
     : "";
   $("account-error").textContent = a.error || "";
+  reportsShown = !!a.error_reports?.enabled;
+  $("error-reports").checked = reportsShown;
+  $("error-reports").disabled = !connected;
 }
 
 async function refreshAccount() {
@@ -469,16 +459,10 @@ function fill(s) {
   $("sound-processing").checked = s.sound_processing;
   $("sound-keyboard").replaceChildren(...Object.entries(s.sound_keyboards).map(([id, label]) => new Option(label, id)));
   $("sound-keyboard").value = s.sound_keyboard;
-  $("preview").checked = s.preview;
-  for (const lang of ["ko", "en"]) {
-    $(`preview-font-${lang}`).replaceChildren(...Object.entries(s.preview_fonts[lang]).map(([name, label]) => new Option(label, name)));
-    $(`preview-font-${lang}`).value = s[`preview_font_${lang}`];
-  }
-  $("preview-size").replaceChildren(...s.preview_font_sizes.map((n) => new Option(n, n)));
-  $("preview-size").value = s.preview_font_size;
   renderAccount(s.account);
   refreshAccount();
   fillPersonal(s);
+  $("version").textContent = "Thock " + s.version;
 }
 
 function fillPersonal(s) {
@@ -502,8 +486,7 @@ $("save").addEventListener("click", async () => {
       hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, learn: $("learn").checked, terms: termsList(),
       sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
       sound_keyboard: $("sound-keyboard").value,
-      preview: $("preview").checked, preview_font_ko: $("preview-font-ko").value,
-      preview_font_en: $("preview-font-en").value, preview_font_size: Number($("preview-size").value),
+      ...($("error-reports").checked !== reportsShown ? {error_reports: $("error-reports").checked} : {}),
     }));
     setStatus("저장했습니다. 바로 적용됩니다.");
   } catch (e) {

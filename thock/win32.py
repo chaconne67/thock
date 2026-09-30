@@ -1,9 +1,9 @@
 """Windows: key hook, foreground app, clipboard, paste."""
 
 import ctypes
+import threading
 import ctypes.wintypes as wt
 import time
-import threading
 from pathlib import Path
 
 
@@ -72,19 +72,29 @@ kernel32.CreateMutexW.restype = wt.HANDLE
 WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 13, 0x100, 0x101, 0x104, 0x105
 WM_TIMER = 0x113
 VK_SHIFT, VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x10, 0x11, 0x56, 2, 1
+VK_RETURN = 0x0D
 CF_UNICODETEXT, GMEM_MOVEABLE = 13, 2
 GDI_FORMATS = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}  # handles that are not global memory
 HOOK_REARM_MS = 30_000
-_clipboard_lock = threading.Lock()
+OWN_INPUT = 0x54484F434B
+_input_revision = 0
+_input_tracking = False
 
 
 def run_key_hook(get_vk, on_key):
     """Swallow the hotkey (Shift+hotkey keeps its normal meaning) and report presses. Blocks forever."""
+    global _input_tracking
     state = {"down": False, "passthrough": False}
 
     def proc(code, wparam, lparam):
+        global _input_revision
         if code == 0:
             info = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+            if info.dwExtraInfo != OWN_INPUT and info.vkCode != get_vk():
+                _input_revision += 1
+                if (info.vkCode == VK_RETURN and wparam in (WM_KEYDOWN, WM_SYSKEYDOWN)
+                        and not user32.GetAsyncKeyState(VK_SHIFT) & 0x8000):
+                    on_key("enter")  # passed through: the app still receives Enter
             if info.vkCode == get_vk():
                 if wparam in (WM_KEYDOWN, WM_SYSKEYDOWN):
                     if not state["down"]:
@@ -101,12 +111,23 @@ def run_key_hook(get_vk, on_key):
                         return 1
         return user32.CallNextHookEx(None, code, wparam, lparam)
 
-    callback = HOOKPROC(proc)
+    def mouse_proc(code, wparam, lparam):
+        global _input_revision
+        if code == 0 and wparam in (0x0201, 0x0204, 0x0207, 0x020B):
+            # MSLLHOOKSTRUCT's POINT has the same layout as MOUSEINPUT's two LONGs.
+            info = ctypes.cast(lparam, ctypes.POINTER(MOUSEINPUT)).contents
+            if info.dwExtraInfo != OWN_INPUT:
+                _input_revision += 1
+        return user32.CallNextHookEx(None, code, wparam, lparam)
 
-    def install():
-        return user32.SetWindowsHookExW(WH_KEYBOARD_LL, callback, kernel32.GetModuleHandleW(None), 0)
+    callback, mouse_callback = HOOKPROC(proc), HOOKPROC(mouse_proc)
 
-    hook = install()
+    def install(kind, callback):
+        return user32.SetWindowsHookExW(kind, callback, kernel32.GetModuleHandleW(None), 0)
+
+    hook = install(WH_KEYBOARD_LL, callback)
+    mouse_hook = install(14, mouse_callback)  # WH_MOUSE_LL
+    _input_tracking = bool(hook and mouse_hook)
     if not hook:
         raise ctypes.WinError(ctypes.get_last_error())
     user32.SetTimer(None, 0, HOOK_REARM_MS, None)
@@ -115,9 +136,14 @@ def run_key_hook(get_vk, on_key):
         if msg.message == WM_TIMER:
             # Windows silently drops a low-level hook whose callback was ever too slow (the usual
             # "hotkey suddenly stopped working" bug). Re-arming keeps CapsLock alive without a restart.
-            if fresh := install():
+            if fresh := install(WH_KEYBOARD_LL, callback):
                 user32.UnhookWindowsHookEx(hook)
                 hook = fresh
+            if fresh := install(14, mouse_callback):
+                if mouse_hook:
+                    user32.UnhookWindowsHookEx(mouse_hook)
+                mouse_hook = fresh
+            _input_tracking = bool(hook and mouse_hook)
 
 
 def foreground_app():
@@ -157,17 +183,11 @@ def _set_clipboard(fmt, data):
         raise ctypes.WinError(ctypes.get_last_error())
 
 
-def capture_target():
-    """Window and UI Automation input identity; never focus or activate another window."""
-    from .editwatch import field_reader
-    window = user32.GetForegroundWindow()
-    identity = field_reader().focus_id()
-    if not window or not identity or window != user32.GetForegroundWindow():
-        return None
-    return window, identity
+_clipboard_lock = threading.Lock()
 
 
 def copy_text(text):
+    """Put saved dictation on the clipboard for the user to paste."""
     with _clipboard_lock:
         _open_clipboard()
         try:
@@ -178,14 +198,105 @@ def copy_text(text):
             user32.CloseClipboard()
 
 
-def paste(text, target):
-    """Return verified/sent/moved. A changed or unknown input target is never pasted into."""
+def capture_target():
     from .editwatch import field_reader
-    if not target or capture_target() != target:
-        return "moved"
-    with _clipboard_lock:
+    revision = _input_revision
+    window = user32.GetForegroundWindow()
+    identity = field_reader().focus_id()
+    if (not window or not identity or window != user32.GetForegroundWindow()
+            or revision != _input_revision):
+        return None
+    return window, identity, revision
+
+
+class InlineField:
+    """Own exactly the selected range and the text subsequently inserted there."""
+    def __init__(self, target):
+        from .editwatch import field_reader
+        self.target, self.current = target, None
+        self.revision = _input_revision
+        self.late_ms = None  # diagnosis: an unverified paste that showed up later
+        self.initial = field_reader().snapshot() if target and capture_target() == target else None
+        self.stopped = self.initial is None
+        self.failure = "range_unavailable" if self.stopped else None
+
+    def restart(self):
+        """After the user's own edit, or while no text field had the caret, own the range at the
+        current caret. None: still no readable field, try again with the next words."""
+        if self.failure not in ("user_input", "range_unavailable"):
+            return False
+        if self.failure == "range_unavailable" and _input_revision == self.revision:
+            return None  # only a field the user picks, never one the app focuses by itself
+        self.__init__(capture_target())
+        return None if self.stopped else True
+
+    def update(self, text):
+        from .editwatch import field_reader, normalize_newlines
+        text = normalize_newlines(text)
+        if self.stopped:
+            return False
+        if _input_revision != self.revision:
+            self.failure, self.stopped = "user_input", True
+            return False
+        if capture_target() != self.target:
+            self.failure, self.stopped = "focus_changed", True
+            return False
+        before, selected, after = self.initial
+        expected = self.initial if self.current is None else (before + self.current, "", after)
         reader = field_reader()
-        before = reader.read_focused()
+        if reader.snapshot() != expected:
+            self.failure, self.stopped = "content_or_caret_changed", True
+            return False
+        common = 0
+        if self.current is not None:
+            for old, new in zip(self.current, text):
+                if old != new:
+                    break
+                common += 1
+            tail = self.current[common:]
+            if not tail and common == len(text):
+                return True
+            expected = reader.select_tail(expected, tail)
+            if expected is None:
+                self.failure, self.stopped = "selection_unavailable", True
+                return False
+        desired = (before + text, "", after)
+        # Many editors expose an empty-field cue, or an empty last line's break, as text after the caret
+        # and remove it on first input. Adopt that only if no other input intervened and, when text
+        # precedes the caret, only blank text followed it.
+        cue = (self.current is None and not selected and bool(after) and _input_tracking
+               and (not before or not after.strip()))
+        started = time.monotonic()
+        actual = paste(text[common:], self.target, expected, desired, cue)
+        if actual is None or _input_revision != self.revision:
+            self.failure = ("delivery_user_input" if _input_revision != self.revision
+                            else "delivery_focus_changed" if capture_target() != self.target
+                            else "delivery_unverified")
+            self.stopped = True
+            if self.failure == "delivery_unverified":
+                # Only observed for the error report: whether the editor was just slow.
+                while time.monotonic() - started < 2 and capture_target() == self.target:
+                    if reader.snapshot() in (desired, (desired[0], "", "")):
+                        self.late_ms = round((time.monotonic() - started) * 1000)
+                        break
+                    time.sleep(0.05)
+            return False
+        self.initial = before, selected, actual[2]
+        self.current = text
+        return True
+
+
+def paste(text, target, expected, desired, allow_cue=False):
+    """Paste at the verified range, wait for delivery, and restore an unchanged clipboard."""
+    from .editwatch import field_reader
+    revision = _input_revision
+    reader = field_reader()
+    def unchanged():
+        return (_input_revision == revision and target and capture_target() == target
+                and (expected is None or reader.snapshot() == expected))
+    if not unchanged():
+        return None
+    with _clipboard_lock:
         _open_clipboard()
         try:
             saved, fmt = [], user32.EnumClipboardFormats(0)
@@ -196,27 +307,34 @@ def paste(text, target):
                     kernel32.GlobalUnlock(handle)
                 fmt = user32.EnumClipboardFormats(fmt)
             user32.EmptyClipboard()
-            _set_clipboard(CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
+            _set_clipboard(CF_UNICODETEXT, (text.replace("\n", "\r\n") + "\0").encode("utf-16-le"))
             _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
         finally:
             user32.CloseClipboard()
         sequence = user32.GetClipboardSequenceNumber()
-        keys = [(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
+        keys = ([(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
+                if text else [(0x08, 0), (0x08, KEYEVENTF_KEYUP)])
         inputs = (INPUT * len(keys))(*[
-            INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, 0))) for vk, flags in keys])
+            INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, OWN_INPUT))) for vk, flags in keys])
         try:
-            if capture_target() != target:
-                return "moved"
+            if not unchanged():
+                return None
             if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
                 raise ctypes.WinError(ctypes.get_last_error())
-            time.sleep(0.4)
-            after = reader.read_focused() if capture_target() == target else None
-            return "verified" if (before is not None and after is not None
-                                  and after.count(text) > before.count(text)) else "sent"
+            deadline = time.monotonic() + 0.5
+            while time.monotonic() < deadline:
+                time.sleep(0.015)
+                if _input_revision != revision or capture_target() != target:
+                    return None
+                observed = reader.snapshot()
+                if observed == desired:
+                    return observed
+                if allow_cue and observed == (desired[0], "", ""):
+                    return observed
+            return None
         finally:
             _open_clipboard()
             try:
-                # Another application may have copied something while the paste was in flight.
                 if user32.GetClipboardSequenceNumber() == sequence:
                     user32.EmptyClipboard()
                     for fmt, data in saved:

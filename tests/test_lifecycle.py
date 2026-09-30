@@ -18,7 +18,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.patch_mic = patch("thock.app.sd.RawInputStream", return_value=self.mic)
         self.patch_mic.start()
         self.addCleanup(self.patch_mic.stop)
-        self.patch_target = patch("thock.app.capture_target", return_value=(1, (2,)))
+        self.patch_target = patch("thock.app.capture_target", return_value=(1, (2,), 0))
         self.patch_target.start()
         self.addCleanup(self.patch_target.stop)
         self.patch_app = patch("thock.app.foreground_app", return_value="test-editor")
@@ -33,10 +33,15 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             profile=SimpleNamespace(context=lambda *args: {}, history=Path("unused"), maybe_rebuild=Mock()),
             polisher=SimpleNamespace(polish=Mock(return_value="다듬은 글")),
             watcher=SimpleNamespace(watch=Mock()), levels=deque(maxlen=18), recording=None, active=set(),
-            last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock())
-        self.patch_paste = patch("thock.app.paste", return_value="verified")
-        self.paste = self.patch_paste.start()
-        self.addCleanup(self.patch_paste.stop)
+            last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
+            report_error=Mock())
+        # The live input field: records what reached the target field; ok=False means it moved.
+        self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None,
+                                     restart=lambda: False)
+        self.field.update = lambda text: self.field.writes.append(text) or self.field.ok
+        self.patch_field = patch("thock.app.InlineField", side_effect=lambda target: self.field)
+        self.patch_field.start()
+        self.addCleanup(self.patch_field.stop)
 
     def start(self):
         session = self.Session(self.state, None)
@@ -56,7 +61,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.state.active)
         self.assertTrue(session.done.done())
         speech.assert_not_called()
-        self.paste.assert_not_called()
+        self.assertEqual(self.field.writes, [])
         self.state.notify.assert_called_once()
 
     async def test_stop_is_idempotent_and_buffer_is_capped_to_grant(self):
@@ -75,7 +80,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             await session.task
         self.assertEqual(sum(map(len, chunks_seen)), SAMPLE_RATE * 2)
         self.mic.close.assert_called_once()
-        self.paste.assert_called_once_with("테스트 문장", (1, (2,)))
+        self.assertEqual(self.field.writes[-1], "테스트 문장")
         self.assertEqual(self.state.queue_report.call_args.args[1:3], (1000, "delivered"))
 
     async def test_polish_failure_retains_raw_text_without_opening_settings(self):
@@ -86,12 +91,12 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             session = self.start()
             session.stop()
             await session.task
-        self.paste.assert_called_once_with("인식한 원문", (1, (2,)))
+        self.assertEqual(self.field.writes[-1], "인식한 원문")
         self.assertEqual(self.state.queue_report.call_args.args[2], "recovered")
         self.state.notify.assert_called_once()
 
     async def test_changed_target_keeps_text_for_explicit_recovery(self):
-        self.paste.return_value = "moved"
+        self.field.ok = False
         with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="보관할 글"):
             session = self.start()
             session.stop()
@@ -106,7 +111,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             session.preview = "아직 확정되지 않은 글"
             await session.task
         self.mic.close.assert_called_once()
-        self.paste.assert_not_called()
+        self.assertEqual(self.field.writes, [])
         self.state.recover.assert_called_once()
         self.assertFalse(self.state.active)
 
@@ -162,9 +167,9 @@ class InputModes(unittest.TestCase):
 class SafePaste(unittest.TestCase):
     def test_target_change_does_not_modify_clipboard_or_send_keys(self):
         from thock.win32 import paste
-        with patch("thock.win32.capture_target", return_value=(20, (2,))), \
+        with patch("thock.win32.capture_target", return_value=(20, (2,), 0)), \
              patch("thock.win32._open_clipboard") as clipboard, \
              patch("thock.win32.user32.SendInput") as send:
-            self.assertEqual(paste("test", (10, (1,))), "moved")
+            self.assertIsNone(paste("test", (10, (1,), 0), None, ("test", "", "")))
         clipboard.assert_not_called()
         send.assert_not_called()

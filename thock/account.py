@@ -13,6 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import datetime
 
 from .config import VERSION
 
@@ -35,6 +36,8 @@ MESSAGES = {
     "already_processed": "이미 처리한 요청입니다.",
     "session_expired": "처리 시간이 지났습니다. 새 받아쓰기를 시작해 주세요.",
     "account_unreachable": "인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+    "correction_limit_reached": "이번 달 문장 다듬기 한도를 모두 사용했습니다. 인식한 원문을 입력합니다.",
+    "key_busy": "문장 다듬기 연결을 잠시 뒤 다시 준비합니다.",
     "sign_in": "로그인을 완료하지 못했습니다. 다시 연결해 주세요.",
 }
 
@@ -67,10 +70,11 @@ def _advapi():
     return api
 
 
-def read_token():
+def read_token(name=None):
+    name = name or CREDENTIAL_NAME  # looked up per call so tests can isolate it
     api = _advapi()
     pointer = ctypes.POINTER(CREDENTIALW)()
-    if not api.CredReadW(CREDENTIAL_NAME, 1, 0, ctypes.byref(pointer)):
+    if not api.CredReadW(name, 1, 0, ctypes.byref(pointer)):
         if ctypes.get_last_error() == 1168:
             return None
         raise ctypes.WinError(ctypes.get_last_error())
@@ -81,12 +85,13 @@ def read_token():
         api.CredFree(pointer)
 
 
-def write_token(token):
+def write_token(token, name=None):
+    name = name or CREDENTIAL_NAME
     api = _advapi()
     blob = ctypes.create_string_buffer(token.encode("utf-8"))
     entry = CREDENTIALW()
     entry.Type = 1  # CRED_TYPE_GENERIC
-    entry.TargetName = CREDENTIAL_NAME
+    entry.TargetName = name
     entry.UserName = "Thock"
     entry.Persist = 2  # CRED_PERSIST_LOCAL_MACHINE, scoped to this Windows user
     entry.CredentialBlobSize = len(token.encode("utf-8"))
@@ -95,9 +100,10 @@ def write_token(token):
         raise ctypes.WinError(ctypes.get_last_error())
 
 
-def delete_token():
+def delete_token(name=None):
+    name = name or CREDENTIAL_NAME
     api = _advapi()
-    if not api.CredDeleteW(CREDENTIAL_NAME, 1, 0) and ctypes.get_last_error() != 1168:
+    if not api.CredDeleteW(name, 1, 0) and ctypes.get_last_error() != 1168:
         raise ctypes.WinError(ctypes.get_last_error())
 
 
@@ -110,6 +116,11 @@ class Account:
         self.last_error = ""
         self.cached = {"state": "checking" if self.token else "signed_out", "email": "", "ready": False}
         self.checked_at = 0.0
+        self.key_lock = threading.Lock()
+        try:
+            self.key = json.loads(read_token(CREDENTIAL_NAME + "/Correction") or "null") if self.token else None
+        except (OSError, ValueError):
+            self.key = None
 
     @staticmethod
     def _request(path, data=None, token=None, timeout=8):
@@ -197,7 +208,7 @@ class Account:
             reason = ("beta_unavailable" if not body.get("beta_ready") else access.get("reason", ""))
             self.cached = {"state": "signed_in", "email": self.email, "account_id": body.get("account_id"),
                            "beta_ready": body.get("beta_ready", False), "ready": ready, "access": access,
-                           "error": MESSAGES.get(reason, "")}
+                           "error_reports": body.get("error_reports") or {}, "error": MESSAGES.get(reason, "")}
         self.checked_at = time.monotonic()
         return self.cached
 
@@ -205,6 +216,8 @@ class Account:
         with self.lock:
             if token == self.token:
                 delete_token()
+                delete_token(CREDENTIAL_NAME + "/Correction")  # the server switches the key off as well
+                self.key = None
                 self.token = None
                 self.email = ""
                 self.checked_at = 0
@@ -238,7 +251,7 @@ class Account:
             uuid.UUID(response["session_id"])
             if (not isinstance(response["api_key"], str) or not response["api_key"]
                     or isinstance(response["max_session_seconds"], bool)
-                    or not 1 <= response["max_session_seconds"] <= 120):
+                    or not 1 <= response["max_session_seconds"] <= 300):
                 raise ValueError
         except (KeyError, TypeError, ValueError):
             raise AccountError("provider_unavailable") from None
@@ -251,5 +264,29 @@ class Account:
 
 
 
-    def complete(self, kind, payload):
-        return self._authorized("/api/thock/complete", {"kind": kind, **payload}, timeout=35)["text"]
+    def correction_key(self, force=False):
+        """This device's own limited OpenRouter key and model; renewed when refused or about to expire."""
+        with self.key_lock:
+            key = self.key
+            if force or not key or key.get("expires", 0) - time.time() < 3600:
+                response = self._authorized("/api/thock/key", {}, timeout=15)
+                try:
+                    if not (isinstance(response["api_key"], str) and response["api_key"]
+                            and isinstance(response["model"], str) and response["model"]):
+                        raise ValueError
+                    expires = datetime.fromisoformat(response["expires_at"]).timestamp()
+                except (KeyError, TypeError, ValueError):
+                    raise AccountError("provider_unavailable") from None
+                key = {"api_key": response["api_key"], "model": response["model"], "expires": expires}
+                try:
+                    write_token(json.dumps(key), CREDENTIAL_NAME + "/Correction")
+                except OSError:
+                    pass  # still usable for this run; the next start asks the server again
+                self.key = key
+            return key
+
+    def set_error_reports(self, enabled):
+        return self._authorized("/api/thock/consent", {"enabled": bool(enabled)})
+
+    def send_error(self, report):
+        return self._authorized("/api/thock/errors", report, timeout=5)

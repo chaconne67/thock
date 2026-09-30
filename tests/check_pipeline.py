@@ -57,7 +57,7 @@ async def main(paths):
                                lambda text: heard.append((time.perf_counter(), text.strip())))
         live = [(t, text) for t, text in heard if text and t < marks["released"]]
         stt = time.perf_counter() - marks["released"]
-        text = await asyncio.to_thread(polisher.polish, raw, "WindowsTerminal.exe", grant["session_id"]) if raw else raw
+        text = await asyncio.to_thread(polisher.polish, raw, "WindowsTerminal.exe") if raw else raw
         total = time.perf_counter() - marks["released"]
         await asyncio.to_thread(account.report, grant["session_id"], recorded_ms, "delivered",
                                 input_mode="hold", stt_ms=round(stt*1000), total_ms=round(total*1000))

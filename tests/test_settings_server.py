@@ -36,7 +36,10 @@ class LocalScreens(unittest.TestCase):
         self.assertNotIn('id="try"',settings)
         self.assertNotIn("첫 받아쓰기 체험",settings)
         self.assertNotIn("Google로 시작하기",settings)
-        self.assertIn("Google로 연결하기",welcome)
+        self.assertIn("Google로 시작하기",welcome)
+        self.assertNotIn("Thock 사용 시작",welcome)  # the welcome finishes by itself after sign-in
+        self.assertIn("말한 내용과 음성은 보내지 않으며",welcome)  # error-report notice before sign-in
+        self.assertIn("오류 정보 보내기",settings)
         self.assertIn("문장 다듬기",settings)
         self.assertNotIn("Soniox",settings+welcome)
 

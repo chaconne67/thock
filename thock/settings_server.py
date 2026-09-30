@@ -83,7 +83,7 @@ class SettingsServer:
                         server.app.account.last_error = "Google 로그인을 완료하지 못했습니다. Thock에서 다시 시도해 주세요."
                         page = "<!doctype html><meta charset=utf-8><title>Thock</title><p>로그인을 완료하지 못했습니다. Thock에서 다시 시도해 주세요.</p>"
                         return self._send(400, page.encode(), "text/html; charset=utf-8")
-                    page = "<!doctype html><meta charset=utf-8><title>Thock</title><p>Thock에 로그인했습니다. 이 창을 닫고 앱으로 돌아가 주세요.</p>"
+                    page = "<!doctype html><meta charset=utf-8><title>Thock</title><p>Thock에 연결되었습니다. 이 창은 닫아도 됩니다.</p>"
                     return self._send(200, page.encode(), "text/html; charset=utf-8")
                 if not self._allowed():
                     return self._send(403, {"error": "forbidden"})

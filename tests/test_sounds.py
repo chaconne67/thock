@@ -49,6 +49,22 @@ class SoundPhases(unittest.TestCase):
         settings["sound_recording"] = True
         self.assertEqual(selected_mode(current, {current, older}, settings), "recording")
 
+    def test_live_typing_sound_follows_speech_while_recording(self):
+        class Session:
+            typing = False
+        session = Session()
+        settings = {"sound_recording": False, "sound_processing": True}
+        self.assertIsNone(selected_mode(session, {session}, settings))
+        session.typing = True
+        self.assertEqual(selected_mode(session, {session}, settings), "processing")
+        session.typing = False  # speech paused while the key is still down
+        self.assertIsNone(selected_mode(session, {session}, settings))
+        session.typing = True
+        settings["sound_processing"] = False
+        self.assertIsNone(selected_mode(session, {session}, settings))
+        settings["sound_recording"] = True
+        self.assertEqual(selected_mode(session, {session}, settings), "recording")
+
     def test_processing_and_silence_follow_session_completion(self):
         session = object()
         settings = {"sound_recording": True, "sound_processing": True}
