@@ -17,6 +17,7 @@ oleaut32.SafeArrayGetLBound.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.P
 oleaut32.SafeArrayGetUBound.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_long)]
 oleaut32.SafeArrayGetElement.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_long), ctypes.c_void_p]
 oleaut32.SafeArrayDestroy.argtypes = [ctypes.c_void_p]
+oleaut32.VariantClear.argtypes = [ctypes.c_void_p]
 _local_reader = threading.local()
 
 
@@ -37,6 +38,10 @@ def _guid(text):
     g = GUID()
     ole32.CLSIDFromString(ctypes.c_wchar_p(text), ctypes.byref(g))
     return g
+
+
+class VARIANT(ctypes.Structure):
+    _fields_ = [("vt", ctypes.c_ushort), ("reserved", ctypes.c_ushort * 3), ("data", ctypes.c_ubyte * 16)]
 
 
 def _com(obj, index, *argtypes):
@@ -154,6 +159,24 @@ class FieldReader:
         finally:
             if rid:
                 oleaut32.SafeArrayDestroy(rid)
+            _release(element)
+
+    def read_only(self):
+        """True only when the focused element says it cannot be edited, as a web page's own text does.
+        Elements that do not say keep working as before."""
+        element, value = ctypes.c_void_p(), VARIANT()
+        try:
+            _ok(_com(self.uia, 8, _PP)(self.uia, ctypes.byref(element)))  # GetFocusedElement
+            if not element:
+                return False
+            # GetCurrentPropertyValueEx(UIA_ValueIsReadOnlyPropertyId, ignore the default value)
+            _ok(_com(element, 11, ctypes.c_int, ctypes.c_int, ctypes.POINTER(VARIANT))(
+                element, 30046, 1, ctypes.byref(value)))
+            return value.vt == 11 and bytes(value.data[:2]) != b"\0\0"  # VT_BOOL, VARIANT_TRUE
+        except (OSError, RuntimeError):
+            return False
+        finally:
+            oleaut32.VariantClear(ctypes.byref(value))
             _release(element)
 
     def read_focused(self):

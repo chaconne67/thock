@@ -19,6 +19,7 @@ class InlineFieldContract(unittest.TestCase):
         self.target = (12, (34,))
         self.reader = Mock()
         self.reader.snapshot.return_value = ("앞 ", "", " 뒤")
+        self.reader.read_only.return_value = False
         self.reader.select_tail.side_effect = lambda expected, tail: (
             expected[0][:-len(tail)], tail, expected[2]) if tail else expected
         for item in (
@@ -96,6 +97,8 @@ class InlineFieldContract(unittest.TestCase):
         self.assertIsNone(ready_target())  # CapsLock is answered with a guide, not a recording
         self.reader.snapshot.return_value = ("", "", "")
         self.assertEqual(ready_target(), self.target)
+        self.reader.read_only.return_value = True  # a web page's own text: readable, not writable
+        self.assertIsNone(ready_target())
 
     def test_failed_delivery_names_what_changed(self):
         import thock.win32 as win32

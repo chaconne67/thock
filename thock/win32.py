@@ -220,10 +220,10 @@ def capture_target():
 
 
 def ready_target():
-    """The focused text field to dictate into, or None when no readable field has the caret."""
+    """The focused text field to dictate into, or None when no editable, readable field has the caret."""
     from .editwatch import field_reader
-    target = capture_target()
-    return target if target and field_reader().snapshot() is not None else None
+    target, reader = capture_target(), field_reader()
+    return target if target and not reader.read_only() and reader.snapshot() is not None else None
 
 
 class InlineField:
