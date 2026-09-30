@@ -310,6 +310,12 @@ class FieldReader:
                         observed = _snapshot(document, candidate)
                         if observed == wanted:
                             _ok(_com(candidate, 16)(candidate))
+                            # Chromium rich editors apply Select asynchronously; return only what is seen.
+                            deadline = time.monotonic() + 0.5
+                            while self.snapshot() != wanted:
+                                if time.monotonic() > deadline:
+                                    return None
+                                time.sleep(0.015)
                             return wanted
                         size = len(observed[1])
                         if size < len(tail):

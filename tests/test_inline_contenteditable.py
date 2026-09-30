@@ -1,4 +1,4 @@
-"""Live replacement inside Chromium rich editors (contenteditable), traced step by step."""
+"""Live dictation and correction inside Chromium rich editors, like the Codex and Claude apps."""
 import json
 import os
 from pathlib import Path
@@ -33,21 +33,6 @@ class ContentEditableInline(unittest.TestCase):
 
         session = None
         reader = field_reader()
-        real_paste, real_select = win32.paste, reader.select_tail
-        trace = []
-
-        def traced_paste(text, target, expected, desired, cue=False):
-            before = reader.snapshot()
-            result = real_paste(text, target, expected, desired, cue)
-            trace.append({"paste": text, "expected": expected, "seen_before": before, "desired": desired,
-                          "result": result, "seen_after": reader.snapshot(), "revision": win32._input_revision})
-            return result
-
-        def traced_select(expected, tail):
-            result = real_select(expected, tail)
-            trace.append({"select_tail": tail, "expected": expected, "result": result, "seen": reader.snapshot()})
-            return result
-
         try:
             for _ in range(100):
                 try:
@@ -68,7 +53,6 @@ class ContentEditableInline(unittest.TestCase):
                      "이게 말소리와 함께 타이핑 소리도 끝나야 한다.", "이게 말소리와 함께 타이핑도 끝나야 한다.")
             for kind in ("pre-wrap-paragraph", "plain", "textarea"):
                 with self.subTest(kind=kind):
-                    trace.clear()
                     script("""
                         const kind = arguments[0];
                         document.body.innerHTML = kind === 'textarea' ? '<textarea></textarea>'
@@ -83,9 +67,7 @@ class ContentEditableInline(unittest.TestCase):
                         }
                     """, kind)
                     time.sleep(0.3)
-                    with patch.object(win32, "paste", traced_paste), \
-                            patch.object(reader, "select_tail", traced_select), \
-                            patch("thock.win32._input_tracking", True):
+                    with patch("thock.win32._input_tracking", True):
                         target = win32.capture_target()
                         initial = reader.snapshot()
                         field = win32.InlineField(target)
@@ -94,9 +76,8 @@ class ContentEditableInline(unittest.TestCase):
                             results.append((text, field.update(text), field.failure))
                             time.sleep(0.3)
                     dom = script("const f=document.body.firstElementChild; return f.value ?? f.innerText;")
-                    report = json.dumps({"kind": kind, "initial": initial, "results": results, "dom": dom,
-                                         "trace": trace}, ensure_ascii=True, indent=1)
-                    print(report)
+                    report = json.dumps({"kind": kind, "initial": initial, "results": results, "dom": dom},
+                                        ensure_ascii=True)
                     self.assertTrue(all(ok for _, ok, _ in results), report)
                     self.assertEqual(dom.strip(), steps[-1], report)
         finally:

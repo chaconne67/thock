@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.1.4"
+APP_NAME, VERSION = "Thock", "0.1.5"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
