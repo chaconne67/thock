@@ -138,6 +138,19 @@ class AccountNotice(unittest.TestCase):
         state.open_welcome.assert_called_once()
         self.assertIsNone(app.App.status(state)[0])
 
+    def test_the_account_message_goes_away_once_the_account_is_ready(self):
+        from pathlib import Path
+        from thock import app
+        state = app.App.__new__(app.App)
+        state.error_until, state.recording, state.active = 0.0, None, set()
+        state.settings = {"welcome_complete": True}
+        state.data_root = Path("unused")
+        state.account = SimpleNamespace(status=lambda force=False: {"state": "offline", "ready": True})
+        state.legacy_available = lambda: False
+        state.ask_account("이 계정의 Thock 이용권을 확인해 주세요.")
+        app.App.account_status(state)
+        self.assertIsNone(app.App.status(state)[0])
+
 
 if __name__ == "__main__":
     unittest.main()

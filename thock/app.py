@@ -357,6 +357,8 @@ class App:
                 self.data_root = None
                 self.settings["terms"] = []
                 self.recovery = []
+        if status.get("ready") and getattr(self, "notice_action", None) == "account":
+            self.notice_action, self.notice_until = None, 0.0  # settled: the account message goes away
         return {**status, "personal_key": self.data_root.name if self.data_root else None,
                 "welcome_complete": self.settings["welcome_complete"],
                 "legacy_available": self.legacy_available()}
