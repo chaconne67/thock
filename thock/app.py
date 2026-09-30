@@ -350,7 +350,8 @@ class App:
     def complete_profile(self, texts):
         if not self.settings["learn"]:
             raise AccountError("learning_paused")
-        return self.polisher.complete(PROFILE_PROMPT, json.dumps(texts[:100], ensure_ascii=False), max_tokens=1200)
+        return self.polisher.complete(PROFILE_PROMPT, json.dumps(texts[:100], ensure_ascii=False), max_tokens=1200,
+                                      background=True)
 
     def report_error(self, session, record, field):
         """Send what failed and where, never what was said, when the member allowed error reports."""

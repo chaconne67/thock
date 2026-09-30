@@ -74,16 +74,18 @@ class Polisher:
 
     def __init__(self, settings, notes, account, profile):
         self.settings, self.notes, self.account, self.profile = settings, notes, account, profile
-        self.lock = threading.Lock()
-        self.conn = None
+        # Slow background calls (the profile) never share a lock or connection with dictation corrections.
+        self.channels = {False: {"lock": threading.Lock(), "conn": None},
+                         True: {"lock": threading.Lock(), "conn": None}}
 
-    def complete(self, instructions, user, max_tokens=600):
-        """One model answer (also used to build the profile). A refused key is renewed once."""
-        with self.lock:
+    def complete(self, instructions, user, max_tokens=600, background=False):
+        """One model answer. A refused key is renewed once."""
+        channel = self.channels[background]
+        with channel["lock"]:
             for attempt in (1, 2):
                 key = self.account.correction_key(force=attempt == 2)
                 try:
-                    return self._openrouter(key, instructions, user, max_tokens)
+                    return self._openrouter(channel, key, instructions, user, max_tokens)
                 except KeyRefused:
                     if attempt == 2:
                         raise
@@ -103,7 +105,7 @@ class Polisher:
             raise RuntimeError("correction rejected: output is not a correction")
         return out
 
-    def _openrouter(self, key, prompt, user, max_tokens):
+    def _openrouter(self, channel, key, prompt, user, max_tokens):
         body = json.dumps({
             "model": key["model"], "temperature": 0, "max_tokens": max_tokens, "reasoning": {"enabled": False},
             "provider": {"sort": "latency"},
@@ -112,13 +114,13 @@ class Polisher:
                    "X-Title": APP_NAME, "User-Agent": f"{APP_NAME}/{VERSION}"}
         for attempt in (1, 2):  # a kept-alive connection may have been closed by the server
             try:
-                if self.conn is None:
-                    self.conn = http.client.HTTPSConnection("openrouter.ai", timeout=8)
-                self.conn.request("POST", "/api/v1/chat/completions", body, headers)
-                response = self.conn.getresponse()
+                if channel["conn"] is None:
+                    channel["conn"] = http.client.HTTPSConnection("openrouter.ai", timeout=8)
+                channel["conn"].request("POST", "/api/v1/chat/completions", body, headers)
+                response = channel["conn"].getresponse()
                 data = response.read()
             except (http.client.HTTPException, OSError):
-                self.conn = None
+                channel["conn"] = None
                 if attempt == 2:
                     raise
                 continue

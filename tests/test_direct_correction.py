@@ -38,6 +38,21 @@ class DirectCorrection(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Bearer renewed")
         self.assertIn("<dictation>", conn.request.call_args.args[2])
 
+    def test_profile_building_does_not_hold_up_dictation_corrections(self):
+        import threading
+        body = b'{"choices": [{"message": {"content": "ok"}}]}'
+        polisher, _, conn = self.polisher([Response(200, body)] * 2)
+        release, started = threading.Event(), threading.Event()
+        slow = Mock()
+        slow.getresponse.side_effect = lambda: (started.set(), release.wait(2), Response(200, body))[2]
+        with patch("thock.correction.http.client.HTTPSConnection", side_effect=[slow, conn]):
+            profile = threading.Thread(target=polisher.complete, args=("p", "[]"), kwargs={"background": True})
+            profile.start()
+            started.wait(2)
+            self.assertEqual(polisher.complete("i", "u"), "ok")  # does not wait for the profile
+            release.set()
+            profile.join(2)
+
     def test_a_second_refusal_is_reported_not_retried_forever(self):
         from thock.correction import KeyRefused
         polisher, account, conn = self.polisher([Response(402), Response(403)])
