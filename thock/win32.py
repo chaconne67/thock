@@ -192,6 +192,7 @@ class InlineField:
         from .editwatch import field_reader
         self.target, self.current = target, None
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
+        self.observed = self.initial
         self.stopped = self.initial is None
         self.failure = "range_unavailable" if self.stopped else None
 
@@ -207,7 +208,7 @@ class InlineField:
             self.failure, self.stopped = "focus_changed", True
             return False
         before, selected, after = self.initial
-        expected = self.initial if self.current is None else (before + self.current, "", after)
+        expected = self.observed
         reader = field_reader()
         if reader.snapshot() != expected:
             self.failure, self.stopped = "content_or_caret_changed", True
@@ -234,8 +235,9 @@ class InlineField:
         if actual is None or _input_revision != self.target[-1]:
             self.failure, self.stopped = "delivery_unverified", True
             return False
-        self.initial = before, selected, actual[2]
-        self.current = text
+        if cue:
+            self.initial = before, selected, actual[2]
+        self.observed, self.current = actual, text
         return True
 
 
@@ -282,7 +284,11 @@ class InlineField:
                     if target is None:
                         continue
                     observed = reader.snapshot()
-                    if ((observed == desired or allow_cue and observed == (text, "", ""))
+                    # Rich editors may retain a layout-only final line after our replacement.
+                    # Match the full resulting value; never discard an original trailing newline.
+                    layout = (not desired[2] and observed == (desired[0], "", "\n")
+                              and reader.read_focused() == desired[0])
+                    if ((observed == desired or layout or allow_cue and observed == (text, "", ""))
                             and target[0] == self.target[0] and target[-1] == self.target[-1]
                             and capture_target() == target):
                         self.target = target
