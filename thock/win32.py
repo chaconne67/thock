@@ -201,11 +201,12 @@ class InlineField:
         self.failure = "range_unavailable" if self.stopped else None
 
     def restart(self):
-        """After the user's own edit, own a new empty range at their current caret."""
-        if self.failure != "user_input":
+        """After the user's own edit, or while no text field had the caret, own the range at the
+        current caret. None: still no readable field, try again with the next words."""
+        if self.failure not in ("user_input", "range_unavailable"):
             return False
         self.__init__(capture_target())
-        return not self.stopped
+        return None if self.stopped else True
 
     def update(self, text):
         from .editwatch import field_reader, normalize_newlines

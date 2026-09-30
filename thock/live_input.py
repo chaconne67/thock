@@ -8,9 +8,10 @@ import asyncio
 
 
 class LiveDictation:
-    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False):
+    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False, waiting_notice=""):
         self.write, self.polish, self.apply_notes, self.on_error = write, polish, apply_notes, on_error
-        self.restart = restart
+        self.restart, self.waiting_notice = restart, waiting_notice
+        self.waiting = False
         self.piece = 0  # bumped when later speech moves to the user's new caret
         self.heard = self.boundary = self.processed = self.corrected = ""
         self.changed, self.segment_ready = asyncio.Event(), asyncio.Event()
@@ -73,16 +74,23 @@ class LiveDictation:
                         result = await asyncio.to_thread(self.write, text)
                     except Exception:
                         result = False
-                    if not result and await asyncio.to_thread(self.restart):
-                        # The user edited: keep what is written, continue after the last finished phrase.
-                        self.piece += 1
-                        self.processed, self.corrected, self.delivered = self.boundary, "", ""
+                    restarted = (await asyncio.to_thread(self.restart)) if not result else False
+                    if restarted:
+                        if self.delivered:
+                            # The user edited: keep what is written, continue after the last finished phrase.
+                            self.piece += 1
+                            self.processed, self.corrected, self.delivered = self.boundary, "", ""
+                        self.waiting = False
                         self.changed.set()
+                    elif not result and restarted is None:
+                        if not self.waiting:
+                            self.waiting = True
+                            self.on_error(self.waiting_notice)
                     elif not result:
                         self.blocked = True
                         self.on_error("입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다.")
                     else:
-                        self.delivered = text
+                        self.delivered, self.waiting = text, False
             if self.ending and self.corrector.done() and not self.changed.is_set():
                 return
 

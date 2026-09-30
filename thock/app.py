@@ -95,12 +95,12 @@ class Session:
             if self.previous:
                 await asyncio.shield(self.previous)
             field = await asyncio.to_thread(InlineField, self.target)
+            waiting = "입력칸을 클릭하면 그 자리에 받아씁니다."
             if field.stopped:
-                self.state.show_notice("이 입력창의 커서 위치를 확인할 수 없습니다. 다른 입력창을 선택해 주세요.")
-                raise RuntimeError("input range unavailable")
+                self.state.show_notice(waiting)
             polish = (lambda text: self.state.polisher.polish(text, self.app)) if s["polish"] else None
             live = self.live = LiveDictation(field.update, polish, notes.apply, self.state.show_notice,
-                                             field.restart)
+                                             field.restart, waiting)
             def heard(text):
                 if text.strip() != self.preview:
                     self.heard_at = time.perf_counter()
@@ -118,7 +118,7 @@ class Session:
                 record["polish_error"] = live.error
             if self.entered:
                 record["ended"] = "enter"
-            elif live.blocked:
+            elif live.blocked or field.stopped:
                 record["error"] = "input_changed"
                 record["input_failure"] = field.failure
             elif text and s["learn"]:

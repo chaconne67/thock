@@ -76,6 +76,18 @@ class InlineFieldContract(unittest.TestCase):
         self.assertEqual(field.failure, "focus_changed")
         self.assertFalse(field.restart())
 
+    def test_a_field_without_a_readable_caret_waits_for_one(self):
+        from thock.win32 import InlineField
+        self.reader.snapshot.return_value = None
+        field = InlineField(self.target)
+        self.assertEqual((field.stopped, field.failure), (True, "range_unavailable"))
+        self.assertFalse(field.update("글"))
+        self.assertIsNone(field.restart())  # still nothing to write into
+        self.reader.snapshot.return_value = ("", "", "")
+        self.assertTrue(field.restart())
+        self.assertTrue(field.update("글"))
+        self.assertEqual(self.paste.call_args.args[3], ("글", "", ""))
+
     def test_failed_delivery_names_what_changed(self):
         import thock.win32 as win32
         self.paste.side_effect = lambda *args: None
