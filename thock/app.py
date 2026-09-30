@@ -26,6 +26,7 @@ from .live_input import LiveDictation
 from .win32 import foreground_app, capture_target, InlineField, kernel32, run_key_hook, user32
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
+IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
 
 
 class Session:
@@ -43,6 +44,7 @@ class Session:
                                         blocksize=SAMPLE_RATE // 20, callback=self._on_audio)
         self.stream.start()
         self.task = asyncio.create_task(self.run())
+        self.loop.call_later(IDLE_STOP, self._stop_when_idle)
 
     def _on_audio(self, indata, frames, when, status):
         chunk = bytes(indata)
@@ -51,6 +53,16 @@ class Session:
         rms = math.sqrt(sum(s * s for s in samples) / max(len(samples), 1))
         # -72 dBFS -> flat, -28 dBFS -> full height (this PC's mic idles near -90 dBFS)
         self.state.levels.append(min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0))
+
+    def _stop_when_idle(self):
+        """A tap-started dictation ends like a second tap once speech has stopped for IDLE_STOP."""
+        if self.state.recording is not self:
+            return
+        remaining = IDLE_STOP - (time.perf_counter() - (self.heard_at or self.started))
+        if remaining <= 0 and self.state.toggle:
+            self.state._stop()
+        else:
+            self.loop.call_later(remaining if remaining > 0 else IDLE_STOP, self._stop_when_idle)
 
     @property
     def typing(self):
