@@ -95,7 +95,7 @@ class ChromiumInline(unittest.TestCase):
                     field = InlineField(target)
                     for text in ("소", "소리가 잘 들려", "소리가 잘 들려요.", "소리가 들립니다.", "소리 😀", "소리", "", "다시 입력"):
                         delivered = field.update(text)
-                        actual = script("const f=document.body.firstElementChild; return f.value ?? f.innerText;")
+                        actual = script("const f=document.body.firstElementChild; return f.value ?? f.textContent;")
                         self.assertTrue(delivered, (kind, field.failure, target, capture_target(), reader.snapshot(), actual, reader.read_focused(), script("const f=document.body.firstElementChild; return [f.textContent, f.innerHTML, window.events];")))
                         self.assertEqual(actual, before + text + after)
         finally:

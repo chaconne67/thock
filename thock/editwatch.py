@@ -238,9 +238,9 @@ class FieldReader:
         try:
             with self.selection() as (document, selected):
                 result = _snapshot(document, selected)
-                # An empty editor can expose itself as an embedded object in TextPattern.
+                # Empty editors may expose an object or a layout-only final line break.
                 # Require both an empty caret and an independently empty field value.
-                if result == ("", "", "\ufffc") and self.read_focused() == "":
+                if result in (("", "", "\ufffc"), ("", "", "\n")) and self.read_focused() == "":
                     return "", "", ""
                 return result
         except (OSError, RuntimeError):
