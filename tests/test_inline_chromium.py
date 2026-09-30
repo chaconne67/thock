@@ -45,9 +45,9 @@ class ChromiumInline(unittest.TestCase):
             def script(source, *args):
                 return request("POST", route + "/execute/sync", {"script": source, "args": list(args)})
             kinds = ("input", "textarea", "contenteditable", "rebuilt-textarea")
-            for kind, initial in product(kinds, ("", "앞  뒤")):
+            for kind, initial in product(kinds, ("", "앞  뒤", "앞 \ufffc 뒤", "앞 😀 뒤")):
                 with self.subTest(kind=kind, initial=initial):
-                    before, after = ("앞 ", " 뒤") if initial else ("", "")
+                    before, after = initial[:2], initial[2:]
                     script("""
                         const kind = arguments[0], initial = arguments[1], offset = initial ? 2 : 0;
                         document.body.innerHTML = kind === 'contenteditable'
@@ -93,7 +93,7 @@ class ChromiumInline(unittest.TestCase):
                           'value', ascii(reader.read_focused()), 'raw', ascii(raw), flush=True)
                     self.assertEqual(reader.snapshot(), (before, "", after), (kind, target, reader.snapshot()))
                     field = InlineField(target)
-                    for text in ("소", "소리가 잘 들려", "소리가 잘 들려요.", "소리가 들립니다."):
+                    for text in ("소", "소리가 잘 들려", "소리가 잘 들려요.", "소리가 들립니다.", "소리 😀", "소리", ""):
                         delivered = field.update(text)
                         actual = script("const f=document.body.firstElementChild; return f.value ?? f.innerText;")
                         self.assertTrue(delivered, (kind, field.failure, target, capture_target(), reader.snapshot(), actual, script("return window.events;")))

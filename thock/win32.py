@@ -283,7 +283,8 @@ class InlineField:
                         continue
                     observed = reader.snapshot()
                     if ((observed == desired or allow_cue and observed == (text, "", ""))
-                            and capture_target() == target):
+                            and target[0] == self.target[0] and target[-1] == self.target[-1]
+                        and capture_target() == target):
                         self.target = target
                         return observed
                 return None
