@@ -80,7 +80,7 @@ class WindowsInline(unittest.TestCase):
         self.assertEqual(self.content(), "앞 회의 하자 뒤")
         self.assertTrue(field.update("회의하자. 👍"))
         self.assertEqual(self.content(), "앞 회의하자. 👍 뒤")
-        self.assertTrue(field.update("회의하자. 👍\r\n다음 줄"), (field.failure, self.content(), __import__("thock.editwatch", fromlist=["field_reader"]).field_reader().snapshot(), __import__("thock.editwatch", fromlist=["field_reader"]).field_reader().native_selection()))
+        self.assertTrue(field.update("회의하자. 👍\r\n다음 줄"), field.failure)
         self.assertEqual(self.content(), "앞 회의하자. 👍\r\n다음 줄 뒤")
         self.assertTrue(field.update("회의하자."))
         self.assertEqual(self.content(), "앞 회의하자. 뒤")

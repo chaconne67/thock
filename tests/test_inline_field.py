@@ -16,7 +16,7 @@ class InlineFieldContract(unittest.TestCase):
                 patch("thock.editwatch.field_reader", return_value=self.reader)):
             item.start()
             self.addCleanup(item.stop)
-        self.paste_patch = patch("thock.win32.paste", return_value=True)
+        self.paste_patch = patch("thock.win32.paste", side_effect=lambda text, target, expected, desired, cue: desired)
         self.paste = self.paste_patch.start()
         self.addCleanup(self.paste_patch.stop)
 
@@ -31,14 +31,14 @@ class InlineFieldContract(unittest.TestCase):
         self.assertTrue(field.update("안녕하세요"))
         self.reader.select_tail.assert_called_once_with(("앞 안녕 하세요", "", " 뒤"), " 하세요")
         self.paste.assert_called_with("하세요", self.target,
-                                     ("앞 안녕", " 하세요", " 뒤"), ("앞 안녕하세요", "", " 뒤"))
+                                     ("앞 안녕", " 하세요", " 뒤"), ("앞 안녕하세요", "", " 뒤"), False)
 
     def test_existing_user_selection_is_the_only_initial_replacement(self):
         self.reader.snapshot.return_value = ("앞 ", "선택한 글", " 뒤")
         field = self.field()
         self.assertTrue(field.update("새 글"))
         self.paste.assert_called_once_with("새 글", self.target,
-                                          ("앞 ", "선택한 글", " 뒤"), ("앞 새 글", "", " 뒤"))
+                                          ("앞 ", "선택한 글", " 뒤"), ("앞 새 글", "", " 뒤"), False)
 
     def test_typing_or_moving_caret_permanently_stops_replacement(self):
         field = self.field()
@@ -62,3 +62,37 @@ class InlineFieldContract(unittest.TestCase):
         with patch("thock.win32.capture_target", return_value=(12, (99,))):
             self.assertFalse(field.update("글"))
         self.paste.assert_not_called()
+
+
+    def test_first_input_can_remove_a_native_cue_without_touching_other_text(self):
+        self.reader.snapshot.return_value = ("", "", "editor cue")
+        self.reader.native_selection.return_value = (123, ("", "", "editor cue"), 0, 0, "\r")
+        with patch("thock.win32._input_tracking", True):
+            field = self.field()
+            self.paste.side_effect = lambda text, target, expected, desired, cue: (text, "", "") if cue else desired
+            self.assertTrue(field.update("first"))
+            self.assertEqual(field.initial, ("", "", ""))
+            self.reader.snapshot.return_value = ("first", "", "")
+            self.assertTrue(field.update("first corrected"))
+            self.assertEqual(self.paste.call_args.args[3], ("first corrected", "", ""))
+
+    def test_user_input_during_first_delivery_cannot_be_adopted_as_a_cue(self):
+        import thock.win32 as win32
+        self.reader.snapshot.return_value = ("", "", "existing text")
+        with patch("thock.win32._input_revision", 0), patch("thock.win32._input_tracking", True):
+            field = self.field()
+            def delivered(*args):
+                win32._input_revision += 1
+                return ("first", "", "")
+            self.paste.side_effect = delivered
+            self.assertFalse(field.update("first"))
+            self.assertFalse(field.update("late correction"))
+            self.assertEqual(self.paste.call_count, 1)
+
+    def test_input_activity_stops_even_when_the_caret_returns_to_the_same_place(self):
+        import thock.win32 as win32
+        with patch("thock.win32._input_revision", 0):
+            field = self.field()
+            win32._input_revision += 1
+            self.assertFalse(field.update("must not be typed"))
+            self.paste.assert_not_called()

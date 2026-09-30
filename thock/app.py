@@ -86,6 +86,7 @@ class Session:
                 record["polish_error"] = live.error
             if live.blocked:
                 record["error"] = "input_changed"
+                record["input_failure"] = field.failure
             elif text and s["learn"]:
                 self.state.watcher.watch(text)
             record["total_seconds"] = round(time.perf_counter() - self.released, 3)

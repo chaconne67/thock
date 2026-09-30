@@ -83,14 +83,18 @@ def _endpoint(rng, end, other, other_end):
     _ok(_com(rng, 15, ctypes.c_int, ctypes.c_void_p, ctypes.c_int)(rng, end, other, other_end))
 
 
+def normalize_newlines(text):
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _snapshot(document, selected):
     before, after = _clone(document), None
     try:
         after = _clone(document)
         _endpoint(before, 1, selected, 0)
         _endpoint(after, 0, selected, 1)
-        result = (_text(before), _text(selected), _text(after))
-        if "".join(result) != _text(document):
+        result = tuple(normalize_newlines(_text(part)) for part in (before, selected, after))
+        if "".join(result) != normalize_newlines(_text(document)):
             raise RuntimeError("inconsistent text range")
         return result
     finally:
@@ -228,12 +232,14 @@ class FieldReader:
 
     def snapshot(self):
         """Text before the selection, the selection, and text after it (including offscreen text)."""
+        native = self.native_selection()
+        if native:
+            return native[1]
         try:
             with self.selection() as (document, selected):
                 return _snapshot(document, selected)
         except (OSError, RuntimeError):
-            native = self.native_selection()
-            return native[1] if native else None
+            return None
 
     def native_selection(self):
         """Classic Edit controls expose caret offsets through their native Windows contract."""
@@ -257,11 +263,15 @@ class FieldReader:
             _message(window, 0x000D, size + 1, ctypes.addressof(buffer))  # WM_GETTEXT
             start, end = ctypes.c_ulong(), ctypes.c_ulong()
             _message(window, 0x00B0, ctypes.addressof(start), ctypes.addressof(end))  # EM_GETSEL
-            encoded = buffer.value.encode("utf-16-le")
+            rich = name.value.lower().startswith("richedit")
+            # WM_GETTEXT expands RichEdit CRs to CRLF; EM_GETSEL still counts each CR once.
+            content = buffer.value.replace("\r\n", "\r") if rich else buffer.value
+            encoded = content.encode("utf-16-le")
             if not 0 <= start.value <= end.value <= len(encoded) // 2:
                 return None
             parts = (encoded[:start.value * 2], encoded[start.value * 2:end.value * 2], encoded[end.value * 2:])
-            return window.value, tuple(part.decode("utf-16-le") for part in parts), start.value, end.value
+            return (window.value, tuple(normalize_newlines(part.decode("utf-16-le")) for part in parts),
+                    start.value, end.value, "\r" if rich else "\r\n")
         except (OSError, RuntimeError, UnicodeError):
             return None
         finally:
@@ -269,6 +279,16 @@ class FieldReader:
 
     def select_tail(self, expected, tail):
         """Select only the exact suffix immediately before the observed caret."""
+        native = self.native_selection()
+        if native:
+            if native[1] != expected or expected[1] or not expected[0].endswith(tail):
+                return None
+            try:
+                size = len(tail.replace("\n", native[4]).encode("utf-16-le")) // 2
+                _message(native[0], 0x00B1, native[2] - size, native[3])
+                return (expected[0][:-len(tail)], tail, expected[2]) if tail else expected
+            except (OSError, RuntimeError):
+                return None
         try:
             with self.selection() as (document, selected):
                 if _snapshot(document, selected) != expected:
@@ -280,7 +300,15 @@ class FieldReader:
                     _endpoint(before, 1, selected, 0)
                     oleaut32.SysAllocString.argtypes = [ctypes.c_wchar_p]
                     oleaut32.SysAllocString.restype = ctypes.c_void_p
-                    needle = oleaut32.SysAllocString(tail)
+                    # Map the canonical suffix back to the provider's literal newline spelling.
+                    raw = _text(before)
+                    start = len(raw)
+                    for char in reversed(tail):
+                        start -= 2 if char == "\n" and raw[:start].endswith("\r\n") else 1
+                    literal = raw[start:]
+                    if normalize_newlines(literal) != tail:
+                        return None
+                    needle = oleaut32.SysAllocString(literal)
                     try:
                         _ok(_com(before, 8, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, _PP)(
                             before, needle, True, False, ctypes.byref(found)))
@@ -300,14 +328,7 @@ class FieldReader:
                     _release(found)
                     _release(before)
         except (OSError, RuntimeError):
-            native = self.native_selection()
-            if not native or native[1] != expected or expected[1] or not expected[0].endswith(tail):
-                return None
-            try:
-                _message(native[0], 0x00B1, native[2] - len(tail.encode("utf-16-le")) // 2, native[3])
-                return (expected[0][:-len(tail)], tail, expected[2]) if tail else expected
-            except (OSError, RuntimeError):
-                return None
+            return None
 
 
 class EditWatcher:

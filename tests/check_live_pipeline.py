@@ -9,6 +9,7 @@ import asyncio
 import json
 import sys
 import tempfile
+import threading
 import time
 import wave
 from pathlib import Path
@@ -22,6 +23,11 @@ async def verify(path, focused, report_path):
     from thock.config import SAMPLE_RATE, load_settings
     from thock.editwatch import field_reader
     from thock.win32 import capture_target
+    from thock import win32
+    threading.Thread(target=win32.run_key_hook, args=(lambda: 0, lambda event: None), daemon=True).start()
+    async with asyncio.timeout(3):
+        while not win32._input_tracking:
+            await asyncio.sleep(0.01)
     settings = load_settings()
     settings["learn"] = False
     state = app_module.App(settings)

@@ -73,15 +73,22 @@ VK_SHIFT, VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x10, 0x11, 0x56, 
 CF_UNICODETEXT, GMEM_MOVEABLE = 13, 2
 GDI_FORMATS = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}  # handles that are not global memory
 HOOK_REARM_MS = 30_000
+OWN_INPUT = 0x54484F434B
+_input_revision = 0
+_input_tracking = False
 
 
 def run_key_hook(get_vk, on_key):
     """Swallow the hotkey (Shift+hotkey keeps its normal meaning) and report presses. Blocks forever."""
+    global _input_tracking
     state = {"down": False, "passthrough": False}
 
     def proc(code, wparam, lparam):
+        global _input_revision
         if code == 0:
             info = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+            if info.dwExtraInfo != OWN_INPUT and info.vkCode != get_vk():
+                _input_revision += 1
             if info.vkCode == get_vk():
                 if wparam in (WM_KEYDOWN, WM_SYSKEYDOWN):
                     if not state["down"]:
@@ -98,12 +105,23 @@ def run_key_hook(get_vk, on_key):
                         return 1
         return user32.CallNextHookEx(None, code, wparam, lparam)
 
-    callback = HOOKPROC(proc)
+    def mouse_proc(code, wparam, lparam):
+        global _input_revision
+        if code == 0 and wparam in (0x0201, 0x0204, 0x0207, 0x020B):
+            # MSLLHOOKSTRUCT's POINT has the same layout as MOUSEINPUT's two LONGs.
+            info = ctypes.cast(lparam, ctypes.POINTER(MOUSEINPUT)).contents
+            if info.dwExtraInfo != OWN_INPUT:
+                _input_revision += 1
+        return user32.CallNextHookEx(None, code, wparam, lparam)
 
-    def install():
-        return user32.SetWindowsHookExW(WH_KEYBOARD_LL, callback, kernel32.GetModuleHandleW(None), 0)
+    callback, mouse_callback = HOOKPROC(proc), HOOKPROC(mouse_proc)
 
-    hook = install()
+    def install(kind, callback):
+        return user32.SetWindowsHookExW(kind, callback, kernel32.GetModuleHandleW(None), 0)
+
+    hook = install(WH_KEYBOARD_LL, callback)
+    mouse_hook = install(14, mouse_callback)  # WH_MOUSE_LL
+    _input_tracking = bool(hook and mouse_hook)
     if not hook:
         raise ctypes.WinError(ctypes.get_last_error())
     user32.SetTimer(None, 0, HOOK_REARM_MS, None)
@@ -112,9 +130,14 @@ def run_key_hook(get_vk, on_key):
         if msg.message == WM_TIMER:
             # Windows silently drops a low-level hook whose callback was ever too slow (the usual
             # "hotkey suddenly stopped working" bug). Re-arming keeps CapsLock alive without a restart.
-            if fresh := install():
+            if fresh := install(WH_KEYBOARD_LL, callback):
                 user32.UnhookWindowsHookEx(hook)
                 hook = fresh
+            if fresh := install(14, mouse_callback):
+                if mouse_hook:
+                    user32.UnhookWindowsHookEx(mouse_hook)
+                mouse_hook = fresh
+            _input_tracking = bool(hook and mouse_hook)
 
 
 def foreground_app():
@@ -154,11 +177,13 @@ _clipboard_lock = threading.Lock()
 
 def capture_target():
     from .editwatch import field_reader
+    revision = _input_revision
     window = user32.GetForegroundWindow()
     identity = field_reader().focus_id()
-    if not window or not identity or window != user32.GetForegroundWindow():
+    if (not window or not identity or window != user32.GetForegroundWindow()
+            or revision != _input_revision):
         return None
-    return window, identity
+    return window, identity, revision
 
 
 class InlineField:
@@ -166,13 +191,18 @@ class InlineField:
     def __init__(self, target):
         from .editwatch import field_reader
         self.target, self.current = target, None
+        self.revision = _input_revision
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
         self.stopped = self.initial is None
         self.failure = "range_unavailable" if self.stopped else None
 
     def update(self, text):
-        from .editwatch import field_reader
+        from .editwatch import field_reader, normalize_newlines
+        text = normalize_newlines(text)
         if self.stopped:
+            return False
+        if _input_revision != self.revision:
+            self.failure, self.stopped = "user_input", True
             return False
         if capture_target() != self.target:
             self.failure, self.stopped = "focus_changed", True
@@ -197,23 +227,29 @@ class InlineField:
                 self.failure, self.stopped = "selection_unavailable", True
                 return False
         desired = (before + text, "", after)
-        if not paste(text[common:], self.target, expected, desired):
+        # Some native editors expose a cue as document text, then remove it on first input.
+        # Adopt that result only when it contains solely our text and no other input intervened.
+        cue = (self.current is None and not before and not selected and bool(after)
+               and _input_tracking and reader.native_selection() is not None)
+        actual = paste(text[common:], self.target, expected, desired, cue)
+        if actual is None or _input_revision != self.revision:
             self.failure, self.stopped = "delivery_unverified", True
             return False
+        self.initial = before, selected, actual[2]
         self.current = text
         return True
 
 
-def paste(text, target=None, expected=None, desired=None):
+def paste(text, target, expected, desired, allow_cue=False):
     """Paste at the verified range, wait for delivery, and restore an unchanged clipboard."""
     from .editwatch import field_reader
-    target = target or capture_target()
+    revision = _input_revision
     reader = field_reader()
     def unchanged():
-        return (target and capture_target() == target
+        return (_input_revision == revision and target and capture_target() == target
                 and (expected is None or reader.snapshot() == expected))
     if not unchanged():
-        return False
+        return None
     with _clipboard_lock:
         _open_clipboard()
         try:
@@ -225,7 +261,7 @@ def paste(text, target=None, expected=None, desired=None):
                     kernel32.GlobalUnlock(handle)
                 fmt = user32.EnumClipboardFormats(fmt)
             user32.EmptyClipboard()
-            _set_clipboard(CF_UNICODETEXT, (text + "\0").encode("utf-16-le"))
+            _set_clipboard(CF_UNICODETEXT, (text.replace("\n", "\r\n") + "\0").encode("utf-16-le"))
             _set_clipboard(user32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing"), b"\0")
         finally:
             user32.CloseClipboard()
@@ -233,20 +269,23 @@ def paste(text, target=None, expected=None, desired=None):
         keys = ([(VK_CONTROL, 0), (VK_V, 0), (VK_V, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP)]
                 if text else [(0x08, 0), (0x08, KEYEVENTF_KEYUP)])
         inputs = (INPUT * len(keys))(*[
-            INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, 0))) for vk, flags in keys])
+            INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(vk, 0, flags, 0, OWN_INPUT))) for vk, flags in keys])
         try:
             if not unchanged():
-                return False
+                return None
             if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
                 raise ctypes.WinError(ctypes.get_last_error())
             deadline = time.monotonic() + 0.5
             while time.monotonic() < deadline:
                 time.sleep(0.015)
-                if capture_target() != target:
-                    return False
-                if desired is not None and reader.snapshot() == desired:
-                    return True
-            return desired is None
+                if _input_revision != revision or capture_target() != target:
+                    return None
+                observed = reader.snapshot()
+                if observed == desired:
+                    return observed
+                if allow_cue and observed == (text, "", ""):
+                    return observed
+            return None
         finally:
             _open_clipboard()
             try:
