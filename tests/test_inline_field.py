@@ -96,3 +96,27 @@ class InlineFieldContract(unittest.TestCase):
             win32._input_revision += 1
             self.assertFalse(field.update("must not be typed"))
             self.paste.assert_not_called()
+
+    def test_input_during_post_paste_capture_cannot_be_adopted(self):
+        import thock.win32 as win32
+        self.paste_patch.stop()
+        with patch.object(win32, "user32") as system, patch.object(
+                win32, "_open_clipboard"), patch.object(win32, "_set_clipboard"), patch.object(
+                    win32, "_input_revision", 0):
+            system.GetForegroundWindow.return_value = self.target[0]
+            system.EnumClipboardFormats.return_value = 0
+            system.SendInput.return_value = 4
+            system.GetClipboardSequenceNumber.return_value = 1
+            field = self.field()
+            def captured():
+                if system.SendInput.called:
+                    win32._input_revision = 1
+                    return (12, (99,), 1)
+                return self.target
+            self.reader.snapshot.side_effect = lambda: (
+                ("앞 first", "", " 뒤") if system.SendInput.called else ("앞 ", "", " 뒤"))
+            with patch.object(win32, "capture_target", side_effect=captured):
+                self.assertFalse(field.update("first"))
+                self.assertEqual(field.target, self.target)
+                self.assertFalse(field.update("late correction"))
+                self.assertEqual(system.SendInput.call_count, 1)
