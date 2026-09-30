@@ -1,7 +1,9 @@
 """Windows lifecycle contract: no real microphone, network or user data is touched."""
+import array
 import asyncio
 import sys
 import tempfile
+import time
 import unittest
 from collections import deque
 from pathlib import Path
@@ -34,7 +36,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             polisher=SimpleNamespace(polish=Mock(return_value="다듬은 글")),
             watcher=SimpleNamespace(watch=Mock()), levels=deque(maxlen=18), recording=None, active=set(),
             last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
-            report_error=Mock())
+            report_error=Mock(), idle_since=time.perf_counter() - 3600)
         # The live input field: records what reached the target field; ok=False means it moved.
         self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None,
                                      restart=lambda: False)
@@ -109,6 +111,27 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.state.recover.assert_called_once()
         self.assertEqual(self.state.recover.call_args.args[0], "보관할 글")
         self.assertFalse(self.state.active)
+
+    async def test_first_words_timing_is_recorded(self):
+        quiet, loud = bytes(1600), array.array("h", [12000, -12000] * 800).tobytes()
+        status = SimpleNamespace(input_overflow=False)
+        async def transcribe(chunks, api_key, context, heard, endpoint, **kwargs):
+            session._on_audio(quiet, 1600, None, status)
+            await asyncio.sleep(0.02)
+            session._on_audio(loud, 1600, None, status)
+            await asyncio.sleep(0.02)
+            heard("첫 단어")
+            return "첫 단어"
+        with patch("thock.app.transcribe", side_effect=transcribe):
+            session = self.start()
+            session.stop()
+            await session.task
+        record = self.state.report_error.call_args.args[1]
+        self.assertGreaterEqual(record["idle_s"], 3599)
+        self.assertLess(record["first_audio_ms"], record["silent_start_ms"])
+        self.assertLessEqual(record["silent_start_ms"], record["first_text_ms"])
+        self.assertIs(session.record, record)
+        self.assertLess(time.perf_counter() - self.state.idle_since, 1)
 
     async def test_a_block_before_enter_is_recorded_and_the_text_kept(self):
         self.field.ok = False

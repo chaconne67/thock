@@ -53,6 +53,19 @@ class LocalScreens(unittest.TestCase):
         self.assertTrue(result["ready"])
         self.app.complete_welcome.assert_called_once_with(bring_legacy=False)
 
+    def test_invite_code_is_redeemed_and_refusals_are_shown(self):
+        from thock.account import AccountError
+        welcome = self.request("/welcome").read().decode()
+        self.assertIn("초대 코드", welcome)
+        self.app.account = SimpleNamespace(redeem=Mock())
+        self.assertEqual(json.load(self.request("/api/account/invite", {"code": "THK-AAAA-BBBB"}))["state"],
+                         "signed_out")
+        self.app.account.redeem.assert_called_once_with("THK-AAAA-BBBB")
+        self.app.account.redeem.side_effect = AccountError("code_used")
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request("/api/account/invite", {"code": "THK-AAAA-BBBB"})
+        self.assertEqual(json.load(error.exception)["message"], "이미 사용한 초대 코드입니다.")
+
     def test_signed_out_personal_data_writes_rejected(self):
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.request("/api/notes",{"action":"add","old":"a","new":"b"})

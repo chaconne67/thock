@@ -10,6 +10,7 @@ main{max-width:480px;margin:auto;padding:44px 32px 28px}.mark{display:flex;align
 .card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:22px;margin:24px 0}.card p:last-child{margin:0}
 button{width:100%;min-height:50px;font:700 15px "Malgun Gothic",sans-serif;border-radius:11px;border:0;background:var(--button);color:var(--on);padding:12px;cursor:pointer}button:disabled{opacity:.45;cursor:wait}.secondary{background:transparent;color:var(--text);border:1px solid var(--line);margin-top:10px}
 button:focus-visible,a:focus-visible{outline:3px solid #4d89ff;outline-offset:3px}a{color:var(--text)}.links{font-size:12px;display:flex;justify-content:center;gap:16px;margin-top:28px}.status{font-size:14px;min-height:24px;overflow-wrap:anywhere}.account{font-weight:700;color:var(--text)}label{font-size:13px;display:flex;gap:10px;margin:16px 0}input{margin-top:5px}small{color:var(--sub);display:block}.foot{text-align:center;font-size:12px;margin-top:28px}
+#code{display:block;width:100%;min-height:48px;margin:0 0 10px;padding:10px 14px;border:1px solid var(--line);border-radius:11px;background:var(--bg);color:var(--text);font:600 17px Consolas,monospace;letter-spacing:1px;text-transform:uppercase}#invite label{display:block;margin:4px 0 8px}
 </style></head><body><main>
 <div class="mark"><div class="icon" aria-hidden="true">▂▅▇▃</div>Thock</div>
 <p class="eyebrow">VOICE TYPING BY AI SHIFT</p>
@@ -20,6 +21,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #4d89ff;outline-offset:3p
 <p id="access" hidden></p>
 <p id="status" class="status" role="status" aria-live="polite">계정 상태를 확인하고 있습니다.</p>
 <button id="login" hidden>Google로 시작하기</button>
+<div id="invite" hidden><label for="code">초대 코드</label><input id="code" autocomplete="off" spellcheck="false" maxlength="20" placeholder="THK-XXXX-XXXX"><button id="redeem">코드 확인</button></div>
 <small id="reports">로그인하면 문제 해결을 위해 오류 정보(앱 버전, 실패한 단계, 입력하던 프로그램 이름)를 AI Shift로 보냅니다. 말한 내용과 음성은 보내지 않으며, 설정에서 끌 수 있습니다. 이 PC에서 쓰던 내 단어와 학습 기록은 그대로 이어서 씁니다.</small>
 <button id="switch" class="secondary" hidden>다른 계정으로 연결</button>
 <button id="refresh" class="secondary" hidden>연결 다시 확인</button>
@@ -36,7 +38,8 @@ async function refresh(){
  $("title").innerHTML=a.welcome_complete?"계정 연결":"말하면,<br>바로 쓰입니다.";
  $("intro").textContent=a.welcome_complete?"사용하던 AI Shift 계정을 다시 연결하세요.":"Google 계정을 연결하면 준비가 끝납니다.";
  $("email").hidden=!connected;$("email").textContent=a.email||"";
- $("status").textContent=a.error||(a.ready?"바로 사용할 수 있습니다.":a.state==="waiting"?"브라우저에서 Google 로그인을 완료해 주세요.":"AI Shift 계정으로 연결해 주세요.");
+ const invite=a.state==="signed_in"&&a.beta_ready&&a.access?.reason==="access_unavailable";$("invite").hidden=!invite;
+ $("status").textContent=invite?"받은 초대 코드를 입력해 주세요.":a.error||(a.ready?"바로 사용할 수 있습니다.":a.state==="waiting"?"브라우저에서 Google 로그인을 완료해 주세요.":"AI Shift 계정으로 연결해 주세요.");
  $("login").hidden=connected;$("login").disabled=a.state==="waiting";
  $("refresh").hidden=false;$("switch").hidden=!connected;$("reports").hidden=connected;
  $("access").hidden=!a.access?.label;
@@ -50,6 +53,8 @@ async function refresh(){
  }catch(e){finishing=false;$("status").textContent=e.message;$("refresh").hidden=false}finally{busy=false}
 }
 $("login").onclick=async()=>{try{await api("/api/account/login",{});await refresh()}catch(e){$("status").textContent=e.message}};
+$("redeem").onclick=async()=>{$("redeem").disabled=true;try{await api("/api/account/invite",{code:$("code").value});$("code").value="";await refresh()}catch(e){$("status").textContent=e.message}finally{$("redeem").disabled=false}};
+$("code").onkeydown=e=>{if(e.key==="Enter")$("redeem").click()};
 $("refresh").onclick=refresh;
 $("switch").onclick=async()=>{try{await api("/api/account/logout",{});await api("/api/account/login",{});await refresh()}catch(e){$("status").textContent=e.message}};
 refresh();

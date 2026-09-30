@@ -34,6 +34,7 @@ from .personal import append_history, read_data, write_data, import_legacy, hist
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
 WAITING = "입력할 곳을 클릭해 주세요."
+VOICE_LEVEL = 0.6  # microphone level (about -46 dBFS) taken as the start of speech, for diagnosis only
 
 
 class Session:
@@ -49,6 +50,10 @@ class Session:
         self.preview = ""  # last heard text, kept for recovery if dictation fails
         self.heard_at = None
         self.heard_at_release = ""  # what the field showed when recording stopped
+        # First-words diagnosis: a waking microphone, a quiet start, or recognition that came late.
+        self.idle_s = round(self.started - app_state.idle_since)
+        self.first_audio = self.voice_at = self.first_text_at = None
+        self.record = None  # this dictation's record once it has finished
         self.live, self.entered = None, False
         self.overflows = 0  # microphone buffer overruns, for error reports
         self.notices = []  # every red message shown while this dictation was active
@@ -96,11 +101,24 @@ class Session:
             return
         if status.input_overflow:
             self.overflows += 1
+        now = time.perf_counter()
+        if self.first_audio is None:
+            self.first_audio = now
         chunk = bytes(indata)
         self.loop.call_soon_threadsafe(self._enqueue, chunk)
         samples = array.array("h", chunk)
         rms = math.sqrt(sum(s * s for s in samples) / max(len(samples), 1))
-        self.state.levels.append(min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0))
+        level = min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0)
+        if self.voice_at is None and level >= VOICE_LEVEL:
+            self.voice_at = now
+        self.state.levels.append(level)
+
+    def timing(self):
+        """Idle time before this dictation and when sound, voice and the first words arrived."""
+        marks = {"first_audio_ms": self.first_audio, "silent_start_ms": self.voice_at,
+                 "first_text_ms": self.first_text_at}
+        return {"idle_s": self.idle_s, **{name: round((at - self.started) * 1000)
+                                          for name, at in marks.items() if at is not None}}
 
     def _enqueue(self, chunk):
         if self.finished:
@@ -175,6 +193,8 @@ class Session:
                 live.blocked = True
 
             def heard(words):
+                if self.first_text_at is None and words.strip():
+                    self.first_text_at = time.perf_counter()
                 if words.strip() != self.preview:
                     self.heard_at = time.perf_counter()
                     self.loop.call_later(TYPING_HOLD, self.state._sync_sound)
@@ -231,6 +251,9 @@ class Session:
                     outcome = "recovered"
                 if self.notices:
                     record["notices"] = list(self.notices)
+                if field is not None and field.late_ms is not None:
+                    record["late_ms"] = field.late_ms
+                record.update(self.timing())
                 record.update(recorded_seconds=self.sent_frames / SAMPLE_RATE, outcome=outcome,
                               stt_seconds=stt_ms / 1000 if stt_ms is not None else None,
                               total_seconds=total_ms / 1000 if total_ms is not None else None,
@@ -247,6 +270,8 @@ class Session:
                 self.state.notify("글 보관 상태를 확인하지 못했습니다. 설정에서 확인해 주세요.", error=True)
             finally:
                 self.finished = True
+                self.record = record
+                self.state.idle_since = time.perf_counter()
                 self.preview = ""
                 while not self.audio.empty():
                     self.audio.get_nowait()
@@ -268,6 +293,7 @@ class App:
         self.polisher = Polisher(settings, self.notes, self.account, self.profile)
         self.profile.complete = self.complete_profile
         self.last_session_id = None
+        self.idle_since = time.perf_counter()  # when the last dictation ended, or the app started
         self.recovery = []
         self.reports = {}
         self.notice = ""
@@ -374,10 +400,29 @@ class App:
             details["late_ms"] = field.late_ms
         if record.get("trace"):
             details["trace"] = record["trace"]
+        self._queue_error(session, stage, code, details)
+
+    def _queue_error(self, session, stage, code, details):
         report = {"stage": stage, "code": code[:48], "app_version": VERSION,
                   "os": f"Windows {platform.version()}"[:48], "target_app": session.app[:64],
                   "details": details, "session_id": session.session_id}
         threading.Thread(target=self._send_error, args=(report,), daemon=True).start()
+
+    def flag_last(self):
+        """The member marked the last dictation as wrong: keep its timings to compare with what was said."""
+        session = self.last
+        if session is None or session.record is None:
+            return self.notify("받아쓰기가 끝난 뒤 다시 눌러 주세요.")
+        record = session.record
+        code = record.get("input_failure") or record.get("error") or record.get("polish_error") or "none"
+        details = {**session.timing(), "overflow_count": session.overflows}
+        if record.get("late_ms") is not None:
+            details["late_ms"] = record["late_ms"]
+        log.warning("flagged dictation %s: code=%s %s", record["time"], code,
+                    " ".join(f"{name}={value}" for name, value in details.items()))
+        if (self.account.cached.get("error_reports") or {}).get("enabled"):
+            self._queue_error(session, "user_flag", code, details)
+        self.notify("방금 받아쓰기를 이상함으로 기록했습니다.")
 
     def _send_error(self, report):
         try:

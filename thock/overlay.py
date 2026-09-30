@@ -152,7 +152,7 @@ class Overlay:
     GEAR, GAP, MARGIN = 30, 8, 10
     TEXT_W, TEXT_H, PAD_X, PAD_Y, LINES = 600, 96, 20, 11, 2  # preview box: widest, tallest (largest font), padding, lines
     SIZE = 0.8
-    MENU_SETTINGS, MENU_RESET, MENU_QUIT, MENU_RECOVERY, MENU_ACCOUNT = 1, 2, 3, 4, 5
+    MENU_SETTINGS, MENU_RESET, MENU_QUIT, MENU_RECOVERY, MENU_ACCOUNT, MENU_FLAG = 1, 2, 3, 4, 5, 6
 
     def __init__(self, app):
         self.app, self.state, self.locked, self.alpha = app, None, False, 0
@@ -276,6 +276,7 @@ class Overlay:
 
     def _menu(self):
         menu = user32.CreatePopupMenu()
+        user32.AppendMenuW(menu, 0, self.MENU_FLAG, "방금 받아쓰기 이상함")
         user32.AppendMenuW(menu, 0, self.MENU_SETTINGS, "설정")
         user32.AppendMenuW(menu, 0, self.MENU_RESET, "위치 초기화")
         user32.AppendMenuW(menu, 0, self.MENU_RECOVERY, "보관한 글")
@@ -287,7 +288,9 @@ class Overlay:
         choice = user32.TrackPopupMenu(menu, 0x0100 | 0x0020 | 0x0004, x, y, 0, self.hwnd, None)  # RETURNCMD|BOTTOMALIGN|CENTERALIGN
         user32.PostMessageW(self.hwnd, 0, 0, 0)
         user32.DestroyMenu(menu)
-        if choice == self.MENU_SETTINGS:
+        if choice == self.MENU_FLAG:
+            self.app.flag_last()
+        elif choice == self.MENU_SETTINGS:
             self.app.open_settings()
         elif choice == self.MENU_RECOVERY:
             self.app.open_recovery()

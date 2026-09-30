@@ -39,6 +39,11 @@ MESSAGES = {
     "correction_limit_reached": "이번 달 문장 다듬기 한도를 모두 사용했습니다. 인식한 원문을 입력합니다.",
     "key_busy": "문장 다듬기 연결을 잠시 뒤 다시 준비합니다.",
     "sign_in": "로그인을 완료하지 못했습니다. 다시 연결해 주세요.",
+    "unknown_invite": "초대 코드를 찾지 못했습니다. 받은 코드를 다시 확인해 주세요.",
+    "code_used": "이미 사용한 초대 코드입니다.",
+    "code_expired": "사용 기한이 지난 초대 코드입니다. 새 코드를 요청해 주세요.",
+    "access_exists": "이 계정에는 이미 Thock 이용권이 있습니다.",
+    "too_many_attempts": "잘못된 코드를 여러 번 입력했습니다. 한 시간 뒤 다시 시도해 주세요.",
 }
 
 
@@ -284,6 +289,18 @@ class Account:
                     pass  # still usable for this run; the next start asks the server again
                 self.key = key
             return key
+
+    def redeem(self, code):
+        """Turn a staff or partner invite code into this account's Thock access."""
+        if not isinstance(code, str) or not code.strip():
+            raise AccountError("unknown_invite")
+        try:
+            self._authorized("/api/thock/invite", {"code": code.strip()[:32]})
+        except AccountError as error:
+            if error.code == "invalid_code":  # the sign-in exchange uses the same word for its own codes
+                raise AccountError("unknown_invite") from None
+            raise
+        self.checked_at = 0  # the next status shows the new access
 
     def set_error_reports(self, enabled):
         return self._authorized("/api/thock/consent", {"enabled": bool(enabled)})

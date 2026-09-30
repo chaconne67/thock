@@ -57,6 +57,21 @@ class AccountFlowTests(unittest.TestCase):
         self.assertIsNone(account.token)
 
 
+class InviteTests(unittest.TestCase):
+    @patch("thock.account.read_token", return_value="app-token")
+    def test_invite_refusals_have_their_own_messages(self, _read):
+        account = Account()
+        with patch.object(account, "_request", return_value={"access": {}}) as request:
+            account.redeem(" thk-aaaa-bbbb ")
+        self.assertEqual(request.call_args.args[:2], ("/api/thock/invite", {"code": "thk-aaaa-bbbb"}))
+        with patch.object(account, "_request", side_effect=AccountError("invalid_code")):
+            with self.assertRaises(AccountError) as error:
+                account.redeem("THK-AAAA-BBBB")
+        self.assertIn("초대 코드를 찾지 못했습니다", str(error.exception))  # not the sign-in message
+        with self.assertRaises(AccountError):
+            account.redeem("  ")
+
+
 @unittest.skipUnless(sys.platform == "win32", "Windows Credential Manager")
 class WindowsCredentialTests(unittest.TestCase):
     def test_round_trip_under_isolated_test_name(self):

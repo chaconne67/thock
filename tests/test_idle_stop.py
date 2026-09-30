@@ -2,7 +2,8 @@
 import sys
 import types
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 
 @unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
@@ -87,6 +88,39 @@ class RedNotices(unittest.TestCase):
         self.assertEqual(session.notices, ["입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다."])
         self.assertIn("red notice", logs.output[0])
         self.assertEqual(app.App.status(state)[0], "error")
+
+
+@unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
+class FlagLastDictation(unittest.TestCase):
+    def app(self, consent, record):
+        from thock import app
+        session = SimpleNamespace(record=record, overflows=0, app="claude.exe", session_id=None,
+                                  timing=lambda: {"idle_s": 7200, "first_audio_ms": 1400, "first_text_ms": 2100})
+        state = app.App.__new__(app.App)
+        state.last, state.recording, state.active, state.error_until = session, None, set(), 0.0
+        state.account = SimpleNamespace(cached={"error_reports": {"enabled": consent}})
+        state._queue_error = Mock()
+        return app, state
+
+    def test_flag_is_logged_and_reported_with_the_last_timings(self):
+        app, state = self.app(True, {"time": "2026-10-01 09:00:00", "input_failure": "delivery_unverified",
+                                     "late_ms": 350})
+        with self.assertLogs("voicetype", level="WARNING") as logs:
+            app.App.flag_last(state)
+        self.assertIn("first_audio_ms=1400", logs.output[0])
+        stage, code, details = state._queue_error.call_args.args[1:]
+        self.assertEqual((stage, code, details["late_ms"], details["idle_s"]),
+                         ("user_flag", "delivery_unverified", 350, 7200))
+        self.assertLessEqual(len(details), 8)  # the server accepts at most eight details
+
+    def test_flag_stays_local_without_consent_and_waits_for_a_finished_dictation(self):
+        app, state = self.app(False, {"time": "2026-10-01 09:00:00"})
+        with self.assertLogs("voicetype", level="WARNING"):
+            app.App.flag_last(state)
+        state._queue_error.assert_not_called()
+        state.last.record = None
+        app.App.flag_last(state)
+        self.assertIn("끝난 뒤", state.notice)
 
 
 if __name__ == "__main__":

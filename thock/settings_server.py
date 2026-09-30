@@ -185,6 +185,12 @@ class SettingsServer:
                     except AccountError as error:
                         return self._send(503, {"error": error.code})
                     return self._send(200, server.app.account_status())
+                if path == "/api/account/invite":
+                    try:
+                        server.app.account.redeem(body.get("code"))
+                    except AccountError as error:
+                        return self._send(409, {"message": str(error)})
+                    return self._send(200, server.app.account_status(force=True))
                 if path == "/api/notes":
                     old, new = str(body.get("old", "")).strip(), str(body.get("new", "")).strip()
                     if body.get("action") == "add" and old and new and old != new:
