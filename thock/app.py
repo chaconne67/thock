@@ -31,7 +31,7 @@ from .speech import transcribe
 from .live_input import LiveDictation
 from .win32 import (foreground_app, capture_target, copy_text, InlineField, input_events, kernel32, press_enter,
                     ready_target, run_key_hook, user32)
-from .personal import append_history, read_data, write_data, import_legacy, history_data
+from .personal import append_history, read_data, write_data, import_legacy, history_data, keep_audio
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
@@ -60,7 +60,8 @@ class Session:
         self.first_audio = self.voice_at = self.first_text_at = None
         # Per half second, for the trace: the loudest microphone level and how many Soniox replies came in.
         # Speech heard by the microphone with no reply tells Soniox apart from a silent microphone.
-        self.loudness, self.replies = [], []
+        self.loudness, self.replies, self.clipped = [], [], []  # clipped: samples at full scale (distortion)
+        self.kept = bytearray() if self.settings["keep_audio"] else None  # audio as sent, for diagnosis
         self.record = None  # this dictation's record once it has finished
         self.events = []  # the trace: [ms from the key press, what happened, {numbers and codes}]
         self.live, self.entered = None, False
@@ -139,16 +140,17 @@ class Session:
         samples = array.array("h", chunk)
         rms = math.sqrt(sum(s * s for s in samples) / max(len(samples), 1))
         level = min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0)
-        self._count(self.loudness, now, level)
+        self._count(self.loudness, now, level, keep_max=True)
+        self._count(self.clipped, now, sum(1 for sample in samples if sample >= 32700 or sample <= -32700))
         if self.voice_at is None and level >= VOICE_LEVEL:
             self.voice_at = now
         self.state.levels.append(level)
 
-    def _count(self, series, now, value):
-        """Keep the largest value (or a count, value=None) for each half second since the key press."""
+    def _count(self, series, now, value, keep_max=False):
+        """Add value (or keep the largest) for each half second since the key press."""
         slot = int((now - self.started) * 2)
         series.extend([0] * (slot + 1 - len(series)))
-        series[slot] = series[slot] + 1 if value is None else max(series[slot], value)
+        series[slot] = max(series[slot], value) if keep_max else series[slot] + value
 
     def timing(self):
         """Idle time before this dictation and when sound, voice and the first words arrived."""
@@ -179,9 +181,10 @@ class Session:
             trace.info(json.dumps({
                 "time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": VERSION, "app": self.app, "outcome": outcome,
                 **{key: record[key] for key in ("input_failure", "error", "polish_error", "ended", "mismatch",
-                                                 "late_ms") if record.get(key) is not None},
+                                                 "late_ms", "audio") if record.get(key) is not None},
                 "events": self.events,
                 "loudness": [round(level * 99) for level in self.loudness], "replies": self.replies,
+                "clipped": self.clipped,
                 "input": [[round((at - self.started) * 1000), kind] for at, kind in list(input_events)
                           if at >= self.started - 2]}, ensure_ascii=False))
         except Exception as error:
@@ -220,6 +223,8 @@ class Session:
                 break
             chunk = chunk[:remaining * 2]
             self.sent_frames += len(chunk) // 2
+            if self.kept is not None:
+                self.kept += chunk
             yield chunk
 
     async def run(self):
@@ -256,7 +261,7 @@ class Session:
                                              field.restart, self.mark)
 
             def heard(words):
-                self._count(self.replies, time.perf_counter(), None)
+                self._count(self.replies, time.perf_counter(), 1)
                 if self.first_text_at is None and words.strip():
                     self.first_text_at = time.perf_counter()
                 if words.strip() != self.preview:
@@ -337,6 +342,8 @@ class Session:
                               stt_seconds=stt_ms / 1000 if stt_ms is not None else None,
                               total_seconds=total_ms / 1000 if total_ms is not None else None,
                               time=time.strftime("%Y-%m-%d %H:%M:%S"))
+                if self.kept:
+                    record["audio"] = await asyncio.to_thread(self.state.keep_audio, bytes(self.kept), record["time"])
                 self.state.report_error(self, record, field)
                 if s["learn"] and self.state.settings["learn"] and text:
                     append_history(self.profile.history, {**record, "text": text})
@@ -533,6 +540,18 @@ class App:
             self.recovery_action(self.recovery[-1]["id"], "copy")
             self.notify("복사했습니다. 원하는 곳에 붙여 넣으세요.", seconds=3)
 
+    def keep_audio(self, pcm, when):
+        """Keep a dictation's audio on this PC (setting 녹음 보관); the file's name, or None."""
+        if not self.data_root:
+            return None
+        name = when.replace(" ", "_").replace(":", "-")
+        try:
+            keep_audio(self.data_root / "audio", name, pcm)
+        except (OSError, ValueError) as error:
+            log.warning("audio not kept: %s", type(error).__name__)
+            return None
+        return name
+
     def recover(self, text, reason):
         if not text:
             return
@@ -717,6 +736,7 @@ class App:
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
                 "sound_recording": s["sound_recording"], "sound_processing": s["sound_processing"],
+                "keep_audio": s["keep_audio"],
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
                 "preview": s["preview"], "preview_font_ko": s["preview_font_ko"], "preview_font_en": s["preview_font_en"],
                 "preview_font_size": s["preview_font_size"], "preview_fonts": PREVIEW_FONTS,
@@ -737,7 +757,7 @@ class App:
             s["hotkey"] = body["hotkey"]
         if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:
             s["sound_keyboard"] = body["sound_keyboard"]
-        for flag in ("polish", "learn", "sound_recording", "sound_processing", "preview"):
+        for flag in ("polish", "learn", "sound_recording", "sound_processing", "preview", "keep_audio"):
             if isinstance(body.get(flag), bool):
                 s[flag] = body[flag]
         for lang, fonts in PREVIEW_FONTS.items():

@@ -1,12 +1,15 @@
 """Feed WAV files (16 kHz mono 16-bit) through the real transcribe() and Polisher at real-time pace.
 
 Usage: uv run python tests/check_pipeline.py file1.wav [file2.wav ...]
+A kept dictation (~/.voicetype/accounts/<id>/audio/<time>.wav.protected, setting 녹음 보관) replays exactly
+what Soniox got: if Soniox misses the same words again, the recognition missed them.
 Prints recognized text, corrected text, and seconds from "key release" (end of audio) to each result,
 and how soon and how often the live preview got text while the audio was still playing.
 """
 
 import asyncio
 import hashlib
+import io
 import sys
 import time
 import wave
@@ -20,8 +23,13 @@ from thock.learning import Profile, TypoNotes  # noqa: E402
 from thock.speech import transcribe  # noqa: E402
 
 
+def open_audio(path):
+    from thock.personal import read_bytes
+    return wave.open(io.BytesIO(read_bytes(Path(path))))
+
+
 async def realtime_chunks(path, marks):
-    with wave.open(str(path)) as w:
+    with open_audio(path) as w:
         assert (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (SAMPLE_RATE, 1, 2), path
         step = SAMPLE_RATE // 10
         marks["started"] = time.perf_counter()
@@ -45,7 +53,7 @@ async def main(paths):
     polisher = Polisher(s, notes, account, profile)
     for path in paths:
         marks, heard = {}, []
-        with wave.open(str(path)) as source:
+        with open_audio(path) as source:
             recorded_ms = round(source.getnframes() * 1000 / source.getframerate())
         if recorded_ms > 120000:
             raise SystemExit("검증 음성은 120초 이하여야 합니다.")

@@ -284,6 +284,13 @@
       </div>
       <span class="switch"><input type="checkbox" id="error-reports" role="switch"></span>
     </div>
+    <div class="row sep">
+      <div>
+        <label class="label" for="keep-audio">녹음 보관 (문제 해결용)</label>
+        <p class="hint">최근 받아쓰기 30건의 녹음을 이 PC에만 보호해 보관합니다. 인식이 이상할 때 원인을 찾는 데 씁니다. 서버로 보내지 않습니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="keep-audio" role="switch"></span>
+    </div>
     <p class="hint" id="version"></p>
   </section>
   <section aria-labelledby="h-recovery"><h2 id="h-recovery">글 복구</h2><p class="hint">입력하지 못했거나 입력 여부를 확인하지 못한 글을 최근 5건까지 보호해 보관합니다.</p><button class="secondary" id="open-recovery" type="button">보관한 글 열기</button></section>
@@ -456,6 +463,7 @@ function fill(s) {
   $("polish").checked = s.polish;
   $("learn").checked = s.learn;
   $("sound-recording").checked = s.sound_recording;
+  $("keep-audio").checked = s.keep_audio;
   $("sound-processing").checked = s.sound_processing;
   $("sound-keyboard").replaceChildren(...Object.entries(s.sound_keyboards).map(([id, label]) => new Option(label, id)));
   $("sound-keyboard").value = s.sound_keyboard;
@@ -485,6 +493,7 @@ $("save").addEventListener("click", async () => {
     fill(await api("/api/settings", {
       hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, learn: $("learn").checked, terms: termsList(),
       sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
+      keep_audio: $("keep-audio").checked,
       sound_keyboard: $("sound-keyboard").value,
       ...($("error-reports").checked !== reportsShown ? {error_reports: $("error-reports").checked} : {}),
     }));

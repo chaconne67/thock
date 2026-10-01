@@ -151,6 +151,8 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         line = json.loads(logs.output[0].split(":", 2)[2])
         self.assertIn("loudness", line)
         self.assertIn("replies", line)
+        self.assertIn("clipped", line)
+        self.assertNotIn("audio", line)  # 녹음 보관 is off by default
         names = [event[1] for event in line["events"]]
         for name in ("grant", "start_field", "stop", "transcribed", "finished"):
             self.assertIn(name, names)

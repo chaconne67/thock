@@ -31,6 +31,24 @@ class SettingsCompatibility(unittest.TestCase):
             self.assertFalse(settings["welcome_complete"])
 
 @unittest.skipUnless(sys.platform=="win32","Windows data protection")
+class KeptAudio(unittest.TestCase):
+    def test_audio_is_protected_and_only_the_newest_are_kept(self):
+        import io, wave
+        from thock.personal import AUDIO_KEPT, keep_audio, read_bytes
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "audio"
+            pcm = bytes(range(256)) * 10
+            for n in range(AUDIO_KEPT + 2):
+                keep_audio(folder, f"2026-10-01_10-00-{n:02d}", pcm)
+            files = sorted(folder.glob("*.wav.protected"))
+            self.assertEqual(len(files), AUDIO_KEPT)
+            self.assertTrue(files[0].name.startswith("2026-10-01_10-00-02"))  # the oldest two went
+            self.assertNotIn(pcm[:64], files[-1].read_bytes())  # stored protected, not as plain audio
+            with wave.open(io.BytesIO(read_bytes(files[-1]))) as w:
+                self.assertEqual((w.getframerate(), w.readframes(10_000)), (16000, pcm))
+
+
+@unittest.skipUnless(sys.platform=="win32","Windows data protection")
 class ProtectedStorage(unittest.TestCase):
     def test_roundtrip_has_no_plaintext_and_rejects_damaged_header(self):
         with tempfile.TemporaryDirectory() as temp:
