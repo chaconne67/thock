@@ -22,6 +22,10 @@ class AccountFlowTests(unittest.TestCase):
         self.assertEqual(url.scheme, "https")
         self.assertEqual(url.hostname, "thock.cloud")
         self.assertEqual(query["challenge"], [expected])
+        self.assertNotIn("switch", query)  # a signed-in browser connects without another step
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(account.begin(43123, switch=True)).query)["switch"],
+                         ["1"])
+        state = urllib.parse.parse_qs(urllib.parse.urlparse(account.begin(43123)).query)["state"][0]
         with patch.object(account, "_request", return_value={"token": "app-token", "email": "x@example.com"}),              patch("thock.account.write_token") as write:
             self.assertEqual(account.finish("one-time-code", state), "x@example.com")
         write.assert_called_once_with("app-token")

@@ -162,5 +162,18 @@ class AccountNotice(unittest.TestCase):
         self.assertIsNone(app.App.status(state)[0])
 
 
+@unittest.skipUnless(sys.platform == "win32", "the app imports Windows audio and input")
+class WelcomeOnStart(unittest.TestCase):
+    def test_each_start_opens_the_window_only_when_the_member_has_something_to_do(self):
+        from thock import app
+        state = app.App.__new__(app.App)
+        state.open_welcome = Mock()
+        for status, opens in (({"state": "signed_out"}, True), ({"state": "signed_in", "ready": False}, True),
+                              ({"state": "signed_in", "ready": True}, False), ({"state": "offline"}, False)):
+            state.open_welcome.reset_mock()
+            state.welcome_if_needed(status)
+            self.assertEqual(state.open_welcome.called, opens, status)
+
+
 if __name__ == "__main__":
     unittest.main()

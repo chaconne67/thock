@@ -150,14 +150,15 @@ class Account:
         except (OSError, ValueError):
             raise AccountError("account_unreachable") from None
 
-    def begin(self, port):
+    def begin(self, port, switch=False):
+        """The sign-in address. A browser already signed in connects that account; switch asks Google which."""
         verifier = secrets.token_urlsafe(32)
         state = secrets.token_urlsafe(32)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
         with self.lock:
             self.pending = (state, verifier, time.monotonic() + 300)
             self.last_error = ""
-        query = urllib.parse.urlencode({"port": port, "state": state, "challenge": challenge})
+        query = urllib.parse.urlencode({"port": port, "state": state, "challenge": challenge, **({"switch": 1} if switch else {})})
         return SITE + "/app/login/?" + query
 
     def finish(self, code, state):

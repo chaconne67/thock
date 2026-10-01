@@ -56,6 +56,6 @@ $("login").onclick=async()=>{try{await api("/api/account/login",{});await refres
 $("redeem").onclick=async()=>{$("redeem").disabled=true;try{await api("/api/account/invite",{code:$("code").value});$("code").value="";await refresh()}catch(e){$("status").textContent=e.message}finally{$("redeem").disabled=false}};
 $("code").onkeydown=e=>{if(e.key==="Enter")$("redeem").click()};
 $("refresh").onclick=refresh;
-$("switch").onclick=async()=>{try{await api("/api/account/logout",{});await api("/api/account/login",{});await refresh()}catch(e){$("status").textContent=e.message}};
+$("switch").onclick=async()=>{try{await api("/api/account/logout",{});await api("/api/account/login",{switch:true});await refresh()}catch(e){$("status").textContent=e.message}};
 refresh();
 </script></body></html>

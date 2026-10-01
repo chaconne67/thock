@@ -562,15 +562,24 @@ class App:
                 continue
             self.reports.pop(session_id, None)
 
+    def welcome_if_needed(self, status):
+        """Each start: an account that cannot dictate yet (signed out, or no access) opens the sign-in and
+        invite code window. Offline is not the member's to fix, so it waits for the hotkey."""
+        if status["state"] == "signed_out" or (status["state"] == "signed_in" and not status.get("ready")):
+            self.open_welcome()
+
     async def maintain_account(self):
-        last_check = 0
+        last_check, greeted = 0, False
         while True:
             now = time.time()
             retry = self.account.cached.get("state") == "offline"
             if self.account_refresh_needed or now - last_check >= (30 if retry else 900):
                 self.account_refresh_needed = False
                 try:
-                    await asyncio.to_thread(self.account_status, True)
+                    status = await asyncio.to_thread(self.account_status, True)
+                    if not greeted:
+                        greeted = True
+                        self.welcome_if_needed(status)
                     if self.data_root:
                         await asyncio.to_thread(history_data, self.profile.history)
                 except Exception as error:
@@ -747,8 +756,6 @@ def main():
                      daemon=True).start()
     asyncio.run_coroutine_threadsafe(app.maintain_account(), loop)
     log.info("started, hotkey=%s", app.settings["hotkey"])
-    if not app.settings["welcome_complete"]:
-        app.open_welcome()
     try:
         run_overlay(app)
     finally:

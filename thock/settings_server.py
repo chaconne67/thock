@@ -203,7 +203,7 @@ class SettingsServer:
                         except AccountError as error:
                             return self._send(503, {"message": str(error)})
                     server.app.account_status()
-                    url = server.app.account.begin(server.httpd.server_port)
+                    url = server.app.account.begin(server.httpd.server_port, switch=body.get("switch") is True)
                     try:
                         from .win32 import allow_next_to_front  # Windows only, loaded when used
                         allow_next_to_front()  # the browser comes over the Thock window
