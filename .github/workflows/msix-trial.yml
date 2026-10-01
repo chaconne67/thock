@@ -45,7 +45,7 @@ jobs:
           "package {0} {1:N0} MB" -f $msixVersion, ((Get-Item dist\Thock.msix).Length / 1MB)
 
       - name: Install the package, it starts and stays running
-        shell: pwsh
+        shell: powershell  # the Appx module does not load in PowerShell 7
         run: |
           Import-Certificate -FilePath dist\Thock-trial.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
           Add-AppxPackage dist\Thock.msix
@@ -69,7 +69,7 @@ jobs:
             ForEach-Object { $_.Name; $_ | Get-ItemProperty | Format-List | Out-String }
 
       - name: Remove the package
-        shell: pwsh
+        shell: powershell  # the Appx module does not load in PowerShell 7
         run: |
           Get-Process Thock -ErrorAction SilentlyContinue | Stop-Process -Force
           $pkg = Get-AppxPackage -Name AIShift.Thock
