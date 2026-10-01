@@ -131,6 +131,7 @@
   footer { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line);
     padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   #status { color: var(--muted); }
+  .footer-actions { display: flex; gap: 8px; }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   .account-actions { display:flex; flex-wrap:wrap; gap:8px; }
   .account-actions a {color:var(--text);font-size:13px;align-self:center}
@@ -298,7 +299,10 @@
 
 <footer>
   <span id="status" role="status" aria-live="polite"></span>
-  <button class="primary" type="button" id="save" disabled>저장</button>
+  <div class="footer-actions">
+    <button class="secondary" type="button" id="close">닫기</button>
+    <button class="primary" type="button" id="save" disabled>저장</button>
+  </div>
 </footer>
 
 <script>
@@ -485,6 +489,9 @@ function fillPersonal(s) {
 // The note inputs save through their own button; everything else waits for 저장.
 document.querySelectorAll("input:not(.add input), textarea, select").forEach((el) => el.addEventListener("input", () => { dirty(); renderHint(); }));
 
+$("close").addEventListener("click", () => {
+  if ($("save").disabled || confirm("저장하지 않은 변경이 있습니다. 닫을까요?")) window.close();
+});
 $("save").addEventListener("click", async () => {
   $("save").disabled = true;
   setStatus("저장 중…");
