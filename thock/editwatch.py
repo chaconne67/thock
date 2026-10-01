@@ -19,6 +19,7 @@ oleaut32.SafeArrayGetElement.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.
 oleaut32.SafeArrayDestroy.argtypes = [ctypes.c_void_p]
 oleaut32.VariantClear.argtypes = [ctypes.c_void_p]
 _local_reader = threading.local()
+APPLY_SECONDS = 0.5  # how long an editor may take to show our selection or paste
 
 
 def field_reader():
@@ -352,7 +353,7 @@ class FieldReader:
                         if observed == wanted:
                             _ok(_com(candidate, 16)(candidate))
                             # Chromium rich editors apply Select asynchronously; return only what is seen.
-                            deadline = time.monotonic() + 0.5
+                            deadline = time.monotonic() + APPLY_SECONDS
                             while self.snapshot() != wanted:
                                 if time.monotonic() > deadline:
                                     return None
