@@ -1,10 +1,19 @@
 """One bounded microphone stream to Soniox, with a deadline after recording ends."""
 import asyncio
 import json
+import re
 import websockets
 from .config import SAMPLE_RATE, SONIOX_MODEL, SONIOX_URL
 
 _background = set()
+# Soniox only hears the words; the correction model decides the punctuation from the context (주인님 결정
+# 2026-10-01). Its sentence marks go, marks inside a word or number (3.5, thock.cloud) stay. Removing only
+# marks followed by a space or the end keeps a finalized prefix a prefix of the later text.
+SENTENCE_MARKS = re.compile(r"[.,?!]+(?=\s|$)")
+
+
+def unpunctuated(text):
+    return SENTENCE_MARKS.sub("", text)
 
 
 async def transcribe(chunks, api_key, get_context, on_text=lambda text: None, on_endpoint=lambda text: None,
@@ -49,15 +58,15 @@ async def transcribe(chunks, api_key, get_context, on_text=lambda text: None, on
                         done = True
                         break
                     if token["text"] == "<end>":
-                        endpoints.append("".join(parts))
+                        endpoints.append(unpunctuated("".join(parts)))
                     else:
                         parts.append(token["text"])
-                on_text("".join(parts + [t["text"] for t in tokens
-                                          if not t.get("is_final") and t["text"] not in ("<end>", "<fin>")]))
+                on_text(unpunctuated("".join(parts + [t["text"] for t in tokens
+                                                      if not t.get("is_final") and t["text"] not in ("<end>", "<fin>")])))
                 for endpoint in endpoints:
                     on_endpoint(endpoint)
                 if done:
-                    return "".join(parts).strip()
+                    return unpunctuated("".join(parts)).strip()
             raise RuntimeError("speech service closed before finalizing")
 
         sender, receiver = asyncio.create_task(send_audio()), asyncio.create_task(receive_text())

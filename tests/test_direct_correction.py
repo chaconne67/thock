@@ -55,7 +55,9 @@ class DirectCorrection(unittest.TestCase):
 
     def test_a_correction_that_touches_a_word_is_dropped(self):
         from thock.correction import same_words
-        self.assertTrue(same_words("um so we ship it", "Um, so we ship it."))
+        self.assertTrue(same_words("이건 내가 볼게 너는 돌려 줄래", "이건 내가 볼게. 너는 돌려 줄래?"))
+        self.assertFalse(same_words("um so we ship it", "Um, so we ship it."))  # letter case is a letter change
+        self.assertTrue(same_words("확인해볼게 가나다 순으로", "확인해 볼게. 가나다순으로."))  # spacing may change
         self.assertFalse(same_words("노트북 화면 전체에 보이니까", "노트북 화면이 보이니까."))
         polisher, _, _ = self.polisher([])
         polisher.correct = lambda text: "노트북 화면이 보이니까."

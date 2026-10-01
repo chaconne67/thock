@@ -158,7 +158,7 @@
     <h2 id="h-dictation">받아쓰기</h2>
     <div class="row"><label class="label" for="input-mode">입력 방식</label><select id="input-mode"></select></div>
     <div class="row sep">
-      <div><label class="label" for="polish">문장 다듬기</label><p class="hint">띄어쓰기와 문장부호만 고칩니다. 말한 단어는 바꾸지 않습니다.</p></div>
+      <div><label class="label" for="polish">문장 다듬기</label><p class="hint">문맥을 보고 문장부호를 붙이고 띄어쓰기를 고칩니다. 말한 단어는 바꾸지 않습니다.</p></div>
       <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
     </div>
     <div class="group">
@@ -283,6 +283,13 @@
         <p class="hint">문제가 생기면 앱 버전, 실패한 단계, 입력하던 프로그램 이름 같은 정보만 AI Shift로 보냅니다. 말한 내용과 음성은 보내지 않습니다.</p>
       </div>
       <span class="switch"><input type="checkbox" id="error-reports" role="switch"></span>
+    </div>
+    <div class="row sep">
+      <div>
+        <label class="label" for="keep-audio">녹음 보관 (문제 해결용)</label>
+        <p class="hint">최근 받아쓰기 30건의 녹음을 이 PC에만 보호해 보관합니다. 인식이 이상할 때 원인을 찾는 데 씁니다. 서버로 보내지 않습니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="keep-audio" role="switch"></span>
     </div>
     <p class="hint" id="version"></p>
   </section>
@@ -456,6 +463,7 @@ function fill(s) {
   $("polish").checked = s.polish;
   $("learn").checked = s.learn;
   $("sound-recording").checked = s.sound_recording;
+  $("keep-audio").checked = s.keep_audio;
   $("sound-processing").checked = s.sound_processing;
   $("sound-keyboard").replaceChildren(...Object.entries(s.sound_keyboards).map(([id, label]) => new Option(label, id)));
   $("sound-keyboard").value = s.sound_keyboard;
@@ -485,6 +493,7 @@ $("save").addEventListener("click", async () => {
     fill(await api("/api/settings", {
       hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, learn: $("learn").checked, terms: termsList(),
       sound_recording: $("sound-recording").checked, sound_processing: $("sound-processing").checked,
+      keep_audio: $("keep-audio").checked,
       sound_keyboard: $("sound-keyboard").value,
       ...($("error-reports").checked !== reportsShown ? {error_reports: $("error-reports").checked} : {}),
     }));

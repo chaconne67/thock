@@ -6,11 +6,15 @@ Legacy files are read only on explicit import and are never overwritten.
 """
 import ctypes
 import ctypes.wintypes as wt
+import io
 import json
 import os
 import threading
 import time
+import wave
 from pathlib import Path
+
+from .config import SAMPLE_RATE
 
 MAGIC = b"THOCK1\0"
 _history_lock = threading.RLock()
@@ -47,19 +51,43 @@ def _protect(data, decrypt=False):
         kernel.LocalFree(result.data)
 
 
+def read_bytes(path):
+    data = path.read_bytes()
+    if data.startswith(MAGIC):
+        return _protect(data[len(MAGIC):], decrypt=True)
+    if path.suffix == ".protected":
+        raise ValueError("protected data has an invalid header")
+    return data
+
+
 def read_data(path, default=None):
     if not path.exists():
         return default
-    data = path.read_bytes()
-    if data.startswith(MAGIC):
-        data = _protect(data[len(MAGIC):], decrypt=True)
-    elif path.suffix == ".protected":
-        raise ValueError("protected data has an invalid header")
-    return json.loads(data.decode("utf-8"))
+    return json.loads(read_bytes(path).decode("utf-8"))
 
 
 def write_data(path, value):
-    data = json.dumps(value, ensure_ascii=False).encode("utf-8")
+    write_bytes(path, json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+AUDIO_KEPT = 30
+
+
+def keep_audio(folder, name, pcm):
+    """A dictation's audio exactly as sent to Soniox, protected for this Windows user, for diagnosis only.
+    Never sent anywhere; the newest AUDIO_KEPT are kept."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(SAMPLE_RATE)
+        out.writeframes(pcm)
+    write_bytes(folder / f"{name}.wav.protected", buffer.getvalue())
+    for old in sorted(folder.glob("*.wav.protected"))[:-AUDIO_KEPT]:
+        old.unlink()
+
+
+def write_bytes(path, data):
     if path.suffix == ".protected":
         encrypted = _protect(data)
         if _protect(encrypted, decrypt=True) != data:

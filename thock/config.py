@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.1"
+APP_NAME, VERSION = "Thock", "0.4.3"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
@@ -18,7 +18,7 @@ SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
                    "technics": "Technics · Gateron Yellow", "keychron": "Keychron K10 · Linear"}
 DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # keep old setting without using it
             "terms": [], "position": None, "learn": True, "input_mode": "toggle", "welcome_complete": False,
-            "sound_recording": False, "sound_processing": True, "sound_keyboard": "rainy75",
+            "sound_recording": False, "keep_audio": False, "sound_processing": True, "sound_keyboard": "rainy75",
             "preview": True, "preview_font_ko": "Noto Sans KR", "preview_font_en": "Inter", "preview_font_size": 14}
 PREVIEW_FONT_SIZES = range(11, 21)  # pixels at 100% display scaling
 # Bundled in thock/fonts (family name: label). Korean fonts also carry Latin letters;

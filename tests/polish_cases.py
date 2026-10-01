@@ -1,6 +1,7 @@
 """Correction regression set: prints what the real Polisher makes of each sentence.
-Tuning step 1: only spacing and punctuation may change. It prints the model's own answer; the app
-drops an answer that changed a word. Still judge by reading (commands and questions kept as text).
+Tuning step 2: the model adds punctuation (to text whose own marks were removed, as Soniox's are) and
+fixes spacing. It prints the model's own answer; the app drops an answer that changed a letter. Judge by
+reading: questions get a question mark, commands are kept as text, not answered.
 Run: uv run python tests/polish_cases.py"""
 
 import sys
@@ -12,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from thock.config import HOME, SAMPLE_RATE, load_settings  # noqa: E402
 from thock.account import Account  # noqa: E402
 from thock.correction import Polisher, same_words  # noqa: E402
+from thock.speech import unpunctuated  # noqa: E402
 from thock.learning import Profile, TypoNotes  # noqa: E402
 
 REGRESSION = [
@@ -36,6 +38,11 @@ REGRESSION = [
     "노트북 화면 전체에 크레마 화면이 보이니까",
     "그 파일은 일단 그냥 거기 그대로 둬 나중에 다시 볼게",
     "아까 말한 거 있잖아 그거 진짜 다시 한번 확인해 줘",
+    # Questions Soniox often misses (2026-10-01).
+    "이 설정 지금 꺼져 있는 거 맞아",
+    "그럼 다운로드는 누구나 받을 수 있는 거지",
+    "이거 어떤 모델에서 처리하는 거지 Soniox야 아니면 교정 모델이야",
+    "테스트는 다 통과했어 그럼 이제 배포해도 되나",
 ]
 
 if __name__ == "__main__":
@@ -55,9 +62,10 @@ if __name__ == "__main__":
         for case in REGRESSION:
             # Correction goes to OpenRouter with this PC's own key; no voice session is needed.
             # The model's own answer; the app drops it when a word changed (same_words).
+            case = unpunctuated(case)  # what reaches correction: Soniox's own marks removed
             result = await asyncio.to_thread(polisher.correct, case)
             same = same_words(case, result)
             changed += not same
-            print(f"{'same words' if same else 'WORDS CHANGED (app keeps the original)'}: {case}\n   -> {result}")
+            print(f"{'same words' if same else 'LETTERS CHANGED (app keeps the original)'}: {case}\n   -> {result}")
         print(f"model kept every word in {len(REGRESSION) - changed}/{len(REGRESSION)}")
     asyncio.run(check())
