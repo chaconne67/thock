@@ -5,12 +5,12 @@ import logging
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.4.dev1"
+APP_NAME, VERSION = "Thock", "0.4.4.dev2"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
 SONIOX_MODEL = "stt-rt-v5"
-INPUT_MODES = {"hold": "누르는 동안", "toggle": "한 번씩 눌러 시작·종료"}
+INPUT_MODES = {"hold": "누르고 있는 동안 녹음", "toggle": "눌러서 녹음 켜고 끄기"}
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
                    "hhkb": "HHKB Professional Hybrid", "leopold": "Leopold FC660M",
