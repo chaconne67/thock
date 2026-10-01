@@ -117,7 +117,7 @@ async def verify(path, focused, report_path):
             if (report["error"] or report["polish_error"] or not report["final_text_delivered"]
                     or not report["preserved_surrounding_text"] or not report["live_updates_before_release"]):
                 raise RuntimeError("live session verification failed")
-            if (settings["sound_recording"] or settings["sound_processing"]) and not output_blocks["nonzero_before_release"]:
+            if settings["sound_processing"] and not output_blocks["nonzero_before_release"]:
                 raise RuntimeError("live typing sound did not reach the output device")
     state.sounds.set_mode(None)
 

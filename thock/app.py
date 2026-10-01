@@ -724,7 +724,7 @@ class App:
     def public_settings(self):
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
-                "sound_recording": s["sound_recording"], "sound_processing": s["sound_processing"],
+                "sound_processing": s["sound_processing"],
                 "keep_audio": s["keep_audio"],
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
                 "preview": s["preview"], "preview_font_ko": s["preview_font_ko"], "preview_font_en": s["preview_font_en"],
@@ -746,7 +746,7 @@ class App:
             s["hotkey"] = body["hotkey"]
         if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:
             s["sound_keyboard"] = body["sound_keyboard"]
-        for flag in ("polish", "learn", "sound_recording", "sound_processing", "preview", "keep_audio"):
+        for flag in ("polish", "learn", "sound_processing", "preview", "keep_audio"):
             if isinstance(body.get(flag), bool):
                 s[flag] = body[flag]
         for lang, fonts in PREVIEW_FONTS.items():

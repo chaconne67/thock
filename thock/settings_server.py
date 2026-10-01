@@ -134,7 +134,7 @@ class SettingsServer:
                     keyboard = parse_qs(urlparse(self.path).query).get("keyboard", [""])[0]
                     if keyboard not in SOUNDS:
                         return self._send(404, {"error": "not found"})
-                    audio = Path(__file__).parent / "sounds" / SOUNDS[keyboard]["processing"]
+                    audio = Path(__file__).parent / "sounds" / SOUNDS[keyboard]
                     return self._send(200, audio.read_bytes(), "audio/wav")
                 self._send(404, {"error": "not found"})
 

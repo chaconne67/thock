@@ -3,7 +3,7 @@ https://freesound.org/people/Techrul/sounds/815614/
 License: Creative Commons 0 (CC0), as stated on the source page.
 https://creativecommons.org/publicdomain/zero/1.0/
 
-Both loops use this recording's public HQ MP3 preview:
+The loop uses this recording's public HQ MP3 preview:
 https://cdn.freesound.org/previews/815/815614_15899953-hq.mp3
 The source's original MP3 download requires a Freesound login.
 
@@ -11,10 +11,8 @@ The natural sequence of different key strikes and its changing rhythm are retain
 The preview was decoded to mono 48 kHz, 16-bit PCM. No single strike was copied
 and repeated; no pitch, speed, or equalization change was applied.
 
-recording.wav: source 0.360-58.261 seconds; 12 long pauses shortened; final
-53.001 seconds, -23.8 dB gain. Intended as quiet sound during microphone use.
 processing.wav: source 2.000-20.300 seconds; 1 long pause shortened; final
-17.830 seconds, -11.8 dB gain. Intended for transcription/correction wait.
+17.830 seconds, -11.8 dB gain. Plays while speech turns into text.
 
 A long pause is a gap over 0.42 seconds between active 10 ms frames
 (frame RMS above -36 dBFS or peak above -34 dBFS). Each edited gap keeps
@@ -34,15 +32,13 @@ Both source pages explicitly allow copying, modifying, distributing and
 commercial use under CC0. Their original downloads require Freesound login;
 the public HQ MP3 previews above were used.
 
-Ikki68: recording.wav equivalent uses source 17.50-45.55 s (28.05 s);
-processing uses 20.00-38.70 s (18.70 s). The early part of the source has
-very low level, so these sustained typing sections were selected.
-HHKB: recording uses source 0.00-44.70 s (44.70 s); processing uses
-2.00-21.00 s (19.00 s). All are mono 48 kHz, 16-bit PCM.
+Ikki68: uses source 20.00-38.70 s (18.70 s). The early part of the source
+has very low level, so a sustained typing section was selected.
+HHKB: uses source 2.00-21.00 s (19.00 s). All are mono 48 kHz, 16-bit PCM.
 No individual hit was copied or sequenced. Each recording's own varied typing
 cadence remains. Each has a 90 ms sine fade-in, a 220 ms cosine fade-out and
-zero endpoints. Loudness was matched to the existing Rainy75 phase tracks
-(approximately -59.9 dBFS RMS while recording; -46.9 dBFS RMS while processing)
+zero endpoints. Loudness was matched to the existing Rainy75 track
+(approximately -46.9 dBFS RMS)
 to avoid a sudden loudness jump when switching keyboards. No speed or pitch
 changes or noise reduction were applied.
 
@@ -73,15 +69,11 @@ the quieter Leopold source (-45 and -43 dBFS respectively) so quieter strokes
 would not be mistaken for silence. Every cut keeps 0.11 s after the preceding
 strike and before the next, with a 20 ms linear crossfade. All files use a
 90 ms sine fade-in and 220 ms cosine fade-out, including zero endpoints.
-Gain matches Rainy75's recording/processing tracks (about -59.9/-46.9 dBFS
-RMS), without changing either existing track.
+Gain matches Rainy75's track (about -46.9 dBFS RMS), without changing it.
 
-Leopold: recording source 74.5-132.5 s, 6 gaps shortened, final 55.180 s;
-processing source 75.0-95.0 s, 1 gap shortened, final 19.570 s.
-Technics: recording source 0.0-51.1 s, 13 gaps shortened, final 44.350 s;
-processing source 2.0-22.0 s, 4 gaps shortened, final 17.630 s.
-Keychron: recording source 0.0-61.3 s, 6 gaps shortened, final 58.890 s;
-processing source 0.5-20.5 s, 1 gap shortened, final 19.730 s.
+Leopold: source 75.0-95.0 s, 1 gap shortened, final 19.570 s.
+Technics: source 2.0-22.0 s, 4 gaps shortened, final 17.630 s.
+Keychron: source 0.5-20.5 s, 1 gap shortened, final 19.730 s.
 
 Reference listening only, not used as app audio: Taeha Types' Keycult No.1/65
 sound test (https://www.youtube.com/watch?v=Jm9R1GtbKHY), Mode's Sonnet

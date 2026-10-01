@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.6.dev10"
+APP_NAME, VERSION = "Thock", "0.4.6.dev11"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
@@ -17,7 +17,7 @@ SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
                    "technics": "Technics · Gateron Yellow", "keychron": "Keychron K10 · Linear"}
 DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # keep old setting without using it
             "terms": [], "position": None, "learn": True, "input_mode": "toggle", "welcome_complete": False,
-            "sound_recording": False, "keep_audio": False, "sound_processing": True, "sound_keyboard": "rainy75",
+            "keep_audio": False, "sound_processing": True, "sound_keyboard": "rainy75",
             "preview": True, "preview_font_ko": "Noto Sans KR", "preview_font_en": "Inter", "preview_font_size": 14}
 PREVIEW_FONT_SIZES = range(11, 21)  # pixels at 100% display scaling
 # Bundled in thock/fonts (family name: label). Korean fonts also carry Latin letters;
@@ -37,6 +37,8 @@ def load_settings():
     settings_path = HOME / "settings.json"
     stored = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
     settings = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS}}
+    if stored.get("sound_recording") is True:  # its switch merged into the one typing-sound switch (0.4.6)
+        settings["sound_processing"] = True
     if settings["input_mode"] not in INPUT_MODES:
         settings["input_mode"] = DEFAULTS["input_mode"]
     if not isinstance(settings["sound_keyboard"], str) or settings["sound_keyboard"] not in SOUND_KEYBOARDS:

@@ -1,4 +1,4 @@
-"""Play the phase-specific keyboard recording with a short fade on stop."""
+"""Play the selected keyboard's typing loop with a short fade on stop."""
 
 import array
 import math
@@ -10,27 +10,23 @@ from .config import log
 
 
 SOUNDS = {
-    "rainy75": {"recording": "recording.wav", "processing": "processing.wav"},
-    "ikki68": {"recording": "ikki68-recording.wav", "processing": "ikki68-processing.wav"},
-    "hhkb": {"recording": "hhkb-recording.wav", "processing": "hhkb-processing.wav"},
-    "leopold": {"recording": "leopold-recording.wav", "processing": "leopold-processing.wav"},
-    "technics": {"recording": "technics-recording.wav", "processing": "technics-processing.wav"},
-    "keychron": {"recording": "keychron-recording.wav", "processing": "keychron-processing.wav"},
+    "rainy75": "processing.wav",
+    "ikki68": "ikki68-processing.wav",
+    "hhkb": "hhkb-processing.wav",
+    "leopold": "leopold-processing.wav",
+    "technics": "technics-processing.wav",
+    "keychron": "keychron-processing.wav",
 }
 RATE, BLOCK_FRAMES, FADE_FRAMES = 48000, 480, 10560  # 10 ms blocks; 220 ms stop fade
 
 
 def selected_mode(recording, active, settings):
-    """The current session owns audio; while recording, typing plays only as speech turns into text."""
+    """Whether typing plays: while recording only as speech turns into text, then until the text is written."""
+    if not settings["sound_processing"]:
+        return False
     if recording is not None and recording in active:
-        if settings["sound_recording"]:
-            return "recording"
-        if getattr(recording, "typing", False) and settings["sound_processing"]:
-            return "processing"
-        return None
-    if active:
-        return "processing" if settings["sound_processing"] else None
-    return None
+        return getattr(recording, "typing", False)
+    return bool(active)
 
 
 class KeyboardSounds:
@@ -40,10 +36,10 @@ class KeyboardSounds:
         self._worker = None
         self._audio = {}
 
-    def set_mode(self, phase, keyboard="rainy75"):
-        if phase is not None and (keyboard not in SOUNDS or phase not in SOUNDS[keyboard]):
-            raise ValueError(f"unknown keyboard sound: {keyboard}/{phase}")
-        mode = (keyboard, phase) if phase is not None else None
+    def set_mode(self, playing, keyboard="rainy75"):
+        if playing and keyboard not in SOUNDS:
+            raise ValueError(f"unknown keyboard sound: {keyboard}")
+        mode = keyboard if playing else None
         with self._lock:
             if mode == self.mode:
                 return
@@ -57,7 +53,7 @@ class KeyboardSounds:
 
     def _read_audio(self, mode):
         if mode not in self._audio:
-            path = Path(__file__).resolve().parent / "sounds" / SOUNDS[mode[0]][mode[1]]
+            path = Path(__file__).resolve().parent / "sounds" / SOUNDS[mode]
             with wave.open(str(path), "rb") as source:
                 if (source.getnchannels(), source.getsampwidth(), source.getframerate()) != (1, 2, RATE):
                     raise ValueError(f"unsupported keyboard sound format: {path}")
