@@ -75,18 +75,22 @@ class ContentEditableInline(unittest.TestCase):
                     deadline = time.monotonic() + 5  # a freshly launched browser builds its accessibility tree late
                     while reader.snapshot() is None and time.monotonic() < deadline:
                         time.sleep(0.1)
-                    with patch("thock.win32._input_tracking", True):
+                    # Just after it starts, Chromium can show a paste or selection in its accessibility tree
+                    # a little after the app's 0.5 s (595 and 615 ms seen on the runner, about 45 ms once warm).
+                    # Allow the 2 s the app itself counts as late but delivered; the text must still be exact.
+                    with patch("thock.win32._input_tracking", True), patch("thock.editwatch.APPLY_SECONDS", 2):
                         target = win32.capture_target()
                         initial = reader.snapshot()
-                        field = win32.InlineField(target)
+                        marks = []
+                        field = win32.InlineField(target, lambda name, **values: marks.append([name, values]))
                         results = []
                         for text in steps:
                             results.append((text, field.update(text), field.failure))
                             time.sleep(0.3)
                     dom = script("const f=document.body.firstElementChild, last=f.querySelector('li:last-child');"
                                  " return f.value ?? (last ? last.innerText : f.innerText);")
-                    report = json.dumps({"kind": kind, "initial": initial, "results": results, "dom": dom},
-                                        ensure_ascii=True)
+                    report = json.dumps({"kind": kind, "initial": initial, "results": results, "marks": marks,
+                                         "dom": dom}, ensure_ascii=True)
                     self.assertTrue(all(ok for _, ok, _ in results), report)
                     self.assertEqual(dom.strip(), steps[-1], report)
         finally:

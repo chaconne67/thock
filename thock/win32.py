@@ -355,7 +355,7 @@ def mismatch(actual, desired):
 
 def paste(text, target, expected, desired, allow_cue=False):
     """Paste at the verified range, wait for delivery, and restore an unchanged clipboard."""
-    from .editwatch import field_reader
+    from .editwatch import APPLY_SECONDS, field_reader
     revision = _input_revision
     reader = field_reader()
     def unchanged():
@@ -388,7 +388,7 @@ def paste(text, target, expected, desired, allow_cue=False):
                 return None
             if user32.SendInput(len(keys), inputs, ctypes.sizeof(INPUT)) != len(keys):
                 raise ctypes.WinError(ctypes.get_last_error())
-            deadline = time.monotonic() + 0.5
+            deadline = time.monotonic() + APPLY_SECONDS
             while time.monotonic() < deadline:
                 time.sleep(0.015)
                 if _input_revision != revision or capture_target() != target:
