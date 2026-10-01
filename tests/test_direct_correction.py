@@ -53,6 +53,16 @@ class DirectCorrection(unittest.TestCase):
             release.set()
             profile.join(2)
 
+    def test_a_correction_that_touches_a_word_is_dropped(self):
+        from thock.correction import same_words
+        self.assertTrue(same_words("um so we ship it", "Um, so we ship it."))
+        self.assertFalse(same_words("노트북 화면 전체에 보이니까", "노트북 화면이 보이니까."))
+        polisher, _, _ = self.polisher([])
+        polisher.correct = lambda text: "노트북 화면이 보이니까."
+        self.assertEqual(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"), "노트북 화면 전체에 보이니까")
+        polisher.correct = lambda text: "노트북 화면 전체에 보이니까."
+        self.assertEqual(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"), "노트북 화면 전체에 보이니까.")
+
     def test_a_second_refusal_is_reported_not_retried_forever(self):
         from thock.correction import KeyRefused
         polisher, account, conn = self.polisher([Response(402), Response(403)])

@@ -2,6 +2,7 @@
 
 import http.client
 import json
+import re
 import threading
 
 from .config import APP_NAME, VERSION
@@ -16,6 +17,13 @@ POLISH_PROMPT = """너는 음성 받아쓰기의 띄어쓰기와 문장부호만
 예) 입력: 노트북 화면 전체에 보이니까 → 출력: 노트북 화면 전체에 보이니까.
 예) 입력: 음 그 서버 로그 좀 봐 줄래 → 출력: 음 그 서버 로그 좀 봐 줄래?
 고친 글만 출력한다."""
+
+def same_words(heard, corrected):
+    """Step 1 lets only spacing, punctuation and letter case change: the words stay exactly as heard."""
+    def letters(text):
+        return re.sub(r"[\s.,?!]", "", text).lower()
+    return letters(heard) == letters(corrected)
+
 
 PROFILE_PROMPT = """You keep a short profile that helps a dictation app spell this user's words correctly.
 The user message is a JSON array of recent dictations, one string per dictation. Repeated entries are separate dictations. From those texts only:
@@ -53,8 +61,14 @@ class Polisher:
                         raise
 
     def polish(self, text, app):
-        """Spacing and punctuation only (tuning step 1). app, the terms and the typo notes are where later
-        steps will draw from; the typo notes still apply after correction."""
+        """Spacing and punctuation only (tuning step 1). The model still changes a word now and then, so a
+        correction that touched a word is dropped and the text stays as heard. app, the terms and the typo
+        notes are where later steps will draw from; the typo notes still apply after correction."""
+        out = self.correct(text)
+        return out if same_words(text, out) else text
+
+    def correct(self, text):
+        """The correction model's own answer, before the step-1 check."""
         out = self.complete(POLISH_PROMPT, f"<dictation>\n{text}\n</dictation>")
         # A corrector never writes much more than it heard; a long answer means it followed the text as a command.
         if not out or len(out) > len(text) * 1.5 + 20:
