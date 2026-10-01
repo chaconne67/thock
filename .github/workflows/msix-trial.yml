@@ -1,0 +1,84 @@
+# Trial only (주인님 지시 2026-10-01): can Thock run as an MSIX package, the Microsoft Store's own format?
+# The same PyInstaller folder as the installer is packed, signed with a throwaway trial certificate,
+# installed on a clean runner and checked to start. Not a release path.
+name: MSIX trial
+
+on:
+  push:
+    branches: [claude/thock-msix]  # a dispatch needs the file on main; this trial stays off main
+  workflow_dispatch:
+
+jobs:
+  msix:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Build app
+        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/welcome.html;thock" --add-data "thock/recovery.html;thock" --add-data "thock/sounds;thock/sounds" --add-data "thock/fonts;thock/fonts" voicetype.py
+
+      - name: Pack and sign with a trial certificate
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $msixVersion = ($version -replace '\.dev\d+$', '') + '.0'  # MSIX takes four numbers
+          $stage = "dist\msix"
+          Copy-Item dist\Thock $stage -Recurse
+          & installer\msix\logos.ps1 -Out "$stage\Assets"
+          (Get-Content installer\msix\AppxManifest.xml -Raw -Encoding utf8).Replace("__VERSION__", $msixVersion) |
+            Set-Content "$stage\AppxManifest.xml" -Encoding utf8
+          $kit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*\x64\makeappx.exe" | Sort-Object FullName | Select-Object -Last 1
+          $kit = $kit.DirectoryName
+          & "$kit\makeappx.exe" pack /o /d $stage /p dist\Thock.msix
+          if ($LASTEXITCODE) { throw "makeappx exit $LASTEXITCODE" }
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Thock Trial" -CertStoreLocation Cert:\CurrentUser\My `
+            -TextExtension @("2.5.29.19={text}") -NotAfter (Get-Date).AddDays(30)
+          $password = ConvertTo-SecureString -String "trial" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath trial.pfx -Password $password | Out-Null
+          Export-Certificate -Cert $cert -FilePath dist\Thock-trial.cer | Out-Null
+          & "$kit\signtool.exe" sign /fd SHA256 /f trial.pfx /p trial dist\Thock.msix
+          if ($LASTEXITCODE) { throw "signtool exit $LASTEXITCODE" }
+          Remove-Item trial.pfx
+          "package {0} {1:N0} MB" -f $msixVersion, ((Get-Item dist\Thock.msix).Length / 1MB)
+
+      - name: Install the package, it starts and stays running
+        shell: pwsh
+        run: |
+          Import-Certificate -FilePath dist\Thock-trial.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          Add-AppxPackage dist\Thock.msix
+          $pkg = Get-AppxPackage -Name AIShift.Thock
+          if (-not $pkg) { throw "package not installed" }
+          "installed $($pkg.PackageFullName) at $($pkg.InstallLocation)"
+          Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!Thock"
+          Start-Sleep 15
+          $log = Get-Content "$env:USERPROFILE\.voicetype\voicetype.log" -Raw -ErrorAction SilentlyContinue
+          $log
+          $running = Get-Process Thock -ErrorAction SilentlyContinue
+          if (-not $running) { throw "Thock is not running from the package" }
+          if ($running.Path -notlike "*WindowsApps*") { throw "a Thock outside the package is running: $($running.Path)" }
+          if ($log -notmatch "started, hotkey=") { throw "Thock did not log its start" }
+          # The user data folder stays the real one in the profile, not a per-package copy.
+          if (-not (Test-Path "$env:USERPROFILE\.voicetype\settings.json") -and -not (Test-Path "$env:USERPROFILE\.voicetype\voicetype.log")) {
+            throw "no ~/.voicetype in the real profile"
+          }
+          "startup task:"
+          Get-ChildItem "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\$($pkg.PackageFamilyName)" -Recurse -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Name; $_ | Get-ItemProperty | Format-List | Out-String }
+
+      - name: Remove the package
+        shell: pwsh
+        run: |
+          Get-Process Thock -ErrorAction SilentlyContinue | Stop-Process -Force
+          $pkg = Get-AppxPackage -Name AIShift.Thock
+          Remove-AppxPackage $pkg.PackageFullName
+          if (Get-AppxPackage -Name AIShift.Thock) { throw "package still installed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Thock-msix-trial
+          path: |
+            dist/Thock.msix
+            dist/Thock-trial.cer
