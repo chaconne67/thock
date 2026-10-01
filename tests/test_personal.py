@@ -24,10 +24,10 @@ class SettingsCompatibility(unittest.TestCase):
             self.assertEqual((root/"secrets.toml").read_bytes(),before)
             self.assertEqual(json.loads((root/"settings.json").read_text())["terms"],["legacy word"])
 
-    def test_new_install_uses_hold_and_needs_separate_welcome(self):
+    def test_new_install_uses_toggle_and_needs_separate_welcome(self):
         with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
             settings=load_settings()
-            self.assertEqual(settings["input_mode"],"hold")
+            self.assertEqual(settings["input_mode"],"toggle")  # press once to start, again (or Enter) to end
             self.assertFalse(settings["welcome_complete"])
 
 @unittest.skipUnless(sys.platform=="win32","Windows data protection")
