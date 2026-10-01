@@ -24,11 +24,11 @@ class ContentEditableInline(unittest.TestCase):
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         url = f"http://127.0.0.1:{port}"
 
-        def request(method, route, body=None):
+        def request(method, route, body=None, timeout=15):
             data = json.dumps(body).encode() if body is not None else None
             req = urllib.request.Request(url + route, data=data, method=method,
                                          headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as result:
+            with urllib.request.urlopen(req, timeout=timeout) as result:
                 return json.load(result)["value"]
 
         session = None
@@ -40,9 +40,12 @@ class ContentEditableInline(unittest.TestCase):
                     break
                 except OSError:
                     time.sleep(0.1)
+            # Chrome's first start on a fresh runner can pass 15 s; chromedriver itself allows it 60 s,
+            # so wait past that and let chromedriver report a real start failure.
             session = request("POST", "/session", {"capabilities": {"alwaysMatch": {
                 "browserName": "chrome", "goog:chromeOptions": {"args": [
-                    "--force-renderer-accessibility", "--no-first-run", "--window-size=800,600"]}}}})["sessionId"]
+                    "--force-renderer-accessibility", "--no-first-run", "--window-size=800,600"]}}}},
+                timeout=90)["sessionId"]
             route = f"/session/{session}"
             request("POST", route + "/url", {"url": "about:blank"})
 
