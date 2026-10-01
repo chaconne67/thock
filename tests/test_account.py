@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 from unittest.mock import patch
 
-from thock.account import Account, AccountError
+from thock.account import Account, AccountError, blob_text
 
 
 class AccountFlowTests(unittest.TestCase):
@@ -94,3 +94,9 @@ class WindowsCredentialTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StoredSignInTests(unittest.TestCase):
+    def test_reads_thock_utf8_and_crema_utf16_sign_ins(self):
+        self.assertEqual(blob_text("tok-123".encode("utf-8")), "tok-123")
+        self.assertEqual(blob_text("tok-123".encode("utf-16-le")), "tok-123")

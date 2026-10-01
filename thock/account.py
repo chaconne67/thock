@@ -76,6 +76,12 @@ def _advapi():
     return api
 
 
+def blob_text(blob):
+    """A stored sign-in as text: Thock's own is UTF-8, which never holds a zero byte; one stored by Rust's keyring
+    (Crema's, read inside Crema) is UTF-16."""
+    return blob.decode("utf-16-le") if b"\x00" in blob else blob.decode("utf-8")
+
+
 def read_token(name=None):
     name = name or CREDENTIAL_NAME  # looked up per call so tests can isolate it
     api = _advapi()
@@ -86,7 +92,7 @@ def read_token(name=None):
         raise ctypes.WinError(ctypes.get_last_error())
     try:
         entry = pointer.contents
-        return ctypes.string_at(entry.CredentialBlob, entry.CredentialBlobSize).decode("utf-8")
+        return blob_text(ctypes.string_at(entry.CredentialBlob, entry.CredentialBlobSize))
     finally:
         api.CredFree(pointer)
 
