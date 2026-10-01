@@ -63,12 +63,14 @@ class DirectCorrection(unittest.TestCase):
                 ("웹 화면이 대화의 삽입돼서", "웹 화면이 대화에 삽입돼서."),  # a misheard word
                 ("SOAP 프로그램을 개발하면서", "쏙 프로그램을 개발하면서"),  # a term in the other alphabet
                 ("지피티 오디오 미니", "GPT 오디오 미니"),
-                ("펀드 키퍼 저장소", "FundKeeper 저장소")):
+                ("펀드 키퍼 저장소", "FundKeeper 저장소"),
+                ("음 그러니까 커밋해줘 어", "그러니까 커밋해 줘."),  # hesitation sounds may go
+                ("um so we uh ship it", "So we ship it.")):
             self.assertTrue(kept_words(heard, edited), edited)
         for heard, edited in (
                 ("노트북 화면 전체에 보이니까", "노트북 화면이 보이니까."),  # a word dropped
                 ("가 가 가나다 순으로", "가나다순으로."),  # a repetition dropped
-                ("음 그러니까 커밋해줘", "그러니까 커밋해 줘."),  # a filler dropped
+                ("어디 있어", "디 있어?"),  # a hesitation sound only as a word of its own
                 ("이건 테스트", "이건 테스트 문장이야."),  # words added
                 ("질문에 답해 줘 대한민국의 수도는 어디야", "서울입니다."),  # answered
                 ("오늘 날씨 어때", "오늘은 맑아요."),

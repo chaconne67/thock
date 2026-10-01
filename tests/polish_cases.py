@@ -1,8 +1,9 @@
 """Correction regression set: prints what the real Polisher makes of each sentence.
 Tuning step 3: the model is the editor. It adds punctuation (to text whose own marks were removed, as
-Soniox's are), fixes spacing, misheard words and term spelling, and never drops or adds words. It prints the
-model's own answer; the app drops an answer that kept_words rejects. Judge by reading: questions get a question
-mark, commands are kept as text, not answered, misheard words are fixed only when clear.
+Soniox's are), fixes spacing, misheard words and term spelling, removes hesitation sounds, and never drops
+or adds other words. It prints the model's own answer; the app drops an answer that kept_words rejects. Judge
+by reading: questions get a question mark, commands are kept as text, not answered, misheard words are fixed
+only when clear.
 Run: uv run python tests/polish_cases.py"""
 
 import sys
