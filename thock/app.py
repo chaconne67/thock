@@ -656,6 +656,8 @@ class App:
                 self.last.enter()
                 if self.recording:
                     self._stop()
+            elif self.notice_action:  # a message on the pill: Enter is its button
+                self.act_on_notice()
             else:  # the dictation finished meanwhile: give the Enter back now
                 press_enter()
         elif event == "up" and self.recording and not self.toggle:
@@ -769,7 +771,7 @@ def main():
     app.loop = loop
     threading.Thread(target=loop.run_forever, daemon=True).start()
     threading.Thread(target=run_key_hook, args=(app.hotkey_vk, lambda e: loop.call_soon_threadsafe(app.on_key, e),
-                                                lambda: bool(app.active)),
+                                                lambda: bool(app.active or app.notice_action)),
                      daemon=True).start()
     asyncio.run_coroutine_threadsafe(app.maintain_account(), loop)
     log.info("started, hotkey=%s", app.settings["hotkey"])

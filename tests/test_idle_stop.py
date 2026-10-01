@@ -46,14 +46,19 @@ class EnterEnds(unittest.TestCase):
         session.enter = lambda: app.Session.enter(session)
         stopped = []
         state = types.SimpleNamespace(recording=session, _stop=lambda: stopped.append(True),
-                                      settings={"input_mode": "toggle"}, last=session, active={session})
+                                      settings={"input_mode": "toggle"}, last=session, active={session},
+                                      notice_action=None, act_on_notice=Mock())
         app.App.on_key(state, "enter")
         # recording stops, the last words still go in (as heard), then Enter is pressed for the user
         self.assertEqual((stopped, session.entered, live.rushing, live.blocked), ([True], True, True, False))
         state.recording, state.active = None, set()
         with patch("thock.app.press_enter") as pressed:
             app.App.on_key(state, "enter")  # held as the dictation finished: given back at once
-        pressed.assert_called_once()
+            pressed.assert_called_once()
+            state.notice_action = "dismiss"
+            app.App.on_key(state, "enter")  # a message with a button on the pill: Enter presses the button
+        state.act_on_notice.assert_called_once()
+        pressed.assert_called_once()  # and does not reach the app as well
         self.assertEqual(stopped, [True])
 
 
