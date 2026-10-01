@@ -107,6 +107,15 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(live.blocked)
         self.assertEqual(self.errors, [])
 
+    async def test_after_enter_the_last_words_go_in_without_waiting_for_correction(self):
+        written, polished = [], []
+        live = LiveDictation(lambda text: written.append(text) or True, lambda text: polished.append(text) or text + "!",
+                             lambda text: text, lambda message: None)
+        self.addAsyncCleanup(live.close)
+        live.rushing = True
+        self.assertEqual(await live.finish("보낼 말"), "보낼 말")
+        self.assertEqual((written[-1], polished), ("보낼 말", []))
+
     async def test_polish_failure_preserves_raw_and_reports_failure(self):
         def fail(text):
             raise TimeoutError()

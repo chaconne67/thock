@@ -95,22 +95,34 @@ def allow_next_to_front():
 input_events = deque(maxlen=300)  # (time, kind) of the user's own key and click events, for the trace
 
 
-def run_key_hook(get_vk, on_key):
-    """Swallow the hotkey (Shift+hotkey keeps its normal meaning) and report presses. Blocks forever."""
+def press_enter():
+    """The Enter held during a dictation, pressed for the user; marked as the app's own input."""
+    keys = [INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(VK_RETURN, 0, flags, 0, OWN_INPUT)))
+            for flags in (0, KEYEVENTF_KEYUP)]
+    user32.SendInput(len(keys), (INPUT * len(keys))(*keys), ctypes.sizeof(INPUT))
+
+
+def run_key_hook(get_vk, on_key, hold_enter=lambda: False):
+    """Swallow the hotkey (Shift+hotkey keeps its normal meaning) and report presses. Enter (not Shift+Enter)
+    during a dictation is held too: the app presses it once the last words are written. Blocks forever."""
     global _input_tracking
-    state = {"down": False, "passthrough": False}
+    state = {"down": False, "passthrough": False, "enter": False}
 
     def proc(code, wparam, lparam):
         global _input_revision
         if code == 0:
             info = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
             if info.dwExtraInfo != OWN_INPUT and info.vkCode != get_vk():
+                down = wparam in (WM_KEYDOWN, WM_SYSKEYDOWN)
+                if info.vkCode == VK_RETURN and (state["enter"] or (
+                        down and not user32.GetAsyncKeyState(VK_SHIFT) & 0x8000 and hold_enter())):
+                    # Held, not the user's edit: the dictation finishes writing and then presses Enter.
+                    if down and not state["enter"]:
+                        on_key("enter")
+                    state["enter"] = down
+                    return 1
                 _input_revision += 1
-                input_events.append((time.perf_counter(), "key_down" if wparam in (WM_KEYDOWN, WM_SYSKEYDOWN)
-                                     else "key_up"))
-                if (info.vkCode == VK_RETURN and wparam in (WM_KEYDOWN, WM_SYSKEYDOWN)
-                        and not user32.GetAsyncKeyState(VK_SHIFT) & 0x8000):
-                    on_key("enter")  # passed through: the app still receives Enter
+                input_events.append((time.perf_counter(), "key_down" if down else "key_up"))
             if info.vkCode == get_vk():
                 if wparam in (WM_KEYDOWN, WM_SYSKEYDOWN):
                     if not state["down"]:

@@ -24,6 +24,9 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.patch_target = patch("thock.app.capture_target", return_value=(1, (2,), 0))
         self.patch_target.start()
         self.addCleanup(self.patch_target.stop)
+        self.patch_enter = patch("thock.app.press_enter")
+        self.press_enter = self.patch_enter.start()
+        self.addCleanup(self.patch_enter.stop)
         self.patch_app = patch("thock.app.foreground_app", return_value="test-editor")
         self.patch_app.start()
         self.addCleanup(self.patch_app.stop)
@@ -40,6 +43,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             report_error=Mock(), idle_since=time.perf_counter() - 3600)
         # The live input field: records what reached the target field; ok=False means it moved.
         self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None, mismatch=None,
+                                     target=(1, (2,), 0),
                                      restart=lambda: False)
         def update(text):
             self.field.writes.append(text)
@@ -188,6 +192,33 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.state.queue_report.call_args.args[2], "recovered")
         record = self.state.report_error.call_args.args[1]
         self.assertEqual((record["input_failure"], record["ended"]), ("delivery_unverified", "enter"))
+        self.press_enter.assert_not_called()  # a kept text is never sent half-written
+
+    async def test_enter_is_pressed_after_the_last_words_are_in(self):
+        order = []
+        self.field.update = lambda text: order.append(("write", text)) or True
+        self.press_enter.side_effect = lambda: order.append(("enter",))
+        async def transcribe(chunks, api_key, context, heard, endpoint, **kwargs):
+            heard("마지막 말까지")
+            await asyncio.sleep(0.05)
+            session.enter()  # the user pressed Enter while the words were still coming in
+            return "마지막 말까지 다 넣고"
+        with patch("thock.app.transcribe", side_effect=transcribe):
+            session = self.start()
+            session.stop()
+            await session.task
+        self.assertEqual(order[-2:], [("write", "마지막 말까지 다 넣고"), ("enter",)])
+        self.press_enter.reset_mock()
+        with patch("thock.app.capture_target", return_value=(9, (9,), 0)):  # another window now
+            async def moved(chunks, api_key, context, heard, endpoint, **kwargs):
+                session.enter()
+                return "다른 창"
+            with patch("thock.app.transcribe", side_effect=moved):
+                self.state.recording = None
+                session = self.start()
+                session.stop()
+                await session.task
+        self.press_enter.assert_not_called()
 
     async def test_stream_failure_stops_mic_and_does_not_paste_partial_text(self):
         with patch("thock.app.transcribe", new_callable=AsyncMock, side_effect=TimeoutError):

@@ -29,8 +29,8 @@ from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .live_input import LiveDictation
-from .win32 import (foreground_app, capture_target, copy_text, InlineField, input_events, kernel32, ready_target,
-                    run_key_hook, user32)
+from .win32 import (foreground_app, capture_target, copy_text, InlineField, input_events, kernel32, press_enter,
+                    ready_target, run_key_hook, user32)
 from .personal import append_history, read_data, write_data, import_legacy, history_data
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
@@ -94,10 +94,20 @@ class Session:
         return field
 
     def enter(self):
-        """Enter sent the dictated message: write nothing more, not even a pending correction."""
+        """Enter during the dictation: held until the last words are written (as heard, not waiting for
+        their correction), then pressed for the user."""
         self.entered = True
         if self.live:
-            self.live.blocked = True
+            self.live.rushing = True
+
+    def _send_enter(self, field):
+        """Press the held Enter if the dictation's field still has the focus."""
+        if (capture_target() or (None, None))[:2] == field.target[:2]:
+            press_enter()
+            self.mark("enter_sent")
+        else:
+            self.mark("enter_not_sent")
+            self.state.notify("보낼 창이 바뀌어 Enter는 누르지 않았습니다.", seconds=5)
 
     def _stop_when_idle(self):
         """A tap-started dictation ends like a second tap once speech has stopped for IDLE_STOP."""
@@ -236,7 +246,7 @@ class Session:
                                              lambda message: self.state.notify(message, fault=live.blocked),
                                              field.restart, self.mark)
             if self.entered:
-                live.blocked = True
+                live.rushing = True
 
             def heard(words):
                 if self.first_text_at is None and words.strip():
@@ -274,6 +284,8 @@ class Session:
                 self.state.notify(reason, action="copy", fault=True)
             elif text and s["learn"] and not self.entered:
                 self.state.watcher.watch(text)
+            if self.entered and not field.failure:  # a kept text is never sent half-written
+                await asyncio.to_thread(self._send_enter, field)
             total_ms = max(0, round((time.perf_counter() - self.released) * 1000))
         except AccountError as error:
             record["error"] = error.code
@@ -639,9 +651,10 @@ class App:
                 self.active.add(self.recording)
                 self.last = self.recording
                 self._sync_sound()
-        elif event == "enter" and self.recording:
-            self.recording.enter()
-            self._stop()
+        elif event == "enter" and self.last in self.active:
+            self.last.enter()
+            if self.recording:
+                self._stop()
         elif event == "up" and self.recording and not self.toggle:
             if mode == "auto" and now - self.pressed_at < TAP_SECONDS:
                 self.toggle = True
@@ -752,7 +765,8 @@ def main():
     loop = asyncio.new_event_loop()
     app.loop = loop
     threading.Thread(target=loop.run_forever, daemon=True).start()
-    threading.Thread(target=run_key_hook, args=(app.hotkey_vk, lambda e: loop.call_soon_threadsafe(app.on_key, e)),
+    threading.Thread(target=run_key_hook, args=(app.hotkey_vk, lambda e: loop.call_soon_threadsafe(app.on_key, e),
+                                                lambda: bool(app.active)),
                      daemon=True).start()
     asyncio.run_coroutine_threadsafe(app.maintain_account(), loop)
     log.info("started, hotkey=%s", app.settings["hotkey"])

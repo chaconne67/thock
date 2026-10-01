@@ -16,6 +16,7 @@ class LiveDictation:
         self.changed, self.segment_ready = asyncio.Event(), asyncio.Event()
         self.ending = False
         self.blocked = False
+        self.rushing = False  # Enter is waiting: the last words go in as heard, without their correction
         self.error = None
         self.delivered = ""
         self.writer = asyncio.create_task(self._write())
@@ -48,7 +49,7 @@ class LiveDictation:
             if segment:
                 content = segment.strip()
                 corrected = content
-                if content and self.polish:
+                if content and self.polish and not self.rushing:
                     started = asyncio.get_running_loop().time()
                     try:
                         corrected = await asyncio.to_thread(self.polish, content)
