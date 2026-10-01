@@ -253,7 +253,6 @@ class InputModes(unittest.TestCase):
         app.settings = {**DEFAULTS, "input_mode": mode, "welcome_complete": True}
         app.recording = None
         app.toggle = False
-        app.pressed_at = 0
         app.account = SimpleNamespace(token="test", cached={"state": "signed_in", "ready": True})
         app.data_root = Path("unused")
         app.active = set()
@@ -301,15 +300,6 @@ class InputModes(unittest.TestCase):
         app, session = self.fake_app("toggle")
         app.on_key("down")
         app.on_key("up")
-        session.stop.assert_not_called()
-        app.on_key("down")
-        session.stop.assert_called_once()
-
-    def test_legacy_short_press_still_toggles(self):
-        app, session = self.fake_app("auto")
-        app.on_key("down")
-        app.on_key("up")
-        self.assertTrue(app.toggle)
         session.stop.assert_not_called()
         app.on_key("down")
         session.stop.assert_called_once()

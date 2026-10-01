@@ -19,7 +19,7 @@ from collections import deque
 import sounddevice as sd
 
 from .config import (APP_NAME, HOME, HOTKEYS, INPUT_MODES, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
-                     TAP_SECONDS, VERSION, load_settings, log, save_settings, trace)
+                     VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
 from .editwatch import EditWatcher
@@ -391,7 +391,6 @@ class App:
         self.watcher.enabled = self.settings["learn"]
         self.active = set()
         self.recording = None
-        self.pressed_at = 0.0
         self.toggle = False
         self.last = None
         self.levels = deque([0.0] * BARS, maxlen=BARS)  # microphone loudness, newest last
@@ -631,8 +630,7 @@ class App:
         return HOTKEYS[self.settings["hotkey"]]
 
     def on_key(self, event):
-        """Runs on the asyncio thread; the user chooses hold or toggle. Old settings keep mixed mode."""
-        now = time.perf_counter()
+        """Runs on the asyncio thread; the user chooses hold or toggle."""
         if self.recording:
             self.recording.mark("hotkey_" + event)
         mode = self.recording.settings["input_mode"] if self.recording else self.settings["input_mode"]
@@ -663,7 +661,7 @@ class App:
                                           ensure_ascii=False))
                     self.notify(WAITING, action="dismiss")
                     return
-                self.pressed_at, self.toggle = now, mode == "toggle"
+                self.toggle = mode == "toggle"
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation
                 rescanned = self.devices_changed and not self.active
@@ -688,10 +686,7 @@ class App:
             else:  # the dictation finished meanwhile: give the Enter back now
                 press_enter()
         elif event == "up" and self.recording and not self.toggle:
-            if mode == "auto" and now - self.pressed_at < TAP_SECONDS:
-                self.toggle = True
-            else:
-                self._stop()
+            self._stop()
 
     def _start_session(self, target):
         if self.devices_changed and not self.active:

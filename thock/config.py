@@ -5,13 +5,12 @@ import logging
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.3"
+APP_NAME, VERSION = "Thock", "0.4.4.dev1"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
 SONIOX_MODEL = "stt-rt-v5"
-INPUT_MODES = {"hold": "누르는 동안", "toggle": "한 번씩 눌러 시작·종료", "auto": "기존 방식 (누르기 + 짧게 두 번)"}
-TAP_SECONDS = 0.35  # shorter press = toggle mode, longer press = push-to-talk
+INPUT_MODES = {"hold": "누르는 동안", "toggle": "한 번씩 눌러 시작·종료"}
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
                    "hhkb": "HHKB Professional Hybrid", "leopold": "Leopold FC660M",
@@ -38,9 +37,6 @@ def load_settings():
     settings_path = HOME / "settings.json"
     stored = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
     settings = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS}}
-    # An existing installation retains its short-tap/hold behavior until the user chooses.
-    if stored and "input_mode" not in stored:
-        settings["input_mode"] = "auto"
     if settings["input_mode"] not in INPUT_MODES:
         settings["input_mode"] = DEFAULTS["input_mode"]
     if not isinstance(settings["sound_keyboard"], str) or settings["sound_keyboard"] not in SOUND_KEYBOARDS:

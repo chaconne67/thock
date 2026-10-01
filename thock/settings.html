@@ -360,8 +360,7 @@ function renderHint() {
   const key = hotkey() === "capslock" ? "CapsLock" : "ScrollLock";
   const mode = $("input-mode").value;
   const message = mode === "hold" ? key + "을 누르는 동안 말하고, 떼면 끝납니다."
-    : mode === "toggle" ? key + "을 한 번 눌러 시작하고, 다시 누르면 끝납니다."
-    : key + "을 누르는 동안 말하거나, 짧게 한 번 눌러 시작하고 다시 눌러 끝냅니다.";
+    : key + "을 한 번 눌러 시작하고, 다시 누르면 끝납니다.";
   $("hotkey-hint").textContent = message + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
   $("terms-count").textContent = `${termsList().length}개`;
 }

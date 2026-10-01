@@ -9,7 +9,7 @@ from thock.config import load_settings, save_settings
 from thock.personal import MAGIC, read_data, write_data, import_legacy, history_data, append_history
 
 class SettingsCompatibility(unittest.TestCase):
-    def test_existing_mixed_input_terms_and_secrets_are_preserved(self):
+    def test_existing_terms_and_secrets_are_preserved(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root/"settings.json").write_text(json.dumps({"hotkey":"scrolllock","terms":["legacy word"],"sound_keyboard":"hhkb"}))
@@ -17,12 +17,17 @@ class SettingsCompatibility(unittest.TestCase):
             before = (root/"secrets.toml").read_bytes()
             with patch("thock.config.HOME",root):
                 settings = load_settings()
-                self.assertEqual(settings["input_mode"], "auto")
+                self.assertEqual(settings["input_mode"], "toggle")
                 self.assertEqual(settings["sound_keyboard"], "hhkb")
                 settings["terms"] = ["different account"]
                 save_settings(settings)
             self.assertEqual((root/"secrets.toml").read_bytes(),before)
             self.assertEqual(json.loads((root/"settings.json").read_text())["terms"],["legacy word"])
+
+    def test_removed_mixed_mode_becomes_toggle(self):
+        with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
+            (Path(temp)/"settings.json").write_text(json.dumps({"input_mode":"auto"}))
+            self.assertEqual(load_settings()["input_mode"],"toggle")
 
     def test_new_install_uses_toggle_and_needs_separate_welcome(self):
         with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
