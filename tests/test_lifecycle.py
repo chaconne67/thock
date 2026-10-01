@@ -20,6 +20,9 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.patch_mic = patch("thock.app.sd.RawInputStream", return_value=self.mic)
         self.patch_mic.start()
         self.addCleanup(self.patch_mic.stop)
+        self.patch_target = patch("thock.app.capture_target", return_value=(1, (2,), 0))
+        self.patch_target.start()
+        self.addCleanup(self.patch_target.stop)
         self.patch_app = patch("thock.app.foreground_app", return_value="test-editor")
         self.patch_app.start()
         self.addCleanup(self.patch_app.stop)
@@ -109,6 +112,30 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.state.recover.assert_called_once()
         self.assertEqual(self.state.recover.call_args.args[0], "보관할 글")
         self.assertFalse(self.state.active)
+
+    async def test_no_field_when_dictation_starts_leads_back_instead_of_recording(self):
+        from thock.app import WAITING
+        self.field.stopped, self.field.failure = True, "range_unavailable"
+        with patch("thock.app.transcribe", new_callable=AsyncMock) as speech:
+            session = self.start()
+            await session.task
+        speech.assert_not_called()
+        self.mic.close.assert_called_once()
+        self.state.notify.assert_called_once_with(WAITING, action="dismiss")
+        self.assertEqual(self.state.queue_report.call_args.args[2], "empty")
+        self.state.recover.assert_not_called()
+        self.assertEqual(self.field.mismatch, "start: unreadable")
+
+    async def test_a_click_into_another_field_before_the_start_is_not_written_into(self):
+        captured = []
+        with patch("thock.app.capture_target", return_value=(1, (9,), 1)), \
+                patch("thock.app.InlineField", side_effect=lambda target: captured.append(target) or self.field):
+            self.field.stopped = True
+            with patch("thock.app.transcribe", new_callable=AsyncMock):
+                session = self.start()
+                await session.task
+        self.assertEqual(captured, [None])
+        self.assertEqual(self.field.mismatch, "start: another field")
 
     async def test_first_words_timing_is_recorded(self):
         quiet, loud = bytes(1600), array.array("h", [12000, -12000] * 800).tobytes()

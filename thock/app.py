@@ -28,7 +28,7 @@ from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .live_input import LiveDictation
-from .win32 import foreground_app, copy_text, InlineField, kernel32, ready_target, run_key_hook, user32
+from .win32 import foreground_app, capture_target, copy_text, InlineField, kernel32, ready_target, run_key_hook, user32
 from .personal import append_history, read_data, write_data, import_legacy, history_data
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
@@ -77,6 +77,17 @@ class Session:
         self.limit_timer = self.loop.call_later(300, self.stop)
         self.task = asyncio.create_task(self.run())
         self.loop.call_later(IDLE_STOP, self._stop_when_idle)
+
+    def _field(self):
+        """The field checked at the key press, taken again as dictation starts: a click inside it since then
+        only moves the caret; another field, or none, is no place to write."""
+        target = capture_target()
+        same = bool(target) and target[:2] == self.target[:2]
+        field = InlineField(target if same else None)
+        if field.stopped:
+            field.mismatch = ("start: no field" if not target else "start: another field" if not same
+                              else "start: unreadable")
+        return field
 
     def enter(self):
         """Enter sent the dictated message: write nothing more, not even a pending correction."""
@@ -186,7 +197,14 @@ class Session:
                     self.limit_timer = self.loop.call_later(remaining, self.stop)
             if self.previous:
                 await asyncio.shield(self.previous)  # earlier dictation finishes writing first
-            field = await asyncio.to_thread(InlineField, self.target)
+            field = await asyncio.to_thread(self._field)
+            if field.stopped:  # no field to write into after all: lead back to one instead of recording
+                self.stop()
+                record["input_failure"] = field.failure
+                log.info("dictation not started: %s", field.mismatch)
+                self.state.notify(WAITING, action="dismiss")
+                outcome = "empty"
+                return
             polish = (lambda words: self.state.polisher.polish(words, self.app)) if s["polish"] else None
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
                                              lambda message: self.state.notify(message, fault=live.blocked),
