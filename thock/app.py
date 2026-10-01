@@ -94,11 +94,9 @@ class Session:
         return field
 
     def enter(self):
-        """Enter during the dictation: held until the last words are written (as heard, not waiting for
-        their correction), then pressed for the user."""
+        """Enter during the dictation: held until the last words are written and corrected, then pressed
+        for the user."""
         self.entered = True
-        if self.live:
-            self.live.rushing = True
 
     def _send_enter(self, field):
         """Press the held Enter if the dictation's field still has the focus."""
@@ -245,8 +243,6 @@ class Session:
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
                                              lambda message: self.state.notify(message, fault=live.blocked),
                                              field.restart, self.mark)
-            if self.entered:
-                live.rushing = True
 
             def heard(words):
                 if self.first_text_at is None and words.strip():

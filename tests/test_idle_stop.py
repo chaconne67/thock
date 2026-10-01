@@ -39,7 +39,7 @@ class IdleStop(unittest.TestCase):
 class EnterEnds(unittest.TestCase):
     def test_enter_ends_dictation_and_blocks_pending_writes(self):
         from thock import app
-        live = types.SimpleNamespace(blocked=False, rushing=False)
+        live = types.SimpleNamespace(blocked=False)
         # a hashable stand-in, like a real session (it goes into the active set)
         session = type("Session", (), {"live": live, "entered": False, "settings": {"input_mode": "toggle"},
                                        "mark": lambda self, *a, **k: None})()
@@ -49,8 +49,8 @@ class EnterEnds(unittest.TestCase):
                                       settings={"input_mode": "toggle"}, last=session, active={session},
                                       notice_action=None, act_on_notice=Mock())
         app.App.on_key(state, "enter")
-        # recording stops, the last words still go in (as heard), then Enter is pressed for the user
-        self.assertEqual((stopped, session.entered, live.rushing, live.blocked), ([True], True, True, False))
+        # recording stops, the last words still go in and are corrected, then Enter is pressed for the user
+        self.assertEqual((stopped, session.entered, live.blocked), ([True], True, False))
         state.recording, state.active = None, set()
         with patch("thock.app.press_enter") as pressed:
             app.App.on_key(state, "enter")  # held as the dictation finished: given back at once

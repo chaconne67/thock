@@ -194,7 +194,8 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((record["input_failure"], record["ended"]), ("delivery_unverified", "enter"))
         self.press_enter.assert_not_called()  # a kept text is never sent half-written
 
-    async def test_enter_is_pressed_after_the_last_words_are_in(self):
+    async def test_enter_is_pressed_after_the_last_words_are_in_and_corrected(self):
+        self.state.settings["polish"] = True
         order = []
         self.field.update = lambda text: order.append(("write", text)) or True
         self.press_enter.side_effect = lambda: order.append(("enter",))
@@ -207,7 +208,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             session = self.start()
             session.stop()
             await session.task
-        self.assertEqual(order[-2:], [("write", "마지막 말까지 다 넣고"), ("enter",)])
+        self.assertEqual(order[-2:], [("write", "다듬은 글"), ("enter",)])  # the correction is in before Enter
         self.press_enter.reset_mock()
         with patch("thock.app.capture_target", return_value=(9, (9,), 0)):  # another window now
             async def moved(chunks, api_key, context, heard, endpoint, **kwargs):
