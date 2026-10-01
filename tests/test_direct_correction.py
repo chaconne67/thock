@@ -31,7 +31,7 @@ class DirectCorrection(unittest.TestCase):
         body = b'{"choices": [{"message": {"content": "\\ub2e4\\ub4ec\\uc740 \\uae00."}}]}'
         polisher, account, conn = self.polisher([Response(401), Response(200, body)])
         with patch("thock.correction.http.client.HTTPSConnection", return_value=conn) as opened:
-            self.assertEqual(polisher.polish("다듬을 글", "claude.exe"), "다듬은 글.")
+            self.assertEqual(polisher.correct("다듬을 글"), "다듬은 글.")  # the model answer; polish() then checks it
         opened.assert_called_once_with("openrouter.ai", timeout=8)
         self.assertEqual([c.kwargs for c in account.correction_key.call_args_list], [{"force": False}, {"force": True}])
         headers = conn.request.call_args.args[3]
