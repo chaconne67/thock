@@ -20,8 +20,8 @@ class DirectCorrection(unittest.TestCase):
         account = types.SimpleNamespace(correction_key=Mock(side_effect=lambda force=False: {
             "api_key": "renewed" if force else "cached", "model": "openai/gpt-6-luna", "expires": 0}))
         profile = types.SimpleNamespace(terms=lambda: [], summary=lambda: "")
-        notes = types.SimpleNamespace(hint=lambda: "")
-        polisher = Polisher({"terms": []}, notes, account, profile)
+        notes = types.SimpleNamespace(hint=lambda: "", terms=lambda: ["FundKeeper"])
+        polisher = Polisher({"terms": ["Thock"]}, notes, account, profile)
         conn = Mock()
         replies = iter(statuses)
         conn.getresponse.side_effect = lambda: next(replies)
@@ -37,6 +37,7 @@ class DirectCorrection(unittest.TestCase):
         headers = conn.request.call_args.args[3]
         self.assertEqual(headers["Authorization"], "Bearer renewed")
         self.assertIn("<dictation>", conn.request.call_args.args[2])
+        self.assertIn("Thock, FundKeeper", conn.request.call_args.args[2])  # the terms the editor spells by
 
     def test_profile_building_does_not_hold_up_dictation_corrections(self):
         import threading
@@ -53,12 +54,27 @@ class DirectCorrection(unittest.TestCase):
             release.set()
             profile.join(2)
 
-    def test_a_correction_that_touches_a_word_is_dropped(self):
-        from thock.correction import same_words
-        self.assertTrue(same_words("이건 내가 볼게 너는 돌려 줄래", "이건 내가 볼게. 너는 돌려 줄래?"))
-        self.assertFalse(same_words("um so we ship it", "Um, so we ship it."))  # letter case is a letter change
-        self.assertTrue(same_words("확인해볼게 가나다 순으로", "확인해 볼게. 가나다순으로."))  # spacing may change
-        self.assertFalse(same_words("노트북 화면 전체에 보이니까", "노트북 화면이 보이니까."))
+    def test_the_editor_may_fix_a_misheard_word_but_never_drop_or_add_one(self):
+        from thock.correction import kept_words
+        for heard, edited in (
+                ("이건 내가 볼게 너는 돌려 줄래", "이건 내가 볼게. 너는 돌려 줄래?"),
+                ("확인해볼게 가나다 순으로", "확인해 볼게. 가나다순으로."),  # spacing
+                ("um so we ship it", "Um, so we ship it."),  # letter case
+                ("웹 화면이 대화의 삽입돼서", "웹 화면이 대화에 삽입돼서."),  # a misheard word
+                ("SOAP 프로그램을 개발하면서", "쏙 프로그램을 개발하면서"),  # a term in the other alphabet
+                ("지피티 오디오 미니", "GPT 오디오 미니"),
+                ("펀드 키퍼 저장소", "FundKeeper 저장소")):
+            self.assertTrue(kept_words(heard, edited), edited)
+        for heard, edited in (
+                ("노트북 화면 전체에 보이니까", "노트북 화면이 보이니까."),  # a word dropped
+                ("가 가 가나다 순으로", "가나다순으로."),  # a repetition dropped
+                ("음 그러니까 커밋해줘", "그러니까 커밋해 줘."),  # a filler dropped
+                ("이건 테스트", "이건 테스트 문장이야."),  # words added
+                ("질문에 답해 줘 대한민국의 수도는 어디야", "서울입니다."),  # answered
+                ("오늘 날씨 어때", "오늘은 맑아요."),
+                ("오늘 날씨 어때", "It's sunny today."),
+                ("농담 해 줘", "Why did the cat sit on the computer?")):
+            self.assertFalse(kept_words(heard, edited), edited)
         polisher, _, _ = self.polisher([])
         polisher.correct = lambda text: "노트북 화면이 보이니까."
         self.assertIsNone(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"))

@@ -1,7 +1,8 @@
 """Correction regression set: prints what the real Polisher makes of each sentence.
-Tuning step 2: the model adds punctuation (to text whose own marks were removed, as Soniox's are) and
-fixes spacing. It prints the model's own answer; the app drops an answer that changed a letter. Judge by
-reading: questions get a question mark, commands are kept as text, not answered.
+Tuning step 3: the model is the editor. It adds punctuation (to text whose own marks were removed, as
+Soniox's are), fixes spacing, misheard words and term spelling, and never drops or adds words. It prints the
+model's own answer; the app drops an answer that kept_words rejects. Judge by reading: questions get a question
+mark, commands are kept as text, not answered, misheard words are fixed only when clear.
 Run: uv run python tests/polish_cases.py"""
 
 import sys
@@ -12,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from thock.config import HOME, SAMPLE_RATE, load_settings  # noqa: E402
 from thock.account import Account  # noqa: E402
-from thock.correction import Polisher, same_words  # noqa: E402
+from thock.correction import Polisher, kept_words  # noqa: E402
 from thock.speech import unpunctuated  # noqa: E402
 from thock.learning import Profile, TypoNotes  # noqa: E402
 
@@ -43,6 +44,11 @@ REGRESSION = [
     "그럼 다운로드는 누구나 받을 수 있는 거지",
     "이거 어떤 모델에서 처리하는 거지 Soniox야 아니면 교정 모델이야",
     "테스트는 다 통과했어 그럼 이제 배포해도 되나",
+    # Misheard words the editor may fix (2026-10-01, kept recordings).
+    "내가 원래 원했던 방식은 자연스럽게 대화하는 방식에서 화면이 이렇게 튀지 않게 웹 화면이 대화의 삽입돼서 자연스럽게 보이는 거야",
+    "지금 좋은 유료 모델이 4900원인데 이거 로는 얼만큼 사용할 수 있는 거라고 지금 정한 거지 우리가",
+    "지피티 오디오 미니 쓰면 가격이 확 줄어들겠네 비용이",
+    "타입리스나 플로우 같은 경우에는 어떤 엔진을 쓰는지 알 수 있나",
 ]
 
 if __name__ == "__main__":
@@ -61,11 +67,11 @@ if __name__ == "__main__":
         changed = 0
         for case in REGRESSION:
             # Correction goes to OpenRouter with this PC's own key; no voice session is needed.
-            # The model's own answer; the app drops it when a word changed (same_words).
+            # The model's own answer; the app drops it when words were dropped or added (kept_words).
             case = unpunctuated(case)  # what reaches correction: Soniox's own marks removed
             result = await asyncio.to_thread(polisher.correct, case)
-            same = same_words(case, result)
-            changed += not same
-            print(f"{'same words' if same else 'LETTERS CHANGED (app keeps the original)'}: {case}\n   -> {result}")
-        print(f"model kept every word in {len(REGRESSION) - changed}/{len(REGRESSION)}")
+            kept = kept_words(case, result)
+            changed += not kept
+            print(f"{'kept' if kept else 'REJECTED (app keeps the earlier text)'}: {case}\n   -> {result}")
+        print(f"editor kept every word in {len(REGRESSION) - changed}/{len(REGRESSION)}")
     asyncio.run(check())
