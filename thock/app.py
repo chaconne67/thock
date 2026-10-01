@@ -18,7 +18,7 @@ from collections import deque
 
 import sounddevice as sd
 
-from .config import (APP_NAME, HOME, HOTKEYS, INPUT_MODES, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
+from .config import (APP_NAME, EMBEDDED, HOME, HOTKEYS, INPUT_MODES, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
                      VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
@@ -369,6 +369,8 @@ class Session:
 class App:
     def __init__(self, settings):
         self.settings = settings
+        if EMBEDDED:  # Crema signed the member in and shows the account; there is no Thock welcome
+            self.settings["welcome_complete"] = True
         self.data_root = None
         self.data_lock = threading.RLock()
         self.settings["terms"] = []
@@ -596,7 +598,10 @@ class App:
 
     def welcome_if_needed(self, status):
         """Each start: an account that cannot dictate yet (signed out, or no access) opens the sign-in and
-        invite code window. Offline is not the member's to fix, so it waits for the hotkey."""
+        invite code window. Offline is not the member's to fix, so it waits for the hotkey. Inside Crema,
+        Crema shows the account."""
+        if EMBEDDED:
+            return
         if status["state"] == "signed_out" or (status["state"] == "signed_in" and not status.get("ready")):
             self.open_welcome()
 
@@ -682,6 +687,16 @@ class App:
         elif event == "up" and self.recording and not self.toggle:
             self._stop()
 
+    def dictate(self):
+        """Crema's mic button, after Crema has focused its input field: start a dictation that the next press
+        stops (as toggle mode), or stop the running one."""
+        if self.recording:
+            self._stop()
+            return
+        self.on_key("down")
+        if self.recording:
+            self.toggle = True
+
     def _start_session(self, target):
         if self.devices_changed and not self.active:
             self._rescan_audio()
@@ -735,7 +750,7 @@ class App:
                             "error": self.profile.last_error} if self.data_root else {},
                 "personal_ready": self.data_root is not None,
                 "personal_key": self.data_root.name if self.data_root else None,
-                "recovery": self.recovery,
+                "recovery": self.recovery, "embedded": EMBEDDED,
                 "account": self.account.cached, "version": VERSION}
 
     def update_settings(self, body):
@@ -784,6 +799,9 @@ def main():
     app = App(load_settings())
     server = SettingsServer(app)
     app.open_settings, app.open_welcome, app.open_recovery = server.open, server.open_welcome, server.open_recovery
+    if EMBEDDED:  # Crema shows this run's settings page inside its own settings and drives the mic from here
+        (HOME / "embedded.json").write_text(json.dumps({"port": server.httpd.server_port, "token": server.token}),
+                                            encoding="utf-8")
     loop = asyncio.new_event_loop()
     app.loop = loop
     threading.Thread(target=loop.run_forever, daemon=True).start()

@@ -466,6 +466,10 @@ function fill(s) {
   refreshAccount();
   fillPersonal(s);
   $("version").textContent = "Thock " + s.version;
+  if (s.embedded) {  // inside Crema: Crema signs in and closes its settings
+    for (const id of ["account-login", "account-logout", "close"]) $(id).style.display = "none";
+    document.querySelector(".account-actions a").style.display = "none";
+  }
 }
 
 function fillPersonal(s) {

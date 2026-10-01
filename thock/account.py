@@ -6,6 +6,7 @@ import ctypes.wintypes as wt
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import threading
 import time
@@ -15,10 +16,10 @@ import urllib.request
 import uuid
 from datetime import datetime
 
-from .config import VERSION
+from .config import EMBEDDED, VERSION
 
-SITE = "https://thock.cloud"  # Thock's own address for AI Shift accounts
-CREDENTIAL_NAME = "AIShift/Thock"
+SITE = os.environ.get("THOCK_SITE") or "https://thock.cloud"  # Thock's own address for AI Shift accounts
+CREDENTIAL_NAME = os.environ.get("THOCK_CREDENTIAL") or "AIShift/Thock"
 MESSAGES = {
     "signed_out": "AI Shift에 다시 로그인해 주세요.",
     "access_unavailable": "이 계정의 Thock 이용권을 확인해 주세요.",
@@ -221,7 +222,8 @@ class Account:
     def _clear(self, token):
         with self.lock:
             if token == self.token:
-                delete_token()
+                if not EMBEDDED:  # inside Crema the sign-in is Crema's, which signs out itself
+                    delete_token()
                 delete_token(CREDENTIAL_NAME + "/Correction")  # the server switches the key off as well
                 self.key = None
                 self.token = None

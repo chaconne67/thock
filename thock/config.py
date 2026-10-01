@@ -2,11 +2,15 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 
 
 APP_NAME, VERSION = "Thock", "0.4.6"
-HOME = Path.home() / ".voicetype"
+# Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
+# its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
+EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
+HOME = Path(os.environ["THOCK_HOME"]) if os.environ.get("THOCK_HOME") else Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
 SONIOX_MODEL = "stt-rt-v5"

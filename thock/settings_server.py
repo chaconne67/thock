@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .account import AccountError
-from .config import HOME, log
+from .config import EMBEDDED, HOME, log
 from .sound import SOUNDS
 
 
@@ -57,6 +57,10 @@ class SettingsServer:
         self._open("/recovery")
 
     def _open(self, path):
+        if EMBEDDED and path in {"/", "/welcome"}:  # Crema opens its settings at 음성 입력
+            log.info("host settings opened")
+            subprocess.Popen([os.environ.get("THOCK_HOST_EXE", ""), "--voice-settings"])
+            return
         log.info("local window opened: %s", path)
         self.window += 1
         url = f"http://127.0.0.1:{self.httpd.server_port}{path}?t={self.token}&w={self.window}"
@@ -160,6 +164,9 @@ class SettingsServer:
                     return self._dispatch_post(path, body)
 
             def _dispatch_post(self, path, body):
+                if path == "/api/dictate":
+                    server.app.loop.call_soon_threadsafe(server.app.dictate)
+                    return self._send(202, {"ok": True})
                 if path == "/api/window":
                     action = {"welcome": server.open_welcome, "recovery": server.open_recovery}.get(body.get("name"))
                     if not action:

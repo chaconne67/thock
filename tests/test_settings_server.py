@@ -109,3 +109,35 @@ class LocalScreens(unittest.TestCase):
         result = json.load(self.request("/api/settings", {"personal_key": "current-account", "terms": ["my word"]}))
         self.assertTrue(result["saved"])
         self.app.update_settings.assert_called_once()
+
+
+class InsideCrema(unittest.TestCase):
+    def test_crema_mic_hands_a_press_to_the_app(self):
+        loop = Mock()
+        app = SimpleNamespace(public_settings=lambda: {}, account_status=lambda **kw: {}, recovery=[], data_root=None,
+                              data_lock=threading.RLock(), active=set(), profile=SimpleNamespace(building=False),
+                              loop=loop, dictate=Mock())
+        server = SettingsServer(app)
+        try:
+            request = urllib.request.Request(f"http://127.0.0.1:{server.httpd.server_port}/api/dictate", data=b"{}",
+                                             headers={"X-Token": server.token, "Content-Type": "application/json"})
+            self.assertEqual(urllib.request.urlopen(request, timeout=2).status, 202)
+            loop.call_soon_threadsafe.assert_called_once_with(app.dictate)
+        finally:
+            server.httpd.shutdown()
+            server.httpd.server_close()
+
+    def test_settings_inside_crema_open_crema(self):
+        from unittest.mock import patch
+        app = SimpleNamespace(public_settings=lambda: {}, account_status=lambda **kw: {}, recovery=[], data_root=None,
+                              data_lock=threading.RLock(), active=set(), profile=SimpleNamespace(building=False))
+        server = SettingsServer(app)
+        try:
+            with patch("thock.settings_server.EMBEDDED", True), patch.dict("os.environ", {"THOCK_HOST_EXE": "C:/Crema/app.exe"}), \
+                    patch("thock.settings_server.subprocess.Popen") as popen:
+                server.open()
+                server.open_welcome()
+            self.assertEqual([c.args[0] for c in popen.call_args_list], [["C:/Crema/app.exe", "--voice-settings"]] * 2)
+        finally:
+            server.httpd.shutdown()
+            server.httpd.server_close()
