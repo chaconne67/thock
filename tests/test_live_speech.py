@@ -25,9 +25,9 @@ class SpeechEndpoints(unittest.IsolatedAsyncioTestCase):
         seen, endpoints = [], []
         with patch("thock.speech.websockets.connect", new_callable=AsyncMock, return_value=Socket()):
             result = await transcribe(audio(), "test", lambda: {}, seen.append, endpoints.append)
-        self.assertEqual(result, "하나. 둘.")
-        self.assertEqual(endpoints, ["하나.", "하나. 둘."])
-        self.assertEqual(seen, ["하나. 임시", "하나. 둘.", "하나. 둘."])
+        self.assertEqual(result, "하나 둘")  # Soniox marks removed
+        self.assertEqual(endpoints, ["하나", "하나 둘"])
+        self.assertEqual(seen, ["하나 임시", "하나 둘", "하나 둘"])
         await asyncio.sleep(0)
 
 

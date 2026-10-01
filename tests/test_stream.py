@@ -41,7 +41,7 @@ class StreamContract(unittest.IsolatedAsyncioTestCase):
         ws = Socket([{"tokens":[{"text":"안녕하세요.", "is_final":True},{"text":"<fin>", "is_final":True}]}])
         with patch("thock.speech.websockets.connect", new_callable=AsyncMock, return_value=ws):
             text = await transcribe(chunks(), "test", lambda:{})
-        self.assertEqual(text, "안녕하세요.")
+        self.assertEqual(text, "안녕하세요")  # Soniox hears the words; punctuation is the correction model's
         self.assertEqual(len(ws.sent[-2]), 6400)
         await asyncio.sleep(0.01)
         self.assertTrue(ws.closed)
