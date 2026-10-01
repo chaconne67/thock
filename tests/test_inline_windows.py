@@ -94,6 +94,16 @@ class WindowsInline(unittest.TestCase):
         self.assertFalse(field.update("늦게 온 교정"))
         self.assertEqual(self.content(), "사용자가 직접 고친 글")
 
+    def test_first_word_equal_to_the_text_before_the_caret_is_still_pasted(self):
+        from thock.win32 import InlineField, capture_target
+        self.user32.SetWindowTextW(self.edit, "앞 네 뒤")
+        self.user32.SendMessageW(self.edit, 0x00B1, 3, 3)  # the field already ends with what is said
+        field = InlineField(capture_target())
+        self.assertTrue(field.update("네"), field.failure)
+        self.assertEqual(self.content(), "앞 네네 뒤")
+        self.assertTrue(field.update("네."), field.failure)
+        self.assertEqual(self.content(), "앞 네네. 뒤")
+
     def test_caret_move_preserves_current_document(self):
         from thock.win32 import InlineField
         field = InlineField(self.target)

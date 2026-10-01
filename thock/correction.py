@@ -64,19 +64,15 @@ class Polisher:
                         raise
 
     def polish(self, text, app):
-        """Punctuation and spacing only (tuning step 2). The model still changes a word now and then, so a
-        correction that touched a letter is dropped and the text stays as heard. app, the terms and the
-        typo notes are where later steps will draw from; the typo notes still apply after correction."""
+        """Punctuation and spacing only (tuning step 2), or None when the model touched a letter: it still
+        changes a word now and then, or answers a spoken request instead of writing it down. app, the terms
+        and the typo notes are where later steps will draw from; the typo notes still apply after correction."""
         out = self.correct(text)
-        return out if same_words(text, out) else text
+        return out if same_words(text, out) else None
 
     def correct(self, text):
         """The correction model's own answer, before the step-2 check."""
-        out = self.complete(POLISH_PROMPT, f"<dictation>\n{text}\n</dictation>")
-        # A corrector never writes much more than it heard; a long answer means it followed the text as a command.
-        if not out or len(out) > len(text) * 1.5 + 20:
-            raise RuntimeError("correction rejected: output is not a correction")
-        return out
+        return self.complete(POLISH_PROMPT, f"<dictation>\n{text}\n</dictation>")
 
     def _openrouter(self, channel, key, prompt, user, max_tokens):
         body = json.dumps({

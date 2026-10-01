@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import unittest
+from unittest.mock import patch
 from thock.live_input import LiveDictation
 
 
@@ -11,6 +12,11 @@ async def until(predicate):
 
 
 class LiveInput(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        pause = patch("thock.live_input.PAUSE", 0.05)
+        pause.start()
+        self.addCleanup(pause.stop)
+
     def make(self, polish=None, write=None):
         self.writes, self.errors = [], []
         def record(text):
@@ -59,7 +65,41 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         live.update("하나. 둘.")
         live.endpoint("하나. 둘.")
         self.assertEqual(await live.finish("하나. 둘."), "하나. 둘.")
-        self.assertEqual(calls, ["하나.", "둘."])
+        self.assertEqual(calls, ["하나.", "하나. 둘."])  # always the whole text so far
+
+    async def test_a_later_correction_of_the_whole_text_moves_an_earlier_mark(self):
+        answers = {"회의는 세 시에": "회의는 세 시에.", "회의는 세 시에 시작합니다": "회의는 세 시에 시작합니다."}
+        live = self.make(answers.get)
+        live.update("회의는 세 시에")
+        live.endpoint("회의는 세 시에")
+        await until(lambda: self.writes and self.writes[-1] == "회의는 세 시에.")
+        live.update("회의는 세 시에 시작합니다")
+        self.assertEqual(await live.finish("회의는 세 시에 시작합니다"), "회의는 세 시에 시작합니다.")
+        self.assertEqual(self.writes[-1], "회의는 세 시에 시작합니다.")
+
+    async def test_speech_within_the_pause_leaves_one_correction_of_the_whole(self):
+        calls = []
+        def polish(text):
+            calls.append(text)
+            return text + "."
+        live = self.make(polish)
+        live.update("앞 말")
+        live.endpoint("앞 말")
+        live.update("앞 말 뒤 말")  # speaking again before the pause is over
+        await asyncio.sleep(0.15)
+        self.assertEqual(calls, [])
+        self.assertEqual(await live.finish("앞 말 뒤 말"), "앞 말 뒤 말.")
+        self.assertEqual(calls, ["앞 말 뒤 말"])
+
+    async def test_a_rejected_correction_keeps_the_earlier_one(self):
+        answers = {"하나": "하나.", "하나 둘": None}  # None: the model touched a letter
+        live = self.make(answers.get)
+        live.update("하나")
+        live.endpoint("하나")
+        await until(lambda: live.processed == "하나")
+        live.update("하나 둘")
+        self.assertEqual(await live.finish("하나 둘"), "하나. 둘")
+        self.assertEqual(self.errors, [])
 
     async def test_a_changed_field_is_never_written_again(self):
         calls = []

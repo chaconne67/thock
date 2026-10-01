@@ -123,14 +123,12 @@ class FlagLastDictation(unittest.TestCase):
         return app, state
 
     def test_flag_is_logged_and_reported_with_the_last_timings(self):
-        app, state = self.app(True, {"time": "2026-10-01 09:00:00", "input_failure": "delivery_unverified",
-                                     "late_ms": 350})
+        app, state = self.app(True, {"time": "2026-10-01 09:00:00", "input_failure": "delivery_unverified"})
         with self.assertLogs("voicetype", level="WARNING") as logs:
             app.App.flag_last(state)
         self.assertIn("first_audio_ms=1400", logs.output[0])
         stage, code, details = state._queue_error.call_args.args[1:]
-        self.assertEqual((stage, code, details["late_ms"], details["idle_s"]),
-                         ("user_flag", "delivery_unverified", 350, 7200))
+        self.assertEqual((stage, code, details["idle_s"]), ("user_flag", "delivery_unverified", 7200))
         self.assertLessEqual(len(details), 8)  # the server accepts at most eight details
 
     def test_flag_stays_local_without_consent_and_waits_for_a_finished_dictation(self):

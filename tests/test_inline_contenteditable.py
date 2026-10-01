@@ -77,8 +77,8 @@ class ContentEditableInline(unittest.TestCase):
                         time.sleep(0.1)
                     # Just after it starts, Chromium can show a paste or selection in its accessibility tree
                     # a little after the app's 0.5 s (595 and 615 ms seen on the runner, about 45 ms once warm).
-                    # Allow the 2 s the app itself counts as late but delivered; the text must still be exact.
-                    with patch("thock.win32._input_tracking", True), patch("thock.editwatch.APPLY_SECONDS", 2):
+                    # Allow it 2 s here; the text must still be exact.
+                    with patch("thock.editwatch.APPLY_SECONDS", 2):
                         target = win32.capture_target()
                         initial = reader.snapshot()
                         marks = []

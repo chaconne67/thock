@@ -253,6 +253,12 @@ def ready_target():
     return target, None, element
 
 
+def shows(field, text):
+    """Thock's own text sits right before an empty caret. The rest of the field is the editor's: an
+    empty-field cue or a trailing line break it shows or removes as typing starts is not checked."""
+    return field is not None and not field[1] and field[0].endswith(text)
+
+
 class InlineField:
     """Own exactly the selected range and the text subsequently inserted there."""
     def __init__(self, target, mark=None):
@@ -260,8 +266,8 @@ class InlineField:
         self.target, self.current = target, None
         self.mark = mark or (lambda name, **values: None)
         self.revision = _input_revision
-        self.late_ms = None  # diagnosis: an unverified paste that showed up later
         self.mismatch = None  # diagnosis: how the field differed when it never showed the paste (lengths only)
+        # Before the first write the field must still be as found; afterwards this is only its last seen shape.
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
         self.stopped = self.initial is None
         self.failure = "range_unavailable" if self.stopped else None
@@ -289,14 +295,14 @@ class InlineField:
             return self._refuse("user_input")
         if capture_target() != self.target:
             return self._refuse("focus_changed")
-        before, selected, after = self.initial
-        expected = self.initial if self.current is None else (before + self.current, "", after)
         reader = field_reader()
         seen = reader.snapshot()
-        if seen != expected:
-            self.mismatch = mismatch(seen, expected)
+        owned = seen == self.initial if self.current is None else shows(seen, self.current)
+        if not owned:
+            self.mismatch = mismatch(seen, self.initial if self.current is None
+                                     else (self.initial[0] + self.current, "", self.initial[2]))
             return self._refuse("content_or_caret_changed")
-        common = 0
+        expected, common = seen, 0
         if self.current is not None:
             for old, new in zip(self.current, text):
                 if old != new:
@@ -306,18 +312,12 @@ class InlineField:
             if not tail and common == len(text):
                 return True
             selecting = time.monotonic()
-            expected = reader.select_tail(expected, tail)
+            expected = reader.select_tail(seen, tail)
             self.mark("select", tail=len(tail), ms=round((time.monotonic() - selecting) * 1000))
             if expected is None:
                 return self._refuse("selection_unavailable")
-        desired = (before + text, "", after)
-        # Many editors expose an empty-field cue, or an empty last line's break, as text after the caret
-        # and remove it on first input. Adopt that only if no other input intervened and, when text
-        # precedes the caret, only blank text followed it.
-        cue = (self.current is None and not selected and bool(after) and _input_tracking
-               and (not before or not after.strip()))
         started = time.monotonic()
-        actual = paste(text[common:], self.target, expected, desired, cue)
+        actual = paste(text[common:], self.target, expected, text)
         self.mark("write", length=len(text), kept=common, ms=round((time.monotonic() - started) * 1000),
                   ok=int(actual is not None and _input_revision == self.revision))
         if actual is None or _input_revision != self.revision:
@@ -326,17 +326,10 @@ class InlineField:
                             else "delivery_unverified")
             self.stopped = True
             if self.failure == "delivery_unverified":
-                # Only observed for the error report: whether the editor was just slow.
-                while time.monotonic() - started < 2 and capture_target() == self.target:
-                    if reader.snapshot() in (desired, (desired[0], "", "")):
-                        self.late_ms = round((time.monotonic() - started) * 1000)
-                        break
-                    time.sleep(0.05)
-                else:
-                    self.mismatch = mismatch(reader.snapshot(), desired)
-            self.mark("refused", why=self.failure, late_ms=self.late_ms, shape=self.mismatch)
+                self.mismatch = mismatch(reader.snapshot(), (expected[0] + text[common:], "", expected[2]))
+            self.mark("refused", why=self.failure, shape=self.mismatch)
             return False
-        self.initial = before, selected, actual[2]
+        self.initial = actual[0][:len(actual[0]) - len(text)], "", actual[2]
         self.current = text
         return True
 
@@ -353,8 +346,9 @@ def mismatch(actual, desired):
             % (*map(len, desired), *map(len, actual), start, end))
 
 
-def paste(text, target, expected, desired, allow_cue=False):
-    """Paste at the verified range, wait for delivery, and restore an unchanged clipboard."""
+def paste(text, target, expected, written):
+    """Paste at the verified range, wait until the field shows written (all of Thock's text) right before
+    the caret, and restore an unchanged clipboard."""
     from .editwatch import APPLY_SECONDS, field_reader
     revision = _input_revision
     reader = field_reader()
@@ -394,9 +388,7 @@ def paste(text, target, expected, desired, allow_cue=False):
                 if _input_revision != revision or capture_target() != target:
                     return None
                 observed = reader.snapshot()
-                if observed == desired:
-                    return observed
-                if allow_cue and observed == (desired[0], "", ""):
+                if observed != expected and shows(observed, written):  # changed: the field may have ended so already
                     return observed
             return None
         finally:

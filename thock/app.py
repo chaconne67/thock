@@ -181,7 +181,7 @@ class Session:
             trace.info(json.dumps({
                 "time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": VERSION, "app": self.app, "outcome": outcome,
                 **{key: record[key] for key in ("input_failure", "error", "polish_error", "ended", "mismatch",
-                                                 "late_ms", "audio") if record.get(key) is not None},
+                                                 "audio") if record.get(key) is not None},
                 "events": self.events,
                 "loudness": [round(level * 99) for level in self.loudness], "replies": self.replies,
                 "clipped": self.clipped,
@@ -333,8 +333,6 @@ class Session:
                     outcome = "recovered"
                 if self.notices:
                     record["notices"] = list(self.notices)
-                if field is not None and field.late_ms is not None:
-                    record["late_ms"] = field.late_ms
                 if field is not None and field.mismatch:
                     record["mismatch"] = field.mismatch
                 record.update(self.timing())
@@ -344,7 +342,7 @@ class Session:
                               time=time.strftime("%Y-%m-%d %H:%M:%S"))
                 if self.kept:
                     record["audio"] = await asyncio.to_thread(self.state.keep_audio, bytes(self.kept), record["time"])
-                self.state.report_error(self, record, field)
+                self.state.report_error(self, record)
                 if s["learn"] and self.state.settings["learn"] and text:
                     append_history(self.profile.history, {**record, "text": text})
                     self.profile.maybe_rebuild()
@@ -471,7 +469,7 @@ class App:
         return self.polisher.complete(PROFILE_PROMPT, json.dumps(texts[:100], ensure_ascii=False), max_tokens=1200,
                                       background=True)
 
-    def report_error(self, session, record, field):
+    def report_error(self, session, record):
         """Send what failed and where, never what was said, when the member allowed error reports."""
         code = record.get("input_failure") or record.get("error") or record.get("polish_error")
         if not code or (record.get("error") and not record.get("trace")):
@@ -484,8 +482,6 @@ class App:
                    "overflow_count": session.overflows}
         if session.heard_at is not None:
             details["sound_started_ms"] = round((session.heard_at - session.started) * 1000)
-        if field is not None and field.late_ms is not None:
-            details["late_ms"] = field.late_ms
         if record.get("trace"):
             details["trace"] = record["trace"]
         self._queue_error(session, stage, code, details)
@@ -504,8 +500,6 @@ class App:
         record = session.record
         code = record.get("input_failure") or record.get("error") or record.get("polish_error") or "none"
         details = {**session.timing(), "overflow_count": session.overflows}
-        if record.get("late_ms") is not None:
-            details["late_ms"] = record["late_ms"]
         log.warning("flagged dictation %s: code=%s %s%s", record.get("time", "(unfinished)"), code,
                     " ".join(f"{name}={value}" for name, value in details.items()),
                     f" mismatch={record['mismatch']}" if record.get("mismatch") else "")

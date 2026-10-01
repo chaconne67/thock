@@ -42,7 +42,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
             report_error=Mock(), idle_since=time.perf_counter() - 3600)
         # The live input field: records what reached the target field; ok=False means it moved.
-        self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, late_ms=None, mismatch=None,
+        self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, mismatch=None,
                                      target=(1, (2,), 0),
                                      restart=lambda: False)
         def update(text):
@@ -312,6 +312,6 @@ class SafePaste(unittest.TestCase):
         with patch("thock.win32.capture_target", return_value=(20, (2,), 0)), \
              patch("thock.win32._open_clipboard") as clipboard, \
              patch("thock.win32.user32.SendInput") as send:
-            self.assertIsNone(paste("test", (10, (1,), 0), None, ("test", "", "")))
+            self.assertIsNone(paste("test", (10, (1,), 0), None, "test"))
         clipboard.assert_not_called()
         send.assert_not_called()

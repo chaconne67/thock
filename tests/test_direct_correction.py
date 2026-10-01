@@ -61,7 +61,7 @@ class DirectCorrection(unittest.TestCase):
         self.assertFalse(same_words("노트북 화면 전체에 보이니까", "노트북 화면이 보이니까."))
         polisher, _, _ = self.polisher([])
         polisher.correct = lambda text: "노트북 화면이 보이니까."
-        self.assertEqual(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"), "노트북 화면 전체에 보이니까")
+        self.assertIsNone(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"))
         polisher.correct = lambda text: "노트북 화면 전체에 보이니까."
         self.assertEqual(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"), "노트북 화면 전체에 보이니까.")
 
@@ -107,26 +107,23 @@ class ErrorReports(unittest.TestCase):
         return state
 
     def session(self):
-        field = types.SimpleNamespace(late_ms=640)
-        session = types.SimpleNamespace(started=time.perf_counter() - 3, heard_at=None, overflows=2,
-                                        app="claude.exe", session_id="s")
-        return session, field
+        return types.SimpleNamespace(started=time.perf_counter() - 3, heard_at=None, overflows=2,
+                                     app="claude.exe", session_id="s")
 
     def test_only_allowed_app_faults_are_reported_without_any_text(self):
         from thock import app
-        session, field = self.session()
+        session = self.session()
         record = {"input_failure": "delivery_unverified", "text": "말한 내용", "raw": "말한 내용"}
         sent = []
         with patch("thock.app.threading.Thread", side_effect=lambda target, args, daemon: types.SimpleNamespace(
                 start=lambda: sent.append(args[0]))):
-            app.App.report_error(self.app(False), session, record, field)
-            app.App.report_error(self.app(True), session, {"error": "time_exhausted"}, field)
-            app.App.report_error(self.app(True), session, record, field)
+            app.App.report_error(self.app(False), session, record)
+            app.App.report_error(self.app(True), session, {"error": "time_exhausted"})
+            app.App.report_error(self.app(True), session, record)
         self.assertEqual(len(sent), 1)
         report = sent[0]
         self.assertEqual((report["stage"], report["code"], report["target_app"]),
                          ("delivery", "delivery_unverified", "claude.exe"))
-        self.assertEqual(report["details"]["late_ms"], 640)
         self.assertNotIn("말한 내용", repr(report))
 
 

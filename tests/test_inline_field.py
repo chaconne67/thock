@@ -28,7 +28,8 @@ class InlineFieldContract(unittest.TestCase):
                 patch("thock.editwatch.field_reader", return_value=self.reader)):
             item.start()
             self.addCleanup(item.stop)
-        self.paste_patch = patch("thock.win32.paste", side_effect=lambda text, target, expected, desired, cue: desired)
+        self.paste_patch = patch("thock.win32.paste", side_effect=lambda text, target, expected, written: (
+            expected[0] + text, "", expected[2]))
         self.paste = self.paste_patch.start()
         self.addCleanup(self.paste_patch.stop)
 
@@ -42,15 +43,13 @@ class InlineFieldContract(unittest.TestCase):
         self.reader.snapshot.return_value = ("앞 안녕 하세요", "", " 뒤")
         self.assertTrue(field.update("안녕하세요"))
         self.reader.select_tail.assert_called_once_with(("앞 안녕 하세요", "", " 뒤"), " 하세요")
-        self.paste.assert_called_with("하세요", self.target,
-                                     ("앞 안녕", " 하세요", " 뒤"), ("앞 안녕하세요", "", " 뒤"), False)
+        self.paste.assert_called_with("하세요", self.target, ("앞 안녕", " 하세요", " 뒤"), "안녕하세요")
 
     def test_existing_user_selection_is_the_only_initial_replacement(self):
         self.reader.snapshot.return_value = ("앞 ", "선택한 글", " 뒤")
         field = self.field()
         self.assertTrue(field.update("새 글"))
-        self.paste.assert_called_once_with("새 글", self.target,
-                                          ("앞 ", "선택한 글", " 뒤"), ("앞 새 글", "", " 뒤"), False)
+        self.paste.assert_called_once_with("새 글", self.target, ("앞 ", "선택한 글", " 뒤"), "새 글")
 
     def test_typing_or_moving_caret_permanently_stops_replacement(self):
         field = self.field()
@@ -81,7 +80,7 @@ class InlineFieldContract(unittest.TestCase):
             self.assertTrue(field.restart())
             self.assertEqual((field.current, field.initial), (None, ("", "", "")))
             self.assertTrue(field.update("다음"))
-            self.assertEqual(self.paste.call_args.args[3], ("다음", "", ""))
+            self.assertEqual(self.paste.call_args.args[3], "다음")
         field = self.field()
         with patch("thock.win32.capture_target", return_value=(12, (99,))):
             self.assertFalse(field.update("글"))
@@ -126,46 +125,44 @@ class InlineFieldContract(unittest.TestCase):
         self.paste.assert_not_called()
 
 
-    def test_first_input_can_remove_a_native_cue_without_touching_other_text(self):
-        self.reader.snapshot.return_value = ("", "", "editor cue")
-        self.reader.native_selection.return_value = (123, ("", "", "editor cue"), 0, 0, "\r")
-        with patch("thock.win32._input_tracking", True):
-            field = self.field()
-            self.paste.side_effect = lambda text, target, expected, desired, cue: (text, "", "") if cue else desired
-            self.assertTrue(field.update("first"))
-            self.assertEqual(field.initial, ("", "", ""))
-            self.reader.snapshot.return_value = ("first", "", "")
-            self.assertTrue(field.update("first corrected"))
-            self.assertEqual(self.paste.call_args.args[3], ("first corrected", "", ""))
+    def test_the_editors_own_text_around_the_caret_may_go_on_the_first_input(self):
+        # Empty-field cues: Grok's sits before the caret, Codex's and Claude's after it, a new list item's
+        # line break after it. Each goes when typing starts; only Thock's own text is checked.
+        for found in (("무엇이든 물어보세요", "", "\n"), ("", "", "\nplaceholder"), ("1. 앞 문장\n", "", "\n")):
+            with self.subTest(found=found):
+                self.reader.snapshot.return_value = found
+                field = self.field()
+                self.paste.side_effect = lambda text, target, expected, written: (written, "", "")
+                self.assertTrue(field.update("중앙"), field.failure)
+                self.assertEqual(field.initial, ("", "", ""))
+                self.reader.snapshot.return_value = ("중앙", "", "")
+                self.paste.side_effect = lambda text, target, expected, written: (written, "", "")
+                self.assertTrue(field.update("중앙 정부"), field.failure)
+                self.assertEqual(self.paste.call_args.args[::3], (" 정부", "중앙 정부"))
 
-    def test_first_input_can_remove_a_web_editor_cue(self):
-        # Chromium and Electron editors expose their empty-field cue through UI Automation too.
-        self.reader.snapshot.return_value = ("", "", "\nplaceholder")
-        self.reader.native_selection.return_value = None
-        with patch("thock.win32._input_tracking", True):
-            field = self.field()
-            self.paste.side_effect = lambda text, target, expected, desired, cue: (text, "", "") if cue else None
-            self.assertTrue(field.update("first"), field.failure)
-            self.assertEqual(field.initial, ("", "", ""))
+    def test_a_change_to_thocks_own_text_or_a_selection_over_it_stops_writing(self):
+        for seen in (("앞 초안을", "", " 뒤"), ("앞 초", "안", " 뒤"), ("앞 ", "", "초안 뒤")):
+            with self.subTest(seen=seen):
+                self.reader.snapshot.return_value = ("앞 ", "", " 뒤")
+                field = self.field()
+                self.assertTrue(field.update("초안"))
+                self.reader.snapshot.return_value = seen
+                calls = self.paste.call_count
+                self.assertFalse(field.update("초안 다음"))
+                self.assertEqual(field.failure, "content_or_caret_changed")
+                self.assertEqual(self.paste.call_count, calls)
 
-    def test_first_input_on_an_empty_last_line_drops_its_line_break(self):
-        self.reader.snapshot.return_value = ("1. 앞 문장\n", "", "\n")
-        self.reader.native_selection.return_value = None
-        with patch("thock.win32._input_tracking", True):
-            field = self.field()
-            self.paste.side_effect = lambda text, target, expected, desired, cue: (desired[0], "", "") if cue else None
-            self.assertTrue(field.update("지금"), field.failure)
-            self.assertEqual(field.initial, ("1. 앞 문장\n", "", ""))
-        self.reader.snapshot.return_value = ("앞 ", "", "뒤에 남은 글")
-        with patch("thock.win32._input_tracking", True):
-            field = self.field()
-            self.assertFalse(field.update("지금"))  # real text after the caret is never treated as a cue
-        self.assertFalse(self.paste.call_args.args[4])
+    def test_text_outside_thocks_own_may_change_without_stopping_it(self):
+        field = self.field()
+        self.assertTrue(field.update("초안"))
+        self.reader.snapshot.return_value = ("1. 앞 초안", "", " 뒤에 붙은 글")  # e.g. the editor made a list
+        self.assertTrue(field.update("초안 다음"), field.failure)
+        self.assertEqual(self.paste.call_args.args[2], ("1. 앞 초안", "", " 뒤에 붙은 글"))
 
-    def test_user_input_during_first_delivery_cannot_be_adopted_as_a_cue(self):
+    def test_user_input_during_first_delivery_stops_writing(self):
         import thock.win32 as win32
         self.reader.snapshot.return_value = ("", "", "existing text")
-        with patch("thock.win32._input_revision", 0), patch("thock.win32._input_tracking", True):
+        with patch("thock.win32._input_revision", 0):
             field = self.field()
             def delivered(*args):
                 win32._input_revision += 1
