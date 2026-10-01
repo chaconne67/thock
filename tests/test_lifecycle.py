@@ -149,6 +149,8 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
                 session.stop()
                 await session.task
         line = json.loads(logs.output[0].split(":", 2)[2])
+        self.assertIn("loudness", line)
+        self.assertIn("replies", line)
         names = [event[1] for event in line["events"]]
         for name in ("grant", "start_field", "stop", "transcribed", "finished"):
             self.assertIn(name, names)
@@ -171,6 +173,9 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             await session.task
         record = self.state.report_error.call_args.args[1]
         self.assertGreaterEqual(record["idle_s"], 3599)
+        self.assertEqual(max(session.loudness), max(session.loudness[:1] + session.loudness))  # loud chunk kept
+        self.assertGreater(max(session.loudness), 0.6)
+        self.assertEqual(sum(session.replies), 1)  # one Soniox reply (heard) in this fake
         self.assertLess(record["first_audio_ms"], record["silent_start_ms"])
         self.assertLessEqual(record["silent_start_ms"], record["first_text_ms"])
         self.assertIs(session.record, record)

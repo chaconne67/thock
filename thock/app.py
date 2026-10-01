@@ -58,6 +58,9 @@ class Session:
         # First-words diagnosis: a waking microphone, a quiet start, or recognition that came late.
         self.idle_s = round(self.started - app_state.idle_since)
         self.first_audio = self.voice_at = self.first_text_at = None
+        # Per half second, for the trace: the loudest microphone level and how many Soniox replies came in.
+        # Speech heard by the microphone with no reply tells Soniox apart from a silent microphone.
+        self.loudness, self.replies = [], []
         self.record = None  # this dictation's record once it has finished
         self.events = []  # the trace: [ms from the key press, what happened, {numbers and codes}]
         self.live, self.entered = None, False
@@ -136,9 +139,16 @@ class Session:
         samples = array.array("h", chunk)
         rms = math.sqrt(sum(s * s for s in samples) / max(len(samples), 1))
         level = min(max((20 * math.log10(max(rms, 1) / 32768) + 72) / 44, 0.0), 1.0)
+        self._count(self.loudness, now, level)
         if self.voice_at is None and level >= VOICE_LEVEL:
             self.voice_at = now
         self.state.levels.append(level)
+
+    def _count(self, series, now, value):
+        """Keep the largest value (or a count, value=None) for each half second since the key press."""
+        slot = int((now - self.started) * 2)
+        series.extend([0] * (slot + 1 - len(series)))
+        series[slot] = series[slot] + 1 if value is None else max(series[slot], value)
 
     def timing(self):
         """Idle time before this dictation and when sound, voice and the first words arrived."""
@@ -171,6 +181,7 @@ class Session:
                 **{key: record[key] for key in ("input_failure", "error", "polish_error", "ended", "mismatch",
                                                  "late_ms") if record.get(key) is not None},
                 "events": self.events,
+                "loudness": [round(level * 99) for level in self.loudness], "replies": self.replies,
                 "input": [[round((at - self.started) * 1000), kind] for at, kind in list(input_events)
                           if at >= self.started - 2]}, ensure_ascii=False))
         except Exception as error:
@@ -245,6 +256,7 @@ class Session:
                                              field.restart, self.mark)
 
             def heard(words):
+                self._count(self.replies, time.perf_counter(), None)
                 if self.first_text_at is None and words.strip():
                     self.first_text_at = time.perf_counter()
                 if words.strip() != self.preview:
