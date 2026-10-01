@@ -29,3 +29,14 @@ class SpeechEndpoints(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(endpoints, ["하나.", "하나. 둘."])
         self.assertEqual(seen, ["하나. 임시", "하나. 둘.", "하나. 둘."])
         await asyncio.sleep(0)
+
+
+class SonioxPunctuation(unittest.TestCase):
+    def test_sentence_marks_go_and_marks_inside_words_stay(self):
+        from thock.speech import unpunctuated
+        self.assertEqual(unpunctuated("점심 먹었어? 응, 먹었어. 버전은 0.4.3이고 thock.cloud야!"),
+                         "점심 먹었어 응 먹었어 버전은 0.4.3이고 thock.cloud야")
+        # a finalized prefix stays a prefix of the later text
+        self.assertTrue(unpunctuated("말했다. 다음").startswith(unpunctuated("말했다.")))
+        self.assertTrue(unpunctuated("3.5").startswith(unpunctuated("3.")))
+
