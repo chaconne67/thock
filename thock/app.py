@@ -651,10 +651,13 @@ class App:
                 self.active.add(self.recording)
                 self.last = self.recording
                 self._sync_sound()
-        elif event == "enter" and self.last in self.active:
-            self.last.enter()
-            if self.recording:
-                self._stop()
+        elif event == "enter":  # only an Enter the hook held reaches here
+            if self.last in self.active:
+                self.last.enter()
+                if self.recording:
+                    self._stop()
+            else:  # the dictation finished meanwhile: give the Enter back now
+                press_enter()
         elif event == "up" and self.recording and not self.toggle:
             if mode == "auto" and now - self.pressed_at < TAP_SECONDS:
                 self.toggle = True

@@ -51,7 +51,9 @@ class EnterEnds(unittest.TestCase):
         # recording stops, the last words still go in (as heard), then Enter is pressed for the user
         self.assertEqual((stopped, session.entered, live.rushing, live.blocked), ([True], True, True, False))
         state.recording, state.active = None, set()
-        app.App.on_key(state, "enter")  # Enter without dictation does nothing
+        with patch("thock.app.press_enter") as pressed:
+            app.App.on_key(state, "enter")  # held as the dictation finished: given back at once
+        pressed.assert_called_once()
         self.assertEqual(stopped, [True])
 
 
