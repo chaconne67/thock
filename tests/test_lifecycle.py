@@ -223,6 +223,7 @@ class InputModes(unittest.TestCase):
         app._sync_sound = Mock()
         app.last = None
         app.notice_action, app.notice_until = None, 0.0
+        app.devices_changed = False
         session = Mock()
         session.settings = dict(app.settings)
         session.stop.side_effect = lambda: setattr(app, "recording", None)

@@ -40,7 +40,7 @@ class EnterEnds(unittest.TestCase):
     def test_enter_ends_dictation_and_blocks_pending_writes(self):
         from thock import app
         live = types.SimpleNamespace(blocked=False)
-        session = types.SimpleNamespace(live=live, entered=False, settings={"input_mode": "toggle"})
+        session = types.SimpleNamespace(live=live, entered=False, settings={"input_mode": "toggle"}, mark=lambda *a, **k: None)
         session.enter = lambda: app.Session.enter(session)
         stopped = []
         state = types.SimpleNamespace(recording=session, _stop=lambda: stopped.append(True),
