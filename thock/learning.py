@@ -9,7 +9,6 @@ import time
 import unicodedata
 
 from .config import log
-from .correction import sentence_levels
 from .personal import read_data, write_data, history_data
 
 
@@ -142,16 +141,6 @@ class Profile:
     def summary(self):
         topics = ", ".join(self.data.get("topics", []))
         return f"{self.data['domain']} ({topics})" if self.data.get("domain") else ""
-
-    def usual_level(self):
-        """The speech level the user normally dictates in ('casual'/'polite'), or None if not clear.
-        Recomputed only when the history file has grown."""
-        size = self.history.stat().st_size if self.history.exists() else 0
-        if getattr(self, "_level_at", None) != size:
-            levels = [lv for text in self._texts()[-200:] for lv in sentence_levels(text)]
-            share = levels.count("casual") / len(levels) if len(levels) >= 10 else 0.5
-            self._level, self._level_at = ("casual" if share >= 0.7 else "polite" if share <= 0.3 else None), size
-        return self._level
 
     def context(self, app, terms):
         """Soniox context: short key-value facts plus the vocabulary to spell right."""

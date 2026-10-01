@@ -55,8 +55,10 @@ class LiveDictation:
                     except Exception as error:
                         self.error = type(error).__name__
                         self.on_error("문장을 다듬지 못해 인식한 원문을 남겼습니다.")
-                    self.mark("polish", length=len(content), ms=round((asyncio.get_running_loop().time() - started) * 1000),
-                              error=self.error)
+                    kept = {word.strip(".,?!") for word in corrected.split()}
+                    self.mark("polish", length=len(content), out=len(corrected),
+                              dropped=sum(word.strip(".,?!") not in kept for word in content.split()),
+                              ms=round((asyncio.get_running_loop().time() - started) * 1000), error=self.error)
                 if piece == self.piece:  # a correction for text the user already took over is dropped
                     leading = segment[:len(segment) - len(segment.lstrip())]
                     trailing = segment[len(segment.rstrip()):]

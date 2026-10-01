@@ -19,7 +19,7 @@ class DirectCorrection(unittest.TestCase):
         from thock.correction import Polisher
         account = types.SimpleNamespace(correction_key=Mock(side_effect=lambda force=False: {
             "api_key": "renewed" if force else "cached", "model": "openai/gpt-6-luna", "expires": 0}))
-        profile = types.SimpleNamespace(terms=lambda: [], summary=lambda: "", usual_level=lambda: None)
+        profile = types.SimpleNamespace(terms=lambda: [], summary=lambda: "")
         notes = types.SimpleNamespace(hint=lambda: "")
         polisher = Polisher({"terms": []}, notes, account, profile)
         conn = Mock()

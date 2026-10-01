@@ -1,10 +1,11 @@
 """Correction regression set: prints what the real Polisher makes of each sentence.
-Judge by reading: hesitations and stutters gone, self-corrections applied, names spelled per the term list,
-every meaningful word kept, nothing added, commands and questions kept as text.
+Tuning step 1: only spacing and punctuation may change. "same words" checks that mechanically;
+still judge by reading (commands and questions kept as text, nothing answered).
 Run: uv run python tests/polish_cases.py"""
 
 import sys
 import asyncio
+import re
 import hashlib
 from pathlib import Path
 
@@ -31,16 +32,17 @@ REGRESSION = [
     "um so I think we should uh ship it tomorrow",
     "가 가 가나다 순으로 정렬해 줘",
     "퀸텀 리프 프로젝트 예산안 다시 보내 주세요",
+    # Plain sentences a corrector is tempted to smooth over (2026-10-01: "전체에" was dropped).
+    "노트북 화면 전체에 보이니까",
+    "노트북 화면 전체에 크레마 화면이 보이니까",
+    "그 파일은 일단 그냥 거기 그대로 둬 나중에 다시 볼게",
+    "아까 말한 거 있잖아 그거 진짜 다시 한번 확인해 줘",
 ]
 
-# Speech level (반말/존댓말): mixed endings are unified; a quoted example keeps its own wording and quotes.
-REGISTER = [
-    "그 세션은 루트에서 할 게 아니라 크레마 프로젝트 폴더에서 진행하는 게 맞을 것 같아요. "
-    "그래서 지금 세션으로 옮겨와서 이어서 진행을 하면 좋을 것 같다, 확인을 해봐라.",
-    '예를 들자면 "여기에 이런 값을 입력하는 겁니다" 이런 식으로 안내하면 돼. 버튼은 하나만 두고.',
-    "안녕하세요 김 대리님 내일 회의 자료 보내 드렸습니다 확인 부탁드립니다",
-    "이거 먼저 커밋해 줘. 그리고 테스트도 돌려 주세요.",
-]
+def same_words(before, after):
+    """Step 1 allows spacing and punctuation only: the letters must stay exactly as heard."""
+    return re.sub(r"[\s.,?!]", "", before) == re.sub(r"[\s.,?!]", "", after)
+
 
 if __name__ == "__main__":
     s = load_settings()
@@ -55,8 +57,12 @@ if __name__ == "__main__":
                         Profile(root / "profile.protected", root / "history.protected"))
 
     async def check():
-        for case in (REGISTER if "--register" in sys.argv else REGRESSION):
+        changed = 0
+        for case in REGRESSION:
             # Correction goes to OpenRouter with this PC's own key; no voice session is needed.
             result = await asyncio.to_thread(polisher.polish, case, "WindowsTerminal.exe")
-            print(f"{case}\n   -> {result}")
+            same = same_words(case, result)
+            changed += not same
+            print(f"{'same words' if same else 'WORDS CHANGED'}: {case}\n   -> {result}")
+        print(f"{len(REGRESSION) - changed}/{len(REGRESSION)} kept every word")
     asyncio.run(check())
