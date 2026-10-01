@@ -7,6 +7,7 @@ import json
 import hashlib
 import uuid
 import logging
+import logging.handlers
 import math
 import platform
 import sys
@@ -18,7 +19,7 @@ from collections import deque
 import sounddevice as sd
 
 from .config import (APP_NAME, HOME, HOTKEYS, INPUT_MODES, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
-                     TAP_SECONDS, VERSION, load_settings, log, save_settings)
+                     TAP_SECONDS, VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
 from .editwatch import EditWatcher
@@ -28,7 +29,8 @@ from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .live_input import LiveDictation
-from .win32 import foreground_app, capture_target, copy_text, InlineField, kernel32, ready_target, run_key_hook, user32
+from .win32 import (foreground_app, capture_target, copy_text, InlineField, input_events, kernel32, ready_target,
+                    run_key_hook, user32)
 from .personal import append_history, read_data, write_data, import_legacy, history_data
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
@@ -57,6 +59,7 @@ class Session:
         self.idle_s = round(self.started - app_state.idle_since)
         self.first_audio = self.voice_at = self.first_text_at = None
         self.record = None  # this dictation's record once it has finished
+        self.events = []  # the trace: [ms from the key press, what happened, {numbers and codes}]
         self.live, self.entered = None, False
         self.overflows = 0  # microphone buffer overruns, for error reports
         self.notices = []  # every red message shown while this dictation was active
@@ -83,7 +86,8 @@ class Session:
         only moves the caret; another field, or none, is no place to write."""
         target = capture_target()
         same = bool(target) and target[:2] == self.target[:2]
-        field = InlineField(target if same else None)
+        self.mark("start_field", same=int(same))
+        field = InlineField(target if same else None, self.mark)
         if field.stopped:
             field.mismatch = ("start: no field" if not target else "start: another field" if not same
                               else "start: unreadable")
@@ -101,6 +105,7 @@ class Session:
             return
         remaining = IDLE_STOP - (time.perf_counter() - (self.heard_at or self.started))
         if remaining <= 0 and self.state.toggle:
+            self.mark("idle_stop")
             self.state._stop()
         else:
             self.loop.call_later(remaining if remaining > 0 else IDLE_STOP, self._stop_when_idle)
@@ -145,9 +150,28 @@ class Session:
         if self.captured_frames >= self.max_frames:
             self.stop()
 
+    def mark(self, name, **values):
+        """One step of this dictation's trace (any thread): when, as ms from the key press, and what."""
+        values = {key: value for key, value in values.items() if value is not None}
+        self.events.append([round((time.perf_counter() - self.started) * 1000), name] + ([values] if values else []))
+
+    def write_trace(self, outcome, record):
+        """The whole dictation on one line of trace.log, with the user's own key and click times."""
+        try:
+            trace.info(json.dumps({
+                "time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": VERSION, "app": self.app, "outcome": outcome,
+                **{key: record[key] for key in ("input_failure", "error", "polish_error", "ended", "mismatch",
+                                                 "late_ms") if record.get(key) is not None},
+                "events": self.events,
+                "input": [[round((at - self.started) * 1000), kind] for at, kind in list(input_events)
+                          if at >= self.started - 2]}, ensure_ascii=False))
+        except Exception as error:
+            log.warning("trace not written: %s", type(error).__name__)
+
     def stop(self):
         if self.released is not None:
             return
+        self.mark("stop")
         self.released = time.perf_counter()
         self.heard_at_release = self.preview
         self.limit_timer.cancel()
@@ -185,6 +209,7 @@ class Session:
         live = field = None
         try:
             grant = await asyncio.to_thread(self.state.account.start_session)
+            self.mark("grant")
             self.session_id = grant["session_id"]
             self.state.last_session_id = self.session_id
             self.max_frames = int(grant["max_session_seconds"]) * SAMPLE_RATE
@@ -197,6 +222,7 @@ class Session:
                     self.limit_timer = self.loop.call_later(remaining, self.stop)
             if self.previous:
                 await asyncio.shield(self.previous)  # earlier dictation finishes writing first
+                self.mark("previous_done")
             field = await asyncio.to_thread(self._field)
             if field.stopped:  # no field to write into after all: lead back to one instead of recording
                 self.stop()
@@ -208,7 +234,7 @@ class Session:
             polish = (lambda words: self.state.polisher.polish(words, self.app)) if s["polish"] else None
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
                                              lambda message: self.state.notify(message, fault=live.blocked),
-                                             field.restart)
+                                             field.restart, self.mark)
             if self.entered:
                 live.blocked = True
 
@@ -224,11 +250,13 @@ class Session:
             raw = await transcribe(self.chunks(), grant["api_key"],
                 lambda: self.profile.context(self.app, s["terms"] + self.notes.terms()),
                 heard, live.endpoint, finalize_timeout=5)
+            self.mark("transcribed", length=len(raw))
             self.stop()
             stt_ms = max(0, round((time.perf_counter() - self.released) * 1000))
             if not raw.startswith(self.heard_at_release):  # finalizing dropped or changed words
                 record["heard_at_release"] = self.heard_at_release
             text = await live.finish(raw)
+            self.mark("finished", length=len(text))
             outcome = "empty" if not raw else "delivered"
             if live.error:
                 record["polish_error"] = live.error
@@ -249,6 +277,7 @@ class Session:
             total_ms = max(0, round((time.perf_counter() - self.released) * 1000))
         except AccountError as error:
             record["error"] = error.code
+            self.mark("account_error", code=error.code)
             self.state.account_refresh_needed = True
             if error.code in ACCOUNT_STATES:
                 self.state.notify(str(error), action="account")
@@ -261,6 +290,7 @@ class Session:
             raise
         except Exception as error:
             record["error"] = type(error).__name__
+            self.mark("error", code=type(error).__name__)
             record["trace"] = [f"{frame.filename.rsplit(chr(92), 1)[-1].rsplit('/', 1)[-1]}:{frame.lineno} {frame.name}"
                                for frame in traceback.extract_tb(error.__traceback__)][-8:]
             log.warning("dictation failed: %s", type(error).__name__)
@@ -298,6 +328,7 @@ class Session:
                 log.warning("dictation cleanup failed: %s", type(error).__name__)
                 self.state.notify("글 보관 상태를 확인하지 못했습니다. 설정에서 확인해 주세요.", action="dismiss", fault=True)
             finally:
+                self.write_trace(outcome, record)
                 self.finished = True
                 self.record = record
                 self.state.idle_since = time.perf_counter()
@@ -554,6 +585,8 @@ class App:
     def on_key(self, event):
         """Runs on the asyncio thread; the user chooses hold or toggle. Old settings keep mixed mode."""
         now = time.perf_counter()
+        if self.recording:
+            self.recording.mark("hotkey_" + event)
         mode = self.recording.settings["input_mode"] if self.recording else self.settings["input_mode"]
         if event == "down":
             if self.recording and self.toggle:
@@ -575,13 +608,17 @@ class App:
                     self.account_refresh_needed = True  # an access given meanwhile clears this message
                     self.notify(cached.get("error") or MESSAGES["access_unavailable"], action="account")
                     return
-                target = ready_target()
+                target, why, element = ready_target()
                 if target is None:  # nothing to write into: lead there instead of recording
+                    trace.info(json.dumps({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": VERSION,
+                                           "app": foreground_app(), "preflight": why, "element": element},
+                                          ensure_ascii=False))
                     self.notify(WAITING, action="dismiss")
                     return
                 self.pressed_at, self.toggle = now, mode == "toggle"
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation
+                rescanned = self.devices_changed and not self.active
                 try:
                     self.recording = self._start_session(target)
                 except Exception:
@@ -589,6 +626,7 @@ class App:
                     self.notify("마이크를 확인해 주세요. Windows의 마이크 접근 허용과 입력 장치를 확인하세요.",
                                 action="dismiss", fault=True)
                     return
+                self.recording.mark("preflight", element=element, rescanned=int(rescanned))
                 self.active.add(self.recording)
                 self.last = self.recording
                 self._sync_sound()
@@ -693,6 +731,9 @@ def main():
     HOME.mkdir(exist_ok=True)
     logging.basicConfig(filename=HOME / "voicetype.log", level=logging.INFO, encoding="utf-8",
                         format="%(asctime)s %(levelname)s %(message)s")
+    trace.addHandler(logging.handlers.RotatingFileHandler(HOME / "trace.log", maxBytes=2_000_000, backupCount=2,
+                                                          encoding="utf-8"))
+    trace.propagate = False
     kernel32.CreateMutexW(None, False, "Local\\VoiceTypeSingleton")
     if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
         sys.exit(f"{APP_NAME} is already running")

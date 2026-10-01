@@ -8,9 +8,9 @@ import asyncio
 
 
 class LiveDictation:
-    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False):
+    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False, mark=lambda name, **values: None):
         self.write, self.polish, self.apply_notes, self.on_error = write, polish, apply_notes, on_error
-        self.restart = restart
+        self.restart, self.mark = restart, mark
         self.piece = 0  # bumped when later speech moves to the user's new caret
         self.heard = self.boundary = self.processed = self.corrected = ""
         self.changed, self.segment_ready = asyncio.Event(), asyncio.Event()
@@ -44,15 +44,19 @@ class LiveDictation:
                 raise RuntimeError("speech endpoint moved backwards")
             segment = boundary[len(self.processed):]
             piece = self.piece
+            self.mark("endpoint", length=len(segment))
             if segment:
                 content = segment.strip()
                 corrected = content
                 if content and self.polish:
+                    started = asyncio.get_running_loop().time()
                     try:
                         corrected = await asyncio.to_thread(self.polish, content)
                     except Exception as error:
                         self.error = type(error).__name__
                         self.on_error("문장을 다듬지 못해 인식한 원문을 남겼습니다.")
+                    self.mark("polish", length=len(content), ms=round((asyncio.get_running_loop().time() - started) * 1000),
+                              error=self.error)
                 if piece == self.piece:  # a correction for text the user already took over is dropped
                     leading = segment[:len(segment) - len(segment.lstrip())]
                     trailing = segment[len(segment.rstrip()):]
@@ -74,6 +78,8 @@ class LiveDictation:
                     except Exception:
                         result = False
                     restarted = (await asyncio.to_thread(self.restart)) if not result else False
+                    if not result:
+                        self.mark("restart" if restarted else "blocked")
                     if restarted:
                         if self.delivered:
                             # The user edited: keep what is written, continue after the last finished phrase.

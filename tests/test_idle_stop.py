@@ -12,7 +12,7 @@ class IdleStop(unittest.TestCase):
         from thock import app
         stopped, scheduled = [], []
         state = types.SimpleNamespace(toggle=True, _stop=lambda: stopped.append(True))
-        session = types.SimpleNamespace(state=state, started=100.0, heard_at=None, _stop_when_idle=None,
+        session = types.SimpleNamespace(state=state, started=100.0, heard_at=None, _stop_when_idle=None, mark=lambda *a, **k: None,
                                         loop=types.SimpleNamespace(call_later=lambda delay, _: scheduled.append(delay)))
         state.recording = session
         def check(now):

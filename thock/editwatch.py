@@ -179,6 +179,22 @@ class FieldReader:
             oleaut32.VariantClear(ctypes.byref(value))
             _release(element)
 
+    def describe(self):
+        """The focused element's control type and class name, for the dictation trace."""
+        element, name = ctypes.c_void_p(), ctypes.c_void_p()
+        try:
+            _ok(_com(self.uia, 8, _PP)(self.uia, ctypes.byref(element)))  # GetFocusedElement
+            if not element:
+                return "none"
+            kind = ctypes.c_int()
+            _ok(_com(element, 21, ctypes.POINTER(ctypes.c_int))(element, ctypes.byref(kind)))  # get_CurrentControlType
+            _ok(_com(element, 30, _PP)(element, ctypes.byref(name)))  # get_CurrentClassName
+            return f"{kind.value}/{_bstr(name.value)[:60]}"
+        except (OSError, RuntimeError):
+            return "unknown"
+        finally:
+            _release(element)
+
     def read_focused(self):
         el = ctypes.c_void_p()
         try:

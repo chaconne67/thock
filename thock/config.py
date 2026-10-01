@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.0.dev11"
+APP_NAME, VERSION = "Thock", "0.4.0.dev12"
 HOME = Path.home() / ".voicetype"
 SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
@@ -29,6 +29,9 @@ PREVIEW_FONTS = {"ko": {"Noto Sans KR": "본고딕", "Pretendard": "프리텐다
 
 
 log = logging.getLogger("voicetype")
+# One JSON line per dictation and per refused key press: what happened and when, as numbers and codes.
+# Never the dictated text, the keys typed or window titles. Written to trace.log, rotated by size.
+trace = logging.getLogger("voicetype.trace")
 
 
 def load_settings():

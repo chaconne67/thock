@@ -20,6 +20,7 @@ class InlineFieldContract(unittest.TestCase):
         self.reader = Mock()
         self.reader.snapshot.return_value = ("앞 ", "", " 뒤")
         self.reader.read_only.return_value = False
+        self.reader.describe.return_value = "50004/test"
         self.reader.select_tail.side_effect = lambda expected, tail: (
             expected[0][:-len(tail)], tail, expected[2]) if tail else expected
         for item in (
@@ -94,11 +95,11 @@ class InlineFieldContract(unittest.TestCase):
         self.assertEqual((field.stopped, field.failure), (True, "range_unavailable"))
         self.assertFalse(field.update("글"))
         self.assertFalse(field.restart())  # only the user's edit moves the range
-        self.assertIsNone(ready_target())  # CapsLock is answered with a guide, not a recording
+        self.assertEqual(ready_target(), (None, "unreadable", "50004/test"))  # a guide, not a recording
         self.reader.snapshot.return_value = ("", "", "")
-        self.assertEqual(ready_target(), self.target)
+        self.assertEqual(ready_target(), (self.target, None, "50004/test"))
         self.reader.read_only.return_value = True  # a web page's own text: readable, not writable
-        self.assertIsNone(ready_target())
+        self.assertEqual(ready_target()[:2], (None, "read only"))
 
     def test_failed_delivery_names_what_changed(self):
         import thock.win32 as win32

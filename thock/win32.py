@@ -4,6 +4,7 @@ import ctypes
 import threading
 import ctypes.wintypes as wt
 import time
+from collections import deque
 from pathlib import Path
 
 
@@ -91,6 +92,9 @@ def allow_next_to_front():
     user32.SendInput(1, (INPUT * 1)(alt[1]), ctypes.sizeof(INPUT))
 
 
+input_events = deque(maxlen=300)  # (time, kind) of the user's own key and click events, for the trace
+
+
 def run_key_hook(get_vk, on_key):
     """Swallow the hotkey (Shift+hotkey keeps its normal meaning) and report presses. Blocks forever."""
     global _input_tracking
@@ -102,6 +106,8 @@ def run_key_hook(get_vk, on_key):
             info = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
             if info.dwExtraInfo != OWN_INPUT and info.vkCode != get_vk():
                 _input_revision += 1
+                input_events.append((time.perf_counter(), "key_down" if wparam in (WM_KEYDOWN, WM_SYSKEYDOWN)
+                                     else "key_up"))
                 if (info.vkCode == VK_RETURN and wparam in (WM_KEYDOWN, WM_SYSKEYDOWN)
                         and not user32.GetAsyncKeyState(VK_SHIFT) & 0x8000):
                     on_key("enter")  # passed through: the app still receives Enter
@@ -128,6 +134,7 @@ def run_key_hook(get_vk, on_key):
             info = ctypes.cast(lparam, ctypes.POINTER(MOUSEINPUT)).contents
             if info.dwExtraInfo != OWN_INPUT:
                 _input_revision += 1
+                input_events.append((time.perf_counter(), "click"))
         return user32.CallNextHookEx(None, code, wparam, lparam)
 
     callback, mouse_callback = HOOKPROC(proc), HOOKPROC(mouse_proc)
@@ -220,30 +227,46 @@ def capture_target():
 
 
 def ready_target():
-    """The focused text field to dictate into, or None when no editable, readable field has the caret."""
+    """(target, None, element) for the focused text field to dictate into, or (None, why not, element)
+    when no editable, readable field has the caret; element describes the focus for the trace."""
     from .editwatch import field_reader
     target, reader = capture_target(), field_reader()
-    return target if target and not reader.read_only() and reader.snapshot() is not None else None
+    element = reader.describe()
+    if not target:
+        return None, "no focus", element
+    if reader.read_only():
+        return None, "read only", element
+    if reader.snapshot() is None:
+        return None, "unreadable", element
+    return target, None, element
 
 
 class InlineField:
     """Own exactly the selected range and the text subsequently inserted there."""
-    def __init__(self, target):
+    def __init__(self, target, mark=None):
         from .editwatch import field_reader
         self.target, self.current = target, None
+        self.mark = mark or (lambda name, **values: None)
         self.revision = _input_revision
         self.late_ms = None  # diagnosis: an unverified paste that showed up later
         self.mismatch = None  # diagnosis: how the field differed when it never showed the paste (lengths only)
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
         self.stopped = self.initial is None
         self.failure = "range_unavailable" if self.stopped else None
+        self.mark("field", **(dict(zip(("before", "selected", "after"), map(len, self.initial)))
+                              if self.initial else {"none": 1}))
 
     def restart(self):
         """After the user's own edit, own the range at the current caret."""
         if self.failure != "user_input":
             return False
-        self.__init__(capture_target())
+        self.__init__(capture_target(), self.mark)
         return not self.stopped
+
+    def _refuse(self, failure):
+        self.failure, self.stopped = failure, True
+        self.mark("refused", why=failure, shape=self.mismatch)
+        return False
 
     def update(self, text):
         from .editwatch import field_reader, normalize_newlines
@@ -251,17 +274,16 @@ class InlineField:
         if self.stopped:
             return False
         if _input_revision != self.revision:
-            self.failure, self.stopped = "user_input", True
-            return False
+            return self._refuse("user_input")
         if capture_target() != self.target:
-            self.failure, self.stopped = "focus_changed", True
-            return False
+            return self._refuse("focus_changed")
         before, selected, after = self.initial
         expected = self.initial if self.current is None else (before + self.current, "", after)
         reader = field_reader()
-        if reader.snapshot() != expected:
-            self.failure, self.stopped = "content_or_caret_changed", True
-            return False
+        seen = reader.snapshot()
+        if seen != expected:
+            self.mismatch = mismatch(seen, expected)
+            return self._refuse("content_or_caret_changed")
         common = 0
         if self.current is not None:
             for old, new in zip(self.current, text):
@@ -271,10 +293,11 @@ class InlineField:
             tail = self.current[common:]
             if not tail and common == len(text):
                 return True
+            selecting = time.monotonic()
             expected = reader.select_tail(expected, tail)
+            self.mark("select", tail=len(tail), ms=round((time.monotonic() - selecting) * 1000))
             if expected is None:
-                self.failure, self.stopped = "selection_unavailable", True
-                return False
+                return self._refuse("selection_unavailable")
         desired = (before + text, "", after)
         # Many editors expose an empty-field cue, or an empty last line's break, as text after the caret
         # and remove it on first input. Adopt that only if no other input intervened and, when text
@@ -283,6 +306,8 @@ class InlineField:
                and (not before or not after.strip()))
         started = time.monotonic()
         actual = paste(text[common:], self.target, expected, desired, cue)
+        self.mark("write", length=len(text), kept=common, ms=round((time.monotonic() - started) * 1000),
+                  ok=int(actual is not None and _input_revision == self.revision))
         if actual is None or _input_revision != self.revision:
             self.failure = ("delivery_user_input" if _input_revision != self.revision
                             else "delivery_focus_changed" if capture_target() != self.target
@@ -297,6 +322,7 @@ class InlineField:
                     time.sleep(0.05)
                 else:
                     self.mismatch = mismatch(reader.snapshot(), desired)
+            self.mark("refused", why=self.failure, late_ms=self.late_ms, shape=self.mismatch)
             return False
         self.initial = before, selected, actual[2]
         self.current = text

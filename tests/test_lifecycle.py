@@ -1,6 +1,7 @@
 """Windows lifecycle contract: no real microphone, network or user data is touched."""
 import array
 import asyncio
+import json
 import sys
 import tempfile
 import time
@@ -46,7 +47,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
                 self.field.failure, self.field.stopped = "delivery_unverified", True
             return self.field.ok
         self.field.update = update
-        self.patch_field = patch("thock.app.InlineField", side_effect=lambda target: self.field)
+        self.patch_field = patch("thock.app.InlineField", side_effect=lambda target, mark=None: self.field)
         self.patch_field.start()
         self.addCleanup(self.patch_field.stop)
 
@@ -129,13 +130,26 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
     async def test_a_click_into_another_field_before_the_start_is_not_written_into(self):
         captured = []
         with patch("thock.app.capture_target", return_value=(1, (9,), 1)), \
-                patch("thock.app.InlineField", side_effect=lambda target: captured.append(target) or self.field):
+                patch("thock.app.InlineField", side_effect=lambda target, mark=None: captured.append(target) or self.field):
             self.field.stopped = True
             with patch("thock.app.transcribe", new_callable=AsyncMock):
                 session = self.start()
                 await session.task
         self.assertEqual(captured, [None])
         self.assertEqual(self.field.mismatch, "start: another field")
+
+    async def test_every_dictation_leaves_a_trace_without_its_text(self):
+        with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="비밀 문장"):
+            with self.assertLogs("voicetype.trace", level="INFO") as logs:
+                session = self.start()
+                session.stop()
+                await session.task
+        line = json.loads(logs.output[0].split(":", 2)[2])
+        names = [event[1] for event in line["events"]]
+        for name in ("grant", "start_field", "stop", "transcribed", "finished"):
+            self.assertIn(name, names)
+        self.assertEqual(line["outcome"], "delivered")
+        self.assertNotIn("비밀", logs.output[0])
 
     async def test_first_words_timing_is_recorded(self):
         quiet, loud = bytes(1600), array.array("h", [12000, -12000] * 800).tobytes()
@@ -189,7 +203,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
 @unittest.skipUnless(sys.platform == "win32", "Windows hotkey integration")
 class InputModes(unittest.TestCase):
     def setUp(self):
-        ready = patch("thock.app.ready_target", return_value=(1, (2,), 0))
+        ready = patch("thock.app.ready_target", return_value=((1, (2,), 0), None, "50004/test"))
         self.ready = ready.start()
         self.addCleanup(ready.stop)
 
@@ -218,11 +232,13 @@ class InputModes(unittest.TestCase):
     def test_no_text_field_leads_there_on_the_pill_without_recording(self):
         from thock.app import WAITING
         app, _ = self.fake_app("hold")
-        self.ready.return_value = None
-        app.on_key("down")
+        self.ready.return_value = (None, "read only", "50030/")
+        with self.assertLogs("voicetype.trace", level="INFO") as logs:
+            app.on_key("down")
+        self.assertIn('"preflight": "read only"', logs.output[0])
         app._start_session.assert_not_called()
         self.assertEqual((app.notice, app.notice_action), (WAITING, "dismiss"))  # 확인 folds the pill back
-        self.ready.return_value = (1, (2,), 0)
+        self.ready.return_value = ((1, (2,), 0), None, "50004/test")
         app.on_key("down")
         app._start_session.assert_called_once_with((1, (2,), 0))
         self.assertIsNone(app.notice_action)  # the press answered the guide
