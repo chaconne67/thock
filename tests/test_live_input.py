@@ -91,15 +91,18 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await live.finish("앞 말 뒤 말"), "앞 말 뒤 말.")
         self.assertEqual(calls, ["앞 말 뒤 말"])
 
-    async def test_a_rejected_correction_keeps_the_earlier_one(self):
-        answers = {"하나": "하나.", "하나 둘": None}  # None: the model touched a letter
-        live = self.make(answers.get)
+    async def test_a_failed_correction_keeps_the_earlier_one(self):
+        def answer(text):
+            if text == "하나 둘":
+                raise RuntimeError("empty correction")
+            return "하나."
+        live = self.make(answer)
         live.update("하나")
         live.endpoint("하나")
         await until(lambda: live.processed == "하나")
         live.update("하나 둘")
         self.assertEqual(await live.finish("하나 둘"), "하나. 둘")
-        self.assertEqual(self.errors, [])
+        self.assertEqual(len(self.errors), 1)
 
     async def test_a_changed_field_is_never_written_again(self):
         calls = []

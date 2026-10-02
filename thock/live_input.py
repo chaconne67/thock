@@ -68,7 +68,7 @@ class LiveDictation:
                         corrected = None
                         self.error = type(error).__name__
                         self.on_error("문장을 다듬지 못해 인식한 원문을 남겼습니다.")
-                    # A rejected correction (None) leaves the earlier correction in place; newer words stay as heard.
+                    # A failed correction (None) leaves the earlier correction in place; newer words stay as heard.
                     self.mark("polish", length=len(content), out=len(corrected) if corrected is not None else None,
                               ms=round((asyncio.get_running_loop().time() - started) * 1000), error=self.error)
                 if corrected is not None and piece == self.piece:  # text the user took over is not corrected

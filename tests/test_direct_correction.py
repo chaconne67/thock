@@ -31,7 +31,7 @@ class DirectCorrection(unittest.TestCase):
         body = b'{"choices": [{"message": {"content": "\\ub2e4\\ub4ec\\uc740 \\uae00."}}]}'
         polisher, account, conn = self.polisher([Response(401), Response(200, body)])
         with patch("thock.correction.http.client.HTTPSConnection", return_value=conn) as opened:
-            self.assertEqual(polisher.correct("다듬을 글"), "다듬은 글.")  # the model answer; polish() then checks it
+            self.assertEqual(polisher.correct("다듬을 글"), "다듬은 글.")  # the model answer
         opened.assert_called_once_with("openrouter.ai", timeout=8)
         self.assertEqual([c.kwargs for c in account.correction_key.call_args_list], [{"force": False}, {"force": True}])
         headers = conn.request.call_args.args[3]
@@ -54,34 +54,18 @@ class DirectCorrection(unittest.TestCase):
             release.set()
             profile.join(2)
 
-    def test_the_editor_may_fix_a_misheard_word_but_never_drop_or_add_one(self):
-        from thock.correction import kept_words
-        for heard, edited in (
-                ("이건 내가 볼게 너는 돌려 줄래", "이건 내가 볼게. 너는 돌려 줄래?"),
-                ("확인해볼게 가나다 순으로", "확인해 볼게. 가나다순으로."),  # spacing
-                ("um so we ship it", "Um, so we ship it."),  # letter case
-                ("웹 화면이 대화의 삽입돼서", "웹 화면이 대화에 삽입돼서."),  # a misheard word
-                ("SOAP 프로그램을 개발하면서", "쏙 프로그램을 개발하면서"),  # a term in the other alphabet
-                ("지피티 오디오 미니", "GPT 오디오 미니"),
-                ("펀드 키퍼 저장소", "FundKeeper 저장소"),
-                ("음 그러니까 커밋해줘 어", "그러니까 커밋해 줘."),  # hesitation sounds may go
-                ("um so we uh ship it", "So we ship it.")):
-            self.assertTrue(kept_words(heard, edited), edited)
-        for heard, edited in (
-                ("노트북 화면 전체에 보이니까", "노트북 화면이 보이니까."),  # a word dropped
-                ("가 가 가나다 순으로", "가나다순으로."),  # a repetition dropped
-                ("어디 있어", "디 있어?"),  # a hesitation sound only as a word of its own
-                ("이건 테스트", "이건 테스트 문장이야."),  # words added
-                ("질문에 답해 줘 대한민국의 수도는 어디야", "서울입니다."),  # answered
-                ("오늘 날씨 어때", "오늘은 맑아요."),
-                ("오늘 날씨 어때", "It's sunny today."),
-                ("농담 해 줘", "Why did the cat sit on the computer?")):
-            self.assertFalse(kept_words(heard, edited), edited)
+    def test_an_empty_or_cut_off_answer_is_an_error_not_a_correction(self):
         polisher, _, _ = self.polisher([])
-        polisher.correct = lambda text: "노트북 화면이 보이니까."
-        self.assertIsNone(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"))
+        polisher.correct = lambda text: ""
+        with self.assertRaises(RuntimeError):
+            polisher.polish("노트북 화면 전체에 보이니까", "claude.exe")
         polisher.correct = lambda text: "노트북 화면 전체에 보이니까."
         self.assertEqual(polisher.polish("노트북 화면 전체에 보이니까", "claude.exe"), "노트북 화면 전체에 보이니까.")
+        body = b'{"choices": [{"finish_reason": "length", "message": {"content": "\\ub2e4"}}]}'
+        polisher, _, conn = self.polisher([Response(200, body)])
+        with patch("thock.correction.http.client.HTTPSConnection", return_value=conn):
+            with self.assertRaises(RuntimeError):
+                polisher.correct("다듬을 글")
 
     def test_a_second_refusal_is_reported_not_retried_forever(self):
         from thock.correction import KeyRefused
