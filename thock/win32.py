@@ -369,6 +369,11 @@ class InlineField:
                 return self._refuse("selection_unavailable")
         started = time.monotonic()
         actual = paste(text[common:], self.target, expected, text)
+        if (actual is None and _input_revision == self.revision and capture_target() != self.target
+                and self._take_back()):  # the front was taken while writing (15:55 test): look again, once
+            seen = reader.snapshot()
+            actual = (seen if shows(seen, text) else paste(text[common:], self.target, expected, text)
+                      if seen == expected else None)
         self.mark("write", length=len(text), kept=common, ms=round((time.monotonic() - started) * 1000),
                   ok=int(actual is not None and _input_revision == self.revision))
         if actual is None or _input_revision != self.revision:
