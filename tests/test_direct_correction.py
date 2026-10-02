@@ -6,6 +6,11 @@ import unittest
 from unittest.mock import Mock, patch
 
 
+def json_text(text):
+    import json
+    return json.dumps(text)[1:-1]
+
+
 class Response:
     def __init__(self, status, body=b""):
         self.status, self.body = status, body
@@ -21,7 +26,7 @@ class DirectCorrection(unittest.TestCase):
             "api_key": "renewed" if force else "cached", "model": "openai/gpt-6-luna", "expires": 0}))
         profile = types.SimpleNamespace(terms=lambda: [], summary=lambda: "")
         notes = types.SimpleNamespace(hint=lambda: "", terms=lambda: ["FundKeeper"])
-        polisher = Polisher({"terms": ["Thock"]}, notes, account, profile)
+        polisher = Polisher({"terms": ["Thock"], "polish_level": "clean"}, notes, account, profile)
         conn = Mock()
         replies = iter(statuses)
         conn.getresponse.side_effect = lambda: next(replies)
@@ -53,6 +58,18 @@ class DirectCorrection(unittest.TestCase):
             self.assertEqual(polisher.complete("i", "u"), "ok")  # does not wait for the profile
             release.set()
             profile.join(2)
+
+    def test_the_chosen_level_decides_which_instructions_the_editor_gets(self):
+        from thock.correction import POLISH_RULES
+        body = b'{"choices": [{"message": {"content": "ok"}}]}'
+        for level, (rules, _) in POLISH_RULES.items():
+            polisher, _, conn = self.polisher([Response(200, body)])
+            polisher.settings["polish_level"] = level
+            with patch("thock.correction.http.client.HTTPSConnection", return_value=conn):
+                polisher.correct("다듬을 글")
+            sent = conn.request.call_args.args[2]
+            for other, (other_rules, _) in POLISH_RULES.items():
+                self.assertEqual(json_text(other_rules) in sent, other == level, (level, other))
 
     def test_an_empty_or_cut_off_answer_is_an_error_not_a_correction(self):
         polisher, _, _ = self.polisher([])

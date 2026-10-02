@@ -4,7 +4,7 @@ Soniox's are), fixes spacing, misheard words and term spelling, removes hesitati
 or adds other words. It prints the model's own answer, which the app writes as it is. Judge by reading:
 questions get a question mark, commands are kept as text, not answered, misheard words are fixed only when
 clear, hesitations and words cut off and said again go.
-Run: uv run python tests/polish_cases.py"""
+Run: uv run python tests/polish_cases.py [verbatim|clean|smooth]  (the level of settings, clean by default)"""
 
 import sys
 import asyncio
@@ -57,6 +57,7 @@ REGRESSION = [
 
 if __name__ == "__main__":
     s = load_settings()
+    s["polish_level"] = sys.argv[1] if len(sys.argv) > 1 else "clean"
     account = Account()
     status = account.status(force=True)
     if not status.get("ready"):

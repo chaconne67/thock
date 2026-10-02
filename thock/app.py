@@ -18,7 +18,8 @@ from collections import deque
 
 import sounddevice as sd
 
-from .config import (APP_NAME, EMBEDDED, HOME, HOTKEYS, INPUT_MODES, PREVIEW_FONT_SIZES, PREVIEW_FONTS, SAMPLE_RATE, SOUND_KEYBOARDS,
+from .config import (APP_NAME, EMBEDDED, HOME, HOTKEYS, INPUT_MODES, POLISH_LEVELS, PREVIEW_FONT_SIZES, PREVIEW_FONTS,
+                     SAMPLE_RATE, SOUND_KEYBOARDS,
                      VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
@@ -741,7 +742,8 @@ class App:
 
     def public_settings(self):
         s = self.settings
-        return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
+        return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"],
+                "polish_level": s["polish_level"], "polish_levels": POLISH_LEVELS, "terms": s["terms"], "learn": s["learn"],
                 "sound_processing": s["sound_processing"],
                 "keep_audio": s["keep_audio"],
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
@@ -760,6 +762,8 @@ class App:
         s = self.settings
         if body.get("input_mode") in INPUT_MODES:
             s["input_mode"] = body["input_mode"]
+        if isinstance(body.get("polish_level"), str) and body["polish_level"] in POLISH_LEVELS:
+            s["polish_level"] = body["polish_level"]
         if body.get("hotkey") in HOTKEYS:
             s["hotkey"] = body["hotkey"]
         if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:

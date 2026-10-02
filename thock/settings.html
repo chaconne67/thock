@@ -159,8 +159,12 @@
     <h2 id="h-dictation">받아쓰기</h2>
     <div class="row"><label class="label" for="input-mode">입력 방식</label><select id="input-mode"></select></div>
     <div class="row sep">
-      <div><label class="label" for="polish">문장 다듬기</label><p class="hint">문맥을 보고 문장부호를 붙이고 띄어쓰기를 고칩니다. 말한 단어는 바꾸지 않습니다.</p></div>
+      <div><label class="label" for="polish">문장 다듬기</label><p class="hint">문맥을 보고 문장부호와 띄어쓰기를 고치고, 고른 정도만큼 말을 다듬습니다. 끄면 들린 그대로 문장부호 없이 넣습니다.</p></div>
       <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
+    </div>
+    <div class="row">
+      <div><label class="label" for="polish-level">다듬는 정도</label><p class="hint" id="polish-level-hint"></p></div>
+      <select id="polish-level"></select>
     </div>
     <div class="group">
       <div class="row">
@@ -360,6 +364,11 @@ function renderHint() {
     : key + "을 한 번 눌러 시작하고, 다시 누르면 끝납니다.";
   $("hotkey-hint").textContent = message + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
   $("terms-count").textContent = `${termsList().length}개`;
+  $("polish-level").disabled = !$("polish").checked;
+  $("polish-level-hint").textContent = {
+    verbatim: "단어는 들린 그대로 두고 문장부호와 띄어쓰기만 고칩니다.",
+    clean: "음·어 같은 망설임 말과 끊긴 말 조각을 빼고, 잘못 들린 말과 용어 표기를 고칩니다.",
+    smooth: "군더더기를 빼고, 되풀이한 말과 고쳐 말한 구절을 정리해 읽기 좋게 문장을 나눕니다."}[$("polish-level").value] || "";
 }
 
 function stopSoundPreview() {
@@ -457,6 +466,8 @@ function fill(s) {
   $("input-mode").replaceChildren(...Object.entries(s.input_modes).map(([value,label])=>new Option(label,value)));
   $("input-mode").value = s.input_mode;
   $("polish").checked = s.polish;
+  $("polish-level").replaceChildren(...Object.entries(s.polish_levels).map(([value,label])=>new Option(label,value)));
+  $("polish-level").value = s.polish_level;
   $("learn").checked = s.learn;
   $("keep-audio").checked = s.keep_audio;
   $("sound-processing").checked = s.sound_processing;
@@ -493,7 +504,7 @@ $("save").addEventListener("click", async () => {
   setStatus("저장 중…");
   try {
     fill(await api("/api/settings", {
-      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, learn: $("learn").checked, terms: termsList(),
+      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, learn: $("learn").checked, terms: termsList(),
       sound_processing: $("sound-processing").checked,
       keep_audio: $("keep-audio").checked,
       sound_keyboard: $("sound-keyboard").value,

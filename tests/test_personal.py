@@ -29,6 +29,14 @@ class SettingsCompatibility(unittest.TestCase):
             (Path(temp)/"settings.json").write_text(json.dumps({"input_mode":"auto"}))
             self.assertEqual(load_settings()["input_mode"],"toggle")
 
+    def test_a_polish_level_not_offered_becomes_the_default(self):
+        with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
+            self.assertEqual(load_settings()["polish_level"],"clean")  # earlier settings: hesitations go
+            (Path(temp)/"settings.json").write_text(json.dumps({"polish_level":"rewrite"}))
+            self.assertEqual(load_settings()["polish_level"],"clean")
+            (Path(temp)/"settings.json").write_text(json.dumps({"polish_level":"smooth"}))
+            self.assertEqual(load_settings()["polish_level"],"smooth")
+
     def test_new_install_uses_toggle_and_needs_separate_welcome(self):
         with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
             settings=load_settings()

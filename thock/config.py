@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.8"
+APP_NAME, VERSION = "Thock", "0.4.9.dev1"
 # Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
 # its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
 EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
@@ -15,11 +15,14 @@ SAMPLE_RATE = 16000
 SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
 SONIOX_MODEL = "stt-rt-v5"
 INPUT_MODES = {"hold": "누르고 있는 동안 녹음", "toggle": "눌러서 녹음 켜고 끄기"}
+# How far the editor goes (주인님 결정 2026-10-02); its instructions per level are in correction.py.
+POLISH_LEVELS = {"verbatim": "말한 그대로", "clean": "군더더기만 빼기", "smooth": "읽기 좋게 다듬기"}
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
                    "hhkb": "HHKB Professional Hybrid", "leopold": "Leopold FC660M",
                    "technics": "Technics · Gateron Yellow", "keychron": "Keychron K10 · Linear"}
-DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_provider": "chatgpt",  # keep old setting without using it
+DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_level": "clean",
+            "polish_provider": "chatgpt",  # keep old setting without using it
             "terms": [], "position": None, "learn": True, "input_mode": "toggle", "welcome_complete": False,
             "keep_audio": False, "sound_processing": True, "sound_keyboard": "rainy75",
             "preview": True, "preview_font_ko": "Noto Sans KR", "preview_font_en": "Inter", "preview_font_size": 14}
@@ -45,6 +48,8 @@ def load_settings():
         settings["sound_processing"] = True
     if settings["input_mode"] not in INPUT_MODES:
         settings["input_mode"] = DEFAULTS["input_mode"]
+    if not isinstance(settings["polish_level"], str) or settings["polish_level"] not in POLISH_LEVELS:
+        settings["polish_level"] = DEFAULTS["polish_level"]
     if not isinstance(settings["sound_keyboard"], str) or settings["sound_keyboard"] not in SOUND_KEYBOARDS:
         settings["sound_keyboard"] = DEFAULTS["sound_keyboard"]
     for lang, fonts in PREVIEW_FONTS.items():
