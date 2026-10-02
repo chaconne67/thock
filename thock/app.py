@@ -23,7 +23,7 @@ from .config import (APP_NAME, EMBEDDED, HOME, HOTKEYS, INPUT_MODES, POLISH_LEVE
                      VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
-from .editwatch import EditWatcher
+from .editwatch import EditWatcher, field_reader
 from .learning import Profile, TypoNotes
 from .overlay import BARS, run_overlay
 from .settings_server import SettingsServer
@@ -122,11 +122,15 @@ class Session:
 
     def _field(self):
         """The field checked at the key press, taken again as dictation starts: a click inside it since then
-        only moves the caret; another field, or none, is no place to write."""
+        only moves the caret; another field, or none, is no place to write. A Chromium app may answer the key
+        press with its window's View and settle on its field a moment later (Crema, 2026-10-03): in the same
+        window with no key or click from the user since, the field it settled on is the one."""
         target = capture_target()
         same = bool(target) and target[:2] == self.target[:2]
-        self.mark("start_field", same=int(same))
-        field = InlineField(target if same else None, self.mark)
+        settled = bool(target) and not same and target[0] == self.target[0] and target[2] == self.target[2]
+        self.mark("start_field", same=int(same), settled=int(settled) or None,
+                  element=field_reader().describe() if settled else None)
+        field = InlineField(target if same or settled else None, self.mark)
         if field.stopped:
             field.mismatch = ("start: no field" if not target else "start: another field" if not same
                               else "start: unreadable")

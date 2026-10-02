@@ -187,6 +187,21 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured, [None])
         self.assertEqual(self.field.mismatch, "start: another field")
 
+    async def test_a_field_the_app_settles_on_after_the_key_press_is_written_into(self):
+        # Crema answered the key press with its window's View, then its field (2026-10-03): same window,
+        # no key or click from the user since (the same input revision), so the settled field is the one.
+        captured = []
+        with patch("thock.app.capture_target", return_value=(1, (9,), 0)), \
+                patch("thock.app.field_reader", return_value=SimpleNamespace(describe=lambda: "50004/")), \
+                patch("thock.app.InlineField", side_effect=lambda target, mark=None: captured.append(target) or self.field):
+            with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="정리된 칸"):
+                session = self.start()
+                session.stop()
+                await session.task
+        self.assertEqual(captured, [(1, (9,), 0)])
+        self.assertIn([1, 1], [[e[2].get("settled"), 1] for e in session.events if e[1] == "start_field"])
+        self.assertEqual(self.field.writes[-1], "정리된 칸")
+
     async def test_every_dictation_leaves_a_trace_without_its_text(self):
         with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="비밀 문장"):
             with self.assertLogs("voicetype.trace", level="INFO") as logs:
