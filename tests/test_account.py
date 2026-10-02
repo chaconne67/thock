@@ -1,8 +1,10 @@
 """AI Shift desktop sign-in and credential handling."""
 
 import hashlib
+import io
 import sys
 import unittest
+import urllib.error
 import urllib.parse
 import urllib.request
 from unittest.mock import patch
@@ -100,3 +102,40 @@ class StoredSignInTests(unittest.TestCase):
     def test_reads_thock_utf8_and_crema_utf16_sign_ins(self):
         self.assertEqual(blob_text("tok-123".encode("utf-8")), "tok-123")
         self.assertEqual(blob_text("tok-123".encode("utf-16-le")), "tok-123")
+
+
+class UnreachedServer(unittest.TestCase):
+    """A server deploy leaves Thock unreachable for seconds: requests that never reached it are sent again."""
+    @staticmethod
+    def proxy_error(status, body):
+        return urllib.error.HTTPError(SITE_URL, status, "", {}, io.BytesIO(body))
+
+    def test_a_proxy_error_or_lost_connection_is_sent_again(self):
+        class Answer:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def read(self, *_): return b'{"session_id": "s"}'
+        answers = [self.proxy_error(502, b"<html>Bad Gateway</html>"), ConnectionResetError(), Answer()]
+        with patch("thock.account.urllib.request.urlopen", side_effect=answers) as urlopen,                 patch("thock.account.time.sleep"):
+            self.assertEqual(Account._request("/api/thock/session", {}), {"session_id": "s"})
+        self.assertEqual(urlopen.call_count, 3)
+
+    def test_still_unreached_after_a_few_seconds_says_which(self):
+        for failure, code in ((self.proxy_error(502, b"<html>Bad Gateway</html>"), "server_unavailable"),
+                              (ConnectionRefusedError(), "account_unreachable")):
+            with self.subTest(code=code), patch("thock.account.urllib.request.urlopen", side_effect=failure) as urlopen,                     patch("thock.account.time.sleep"), patch("thock.account.time.monotonic", side_effect=[0, 1, 2, 3.5]):
+                with self.assertRaises(AccountError) as error:
+                    Account._request("/api/thock/session", {})
+            self.assertEqual((error.exception.code, urlopen.call_count), (code, 3))
+        self.assertIn("서버", str(AccountError("server_unavailable")))  # not the internet message
+
+    def test_thocks_own_refusal_is_not_sent_again(self):
+        refusal = self.proxy_error(403, b'{"error": "signed_out"}')
+        with patch("thock.account.urllib.request.urlopen", side_effect=refusal) as urlopen, patch("thock.account.time.sleep"):
+            with self.assertRaises(AccountError) as error:
+                Account._request("/api/thock/session", {})
+        self.assertEqual((error.exception.code, urlopen.call_count), ("signed_out", 1))
+
+
+SITE_URL = "https://thock.cloud/api/thock/session"

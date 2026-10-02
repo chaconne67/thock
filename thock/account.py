@@ -20,6 +20,9 @@ from .config import EMBEDDED, VERSION
 
 SITE = os.environ.get("THOCK_SITE") or "https://thock.cloud"  # Thock's own address for AI Shift accounts
 CREDENTIAL_NAME = os.environ.get("THOCK_CREDENTIAL") or "AIShift/Thock"
+# A server deploy leaves it unreachable for seconds: a request that never reached Thock is sent again meanwhile.
+RETRY_SECONDS = 3
+UNREACHED = {"account_unreachable", "server_unavailable"}
 MESSAGES = {
     "signed_out": "AI Shift에 다시 로그인해 주세요.",
     "access_unavailable": "이 계정의 Thock 이용권을 확인해 주세요.",
@@ -37,6 +40,7 @@ MESSAGES = {
     "already_processed": "이미 처리한 요청입니다.",
     "session_expired": "처리 시간이 지났습니다. 새 받아쓰기를 시작해 주세요.",
     "account_unreachable": "인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+    "server_unavailable": "Thock 서버가 잠시 응답하지 않습니다. 잠시 뒤 다시 시도해 주세요.",
     "correction_limit_reached": "이번 달 문장 다듬기 한도를 모두 사용했습니다. 인식한 원문을 입력합니다.",
     "key_busy": "문장 다듬기 연결을 잠시 뒤 다시 준비합니다.",
     "sign_in": "로그인을 완료하지 못했습니다. 다시 연결해 주세요.",
@@ -145,17 +149,23 @@ class Account:
             SITE + path, data=json.dumps(data).encode("utf-8") if data is not None else None,
             headers=headers,
         )
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                return json.load(response) if response.status != 204 else {}
-        except urllib.error.HTTPError as error:
+        started = time.monotonic()
+        while True:
             try:
-                code = json.load(error).get("error", "account_unreachable")
-            except (ValueError, OSError):
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    return json.load(response) if response.status != 204 else {}
+            except urllib.error.HTTPError as error:
+                try:
+                    code = json.load(error).get("error", "account_unreachable")
+                except (ValueError, OSError):  # not Thock's answer: the server in front could not reach Thock
+                    code = "server_unavailable" if error.code in (502, 503) else "account_unreachable"
+            except OSError:  # no connection: the internet, or the server not answering
                 code = "account_unreachable"
-            raise AccountError(code) from None
-        except (OSError, ValueError):
-            raise AccountError("account_unreachable") from None
+            except ValueError:
+                raise AccountError("account_unreachable") from None
+            if code not in UNREACHED or time.monotonic() - started > RETRY_SECONDS:  # a timeout has waited enough
+                raise AccountError(code) from None
+            time.sleep(0.5)
 
     def begin(self, port, switch=False):
         """The sign-in address. A browser already signed in connects that account; switch asks Google which."""
