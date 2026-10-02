@@ -326,6 +326,10 @@ class InlineField:
         self.__init__(capture_target(), self.mark)
         return not self.stopped
 
+    def _ours(self, seen):
+        """The field is as Thock left it: as found before the first write, or showing Thock's text since."""
+        return seen == self.initial if self.current is None else shows(seen, self.current)
+
     def _take_back(self):
         """Another program took the front while the user pressed no key and clicked nothing (주인님 2026-10-02):
         put the dictation's window back, twice at most so two windows cannot keep taking it from each other.
@@ -338,9 +342,10 @@ class InlineField:
         while back and capture_target() != self.target and time.monotonic() < deadline:
             time.sleep(0.02)
         ok = back and capture_target() == self.target
-        # A Chromium window just put back reads its field as unreadable for a moment (16:07 test): wait for it.
+        # Just after the switch the focused element may still read as the field that took the front, or as
+        # unreadable (16:07, 16:48 tests): wait up to a second for the field to show Thock's own text again.
         from .editwatch import field_reader
-        while ok and field_reader().snapshot() is None and time.monotonic() < deadline + 1.0:
+        while ok and not self._ours(field_reader().snapshot()) and time.monotonic() < deadline + 1.0:
             time.sleep(0.03)
         self.mark("restored", ok=int(ok))
         return ok
@@ -361,8 +366,7 @@ class InlineField:
             return self._refuse("focus_changed")
         reader = field_reader()
         seen = reader.snapshot()
-        owned = seen == self.initial if self.current is None else shows(seen, self.current)
-        if not owned:
+        if not self._ours(seen):
             self.mismatch = mismatch(seen, self.initial if self.current is None
                                      else (self.initial[0] + self.current, "", self.initial[2]))
             return self._refuse("content_or_caret_changed")
