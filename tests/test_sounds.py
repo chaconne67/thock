@@ -18,6 +18,13 @@ from thock.sound import SOUNDS, KeyboardSounds, selected_mode  # noqa: E402
 from thock.settings_server import SettingsServer  # noqa: E402
 
 
+def fake_sounddevice(open_output):
+    """sounddevice with MME and WASAPI speakers; the typing sound must open WASAPI's."""
+    return types.SimpleNamespace(RawOutputStream=open_output, WasapiSettings=lambda auto_convert: ("wasapi", auto_convert),
+                                 query_hostapis=lambda: [{"name": "MME", "default_output_device": 3},
+                                                         {"name": "Windows WASAPI", "default_output_device": 9}])
+
+
 class SoundSettings(unittest.TestCase):
     def test_old_settings_get_defaults_and_choices_persist(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(config, "HOME", Path(folder)):
@@ -112,8 +119,8 @@ class SoundPlayback(unittest.TestCase):
                 self.blocks.append((samples[0], samples[-1]))
                 time.sleep(0.001)
 
-        output = Output()
-        fake = types.SimpleNamespace(RawOutputStream=lambda **_: output)
+        output, opened = Output(), []
+        fake = fake_sounddevice(lambda **settings: opened.append(settings) or output)
         with patch.dict(sys.modules, {"sounddevice": fake}):
             player = KeyboardSounds()
             player._audio = {keyboard: array.array("h", [amplitude] * 480).tobytes()
@@ -129,6 +136,7 @@ class SoundPlayback(unittest.TestCase):
             player.set_mode(False)
             self.wait_until(lambda: player._worker is None)
         self.assertEqual(output.open_count, 1)
+        self.assertEqual((opened[0]["device"], opened[0]["extra_settings"]), (9, ("wasapi", True)))  # not MME
         first_ikki = next(i for i, (first, _) in enumerate(output.blocks) if first == 3000)
         first_hhkb = next(i for i, (first, _) in enumerate(output.blocks) if first == 2000)
         self.assertEqual(output.blocks[first_ikki - 1][-1], 0)
@@ -144,7 +152,7 @@ class SoundPlayback(unittest.TestCase):
             def __enter__(self):
                 raise RuntimeError("no output device")
 
-        fake = types.SimpleNamespace(RawOutputStream=lambda **_: FailingOutput())
+        fake = fake_sounddevice(lambda **_: FailingOutput())
         with patch.dict(sys.modules, {"sounddevice": fake}), self.assertLogs("voicetype", level="WARNING"):
             player = KeyboardSounds()
             player.set_mode(True)

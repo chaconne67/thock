@@ -69,7 +69,12 @@ class KeyboardSounds:
                 return
             import sounddevice as sd
 
-            with sd.RawOutputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=BLOCK_FRAMES) as output:
+            # The default speakers through WASAPI, not PortAudio's default MME: opening MME speakers (a Bluetooth
+            # speaker waking up) held the MME microphone for up to 0.7 s as the first words became text, and the
+            # words said meanwhile were lost.
+            wasapi = next(api for api in sd.query_hostapis() if api["name"] == "Windows WASAPI")
+            with sd.RawOutputStream(device=wasapi["default_output_device"], samplerate=RATE, channels=1, dtype="int16",
+                                    blocksize=BLOCK_FRAMES, extra_settings=sd.WasapiSettings(auto_convert=True)) as output:
                 audio, position, fade = b"", 0, None
                 while True:
                     with self._lock:
