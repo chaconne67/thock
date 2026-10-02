@@ -93,30 +93,6 @@ def allow_next_to_front():
     user32.SendInput(1, (INPUT * 1)(alt[1]), ctypes.sizeof(INPUT))
 
 
-def bring_to_front(window):
-    """Put a window the user did not leave back in front. Windows refuses an app in the background (16:12 test,
-    from Thock's worker thread); a moment of Alt, and sharing input with the window that took the front for the
-    call, lift that. The switch may land a moment later, so it is waited for."""
-    if not user32.IsWindow(window):
-        return False
-    alt = [INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(VK_MENU, 0, flags, 0, OWN_INPUT)))
-           for flags in (0, KEYEVENTF_KEYUP)]
-    user32.SendInput(2, (INPUT * 2)(*alt), ctypes.sizeof(INPUT))
-    mine = kernel32.GetCurrentThreadId()
-    theirs = user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
-    shared = bool(theirs) and theirs != mine and user32.AttachThreadInput(mine, theirs, True)
-    try:
-        user32.BringWindowToTop(window)
-        user32.SetForegroundWindow(window)
-    finally:
-        if shared:
-            user32.AttachThreadInput(mine, theirs, False)
-    deadline = time.monotonic() + 0.5
-    while user32.GetForegroundWindow() != window and time.monotonic() < deadline:
-        time.sleep(0.02)
-    return user32.GetForegroundWindow() == window
-
-
 input_events = deque(maxlen=300)  # (time, kind) of the user's own key and click events, for the trace
 
 
@@ -308,7 +284,7 @@ class InlineField:
     def __init__(self, target, mark=None):
         from .editwatch import field_reader
         self.target, self.current, self.written = target, None, None  # current: as the field shows written
-        self.restores = 0
+        self.attempt = None  # the last text a write tried to show
         self.mark = mark or (lambda name, **values: None)
         self.revision = _input_revision
         self.mismatch = None  # diagnosis: how the field differed when it never showed the paste (lengths only)
@@ -326,29 +302,28 @@ class InlineField:
         self.__init__(capture_target(), self.mark)
         return not self.stopped
 
-    def _ours(self, seen):
-        """The field is as Thock left it: as found before the first write, or showing Thock's text since."""
-        return seen == self.initial if self.current is None else shows(seen, self.current)
-
-    def _take_back(self):
-        """Another program took the front while the user pressed no key and clicked nothing (주인님 2026-10-02):
-        put the dictation's window back, twice at most so two windows cannot keep taking it from each other.
-        The caller then checks the field as always; a window the user left stays left."""
-        if self.restores >= 2 or _input_revision != self.revision:
-            return False
-        self.restores += 1
-        back = bring_to_front(self.target[0])
-        deadline = time.monotonic() + 0.5
-        while back and capture_target() != self.target and time.monotonic() < deadline:
-            time.sleep(0.02)
-        ok = back and capture_target() == self.target
-        # Just after the switch the focused element may still read as the field that took the front, or as
-        # unreadable (16:07, 16:48 tests): wait up to a second for the field to show Thock's own text again.
+    def resume(self):
+        """After a pause: None while the dictation's field is not in front with a readable caret. Otherwise
+        writing goes on there: "same" when it shows Thock's text as left (or the write that was under way),
+        "moved" when the user changed it, from their caret then. A key or click meanwhile was elsewhere."""
         from .editwatch import field_reader
-        while ok and not self._ours(field_reader().snapshot()) and time.monotonic() < deadline + 1.0:
-            time.sleep(0.03)
-        self.mark("restored", ok=int(ok))
-        return ok
+        target = capture_target()
+        if not target or target[:2] != self.target[:2]:
+            return None
+        seen = field_reader().snapshot()
+        if seen is None:
+            return None
+        self.target, self.revision = target, _input_revision
+        self.failure, self.mismatch, self.stopped = None, None, False
+        landed = shown(seen, self.attempt) if self.attempt is not None else None
+        if landed is not None:
+            self.current, self.written = landed, self.attempt
+            self.initial = seen[0][:len(seen[0]) - len(landed)], "", seen[2]
+            return "same"
+        if seen == self.initial if self.current is None else shows(seen, self.current):
+            return "same"
+        self.__init__(target, self.mark)
+        return None if self.stopped else "moved"
 
     def _refuse(self, failure):
         self.failure, self.stopped = failure, True
@@ -362,11 +337,12 @@ class InlineField:
             return False
         if _input_revision != self.revision:
             return self._refuse("user_input")
-        if capture_target() != self.target and not self._take_back():
+        if capture_target() != self.target:
             return self._refuse("focus_changed")
         reader = field_reader()
         seen = reader.snapshot()
-        if not self._ours(seen):
+        owned = seen == self.initial if self.current is None else shows(seen, self.current)
+        if not owned:
             self.mismatch = mismatch(seen, self.initial if self.current is None
                                      else (self.initial[0] + self.current, "", self.initial[2]))
             return self._refuse("content_or_caret_changed")
@@ -383,19 +359,12 @@ class InlineField:
                 return True
             selecting = time.monotonic()
             expected = reader.select_tail(seen, tail)
-            if (expected is None and _input_revision == self.revision and capture_target() != self.target
-                    and self._take_back()):  # the front was taken while selecting (16:06 test): once more
-                expected = reader.select_tail(seen, tail) if reader.snapshot() == seen else None
             self.mark("select", tail=len(tail), ms=round((time.monotonic() - selecting) * 1000))
             if expected is None:
                 return self._refuse("selection_unavailable")
         started = time.monotonic()
+        self.attempt = text
         actual = paste(text[common:], self.target, expected, text)
-        if (actual is None and _input_revision == self.revision and capture_target() != self.target
-                and self._take_back()):  # the front was taken while writing (15:55 test): look again, once
-            seen = reader.snapshot()
-            actual = (seen if shows(seen, text) else paste(text[common:], self.target, expected, text)
-                      if seen == expected else None)
         self.mark("write", length=len(text), kept=common, ms=round((time.monotonic() - started) * 1000),
                   ok=int(actual is not None and _input_revision == self.revision))
         if actual is None or _input_revision != self.revision:

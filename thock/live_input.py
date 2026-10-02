@@ -5,6 +5,9 @@ The correction model always sees everything said so far, so punctuation follows 
 rather than each short phrase, and a mark set earlier can still move.
 When the user edits during dictation, what was written stays as is and later speech starts
 again at their caret.
+Hearing never depends on writing (주인님 2026-10-02): when the field cannot be written (another window in
+front, the field changed, anything), writing pauses while everything heard is kept, and goes on when the
+dictation's field is back, until a new dictation lets the held text go.
 """
 import asyncio
 
@@ -12,9 +15,13 @@ PAUSE = 1.0  # seconds without new words after a phrase ends before the whole te
 
 
 class LiveDictation:
-    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False, mark=lambda name, **values: None):
+    def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False, mark=lambda name, **values: None,
+                 resume=lambda: None, on_pause=lambda: None):
         self.write, self.polish, self.apply_notes, self.on_error = write, polish, apply_notes, on_error
-        self.restart, self.mark = restart, mark
+        self.restart, self.mark, self.resume, self.on_pause = restart, mark, resume, on_pause
+        self.paused = self.released = False
+        self.skip = 0  # leading letters already in the field before the user moved the caret during a pause
+        self.written = ""  # the whole text as of the last write the field showed
         self.piece = 0  # bumped when later speech moves to the user's new caret
         self.start = ""  # finalized speech before this piece; the rest is corrected as one text
         self.heard = self.boundary = self.processed = self.corrected = ""
@@ -80,12 +87,43 @@ class LiveDictation:
             if self.ending and boundary == self.boundary:
                 return
 
+    @property
+    def complete(self):
+        """Everything heard is in the field."""
+        return not self.blocked and not self.paused and self.text()[self.skip:] == self.delivered
+
+    def release(self):
+        """A new dictation lets a held text go."""
+        self.released = True
+
+    async def _wait_for_field(self):
+        while self.paused and not self.blocked:
+            if self.released:
+                self.blocked, self.paused = True, False
+                self.mark("released")
+                return
+            back = await asyncio.to_thread(self.resume)
+            if back:
+                if back == "moved":  # the user changed the field: what is there stays, the rest goes at the caret
+                    full = self.text()
+                    common = next((i for i, (a, b) in enumerate(zip(self.written, full)) if a != b),
+                                  min(len(self.written), len(full)))
+                    self.skip, self.delivered = common, ""
+                self.paused = False
+                self.mark("resumed", how=back)
+                return
+            await asyncio.sleep(0.3)
+
     async def _write(self):
         while True:
-            await self.changed.wait()
+            if self.paused:
+                await self._wait_for_field()
+            else:
+                await self.changed.wait()
             self.changed.clear()
-            if not self.blocked:
-                text = self.text()
+            if not self.blocked and not self.paused:
+                full = self.text()
+                text = full[self.skip:]
                 if text != self.delivered:
                     try:
                         result = await asyncio.to_thread(self.write, text)
@@ -93,20 +131,20 @@ class LiveDictation:
                         result = False
                     restarted = (await asyncio.to_thread(self.restart)) if not result else False
                     if not result:
-                        self.mark("restart" if restarted else "blocked")
+                        self.mark("restart" if restarted else "paused")
                     if restarted:
                         if self.delivered:
                             # The user edited: keep what is written, continue after the last finished phrase.
                             self.piece += 1
                             self.start = self.processed = self.boundary
-                            self.corrected, self.delivered = "", ""
+                            self.corrected, self.delivered, self.skip, self.written = "", "", 0, ""
                         self.changed.set()
                     elif not result:
-                        self.blocked = True
-                        self.on_error("입력 위치나 글이 바뀌어 자동 입력을 멈췄습니다.")
+                        self.paused = True
+                        self.on_pause()
                     else:
-                        self.delivered = text
-            if self.ending and self.corrector.done() and not self.changed.is_set():
+                        self.delivered, self.written = text, full
+            if self.ending and self.corrector.done() and not self.changed.is_set() and not self.paused:
                 return
 
     async def finish(self, raw):

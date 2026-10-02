@@ -39,6 +39,7 @@ IDLE_STOP = 5  # seconds without new speech that end a tap-started dictation
 WAITING = "입력할 곳을 클릭해 주세요."  # CapsLock with no text field to write into
 # A dictation the granted time stopped is never stopped silently (주인님 2026-10-02).
 LIMIT_REACHED = "사용 한도를 모두 써서 받아쓰기를 멈췄습니다. 지금까지 말한 글은 입력합니다."
+HOLDING = "입력창으로 돌아가면 이어서 입력합니다."  # writing paused; everything heard is kept
 LONGEST = "한 번에 5분까지 받아쓸 수 있어 멈췄습니다. 다시 눌러 이어서 말해 주세요."
 # Account states the member settles in the account window: the pill's 확인 opens it.
 ACCOUNT_STATES = {"signed_out", "access_unavailable", "access_suspended", "access_not_started", "access_expired",
@@ -208,6 +209,11 @@ class Session:
         if self.captured_frames >= self.max_frames:
             self._at_limit()
 
+    @property
+    def holding(self):
+        """Speech is over and its text waits for the field: not shown as processing."""
+        return self.released is not None and self.live is not None and self.live.paused
+
     def _at_limit(self):
         """The granted time ran out while the microphone was still on: stop and say why. Under five minutes the
         grant was the account's remaining time (the server never grants more than 300 s at once)."""
@@ -310,7 +316,8 @@ class Session:
             polish = (lambda words: self.state.polisher.polish(words, self.app)) if s["polish"] and not restyle else None
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
                                              lambda message: self.state.notify(message, fault=live.blocked),
-                                             field.restart, self.mark)
+                                             field.restart, self.mark, field.resume,
+                                             lambda: (self.state.notify(HOLDING, seconds=30), self.state._sync_sound()))
 
             def heard(words):
                 self._count(self.replies, time.perf_counter(), 1)
@@ -332,7 +339,7 @@ class Session:
                 record["heard_at_release"] = self.heard_at_release
             text = await live.finish(raw)
             self.mark("finished", length=len(text))
-            if restyle and text and not field.stopped:
+            if restyle and text and live.complete:
                 began = time.perf_counter()
                 try:
                     styled = await asyncio.to_thread(self.state.polisher.restyle, text)
@@ -351,18 +358,16 @@ class Session:
                 outcome = "recovered"  # the raw recognition was kept instead of a correction
             if self.entered:
                 record["ended"] = "enter"
-            if raw and field.failure:
-                # Kept even when Enter ended the dictation: what was sent may have been cut short.
+            if raw and not live.complete:
+                # A held text a new dictation let go: kept quietly in 글 복구, never sent half-written.
                 outcome = "recovered"
-                record["input_failure"] = field.failure
+                record["input_failure"] = field.failure or "released"
                 if field.mismatch:
                     log.warning("input not verified: %s", field.mismatch)
-                reason = "입력하지 못한 글을 보관했습니다."
-                self.state.recover(text or raw, reason)
-                self.state.notify(reason, action="copy", fault=True)
+                self.state.recover(text or raw, "입력창으로 돌아가지 않아 입력하지 못한 글입니다.")
             elif text and s["learn"] and not self.entered and not restyle:  # edits to a rewrite are not mishearings
                 self.state.watcher.watch(text)
-            if self.entered and not field.failure:  # a kept text is never sent half-written
+            if self.entered and live.complete:  # a kept text is never sent half-written
                 await asyncio.to_thread(self._send_enter, field)
             total_ms = max(0, round((time.perf_counter() - self.released) * 1000))
         except AccountError as error:
@@ -387,7 +392,7 @@ class Session:
             kept = bool(text or self.preview)
             if kept:
                 self.state.recover(text or self.preview, "완료하지 못한 받아쓰기입니다. 내용을 확인해 주세요.")
-            self.state.notify("받아쓰기를 마치지 못했습니다. 연결을 확인해 주세요.", action="copy" if kept else "dismiss",
+            self.state.notify("받아쓰기를 마치지 못했습니다. 연결을 확인해 주세요.", action="dismiss",
                               fault=True)
         finally:
             try:
@@ -733,6 +738,8 @@ class App:
                 self.levels.extend([0.0] * BARS)
                 self.watcher.flush()  # fixes made to the last paste apply to this dictation
                 rescanned = self.devices_changed and not self.active
+                if self.last and self.last.live and self.last.live.paused:
+                    self.last.live.release()  # a new dictation lets the held text go (주인님 2026-10-02)
                 try:
                     self.recording = self._start_session(target)
                 except Exception:
@@ -790,13 +797,14 @@ class App:
         self._sync_sound()
 
     def _sync_sound(self):
-        self.sounds.set_mode(selected_mode(self.recording, self.active, self.settings), self.settings["sound_keyboard"])
+        writing = {session for session in self.active if not session.holding}  # a held text makes no sound
+        self.sounds.set_mode(selected_mode(self.recording, writing, self.settings), self.settings["sound_keyboard"])
 
     def status(self):
         """(state, locked) for the overlay; locked means toggle mode is keeping the mic on."""
         if self.recording:
             return "recording", self.toggle
-        if self.active:
+        if any(not session.holding for session in self.active):
             return "processing", False
         if time.perf_counter() < self.notice_until:
             return "notice", False

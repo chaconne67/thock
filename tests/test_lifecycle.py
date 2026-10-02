@@ -11,6 +11,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+async def until(predicate):
+    async with asyncio.timeout(3):
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+
 @unittest.skipUnless(sys.platform == "win32", "Windows app")
 class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -44,7 +50,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         # The live input field: records what reached the target field; ok=False means it moved.
         self.field = SimpleNamespace(writes=[], ok=True, stopped=False, failure=None, mismatch=None,
                                      target=(1, (2,), 0),
-                                     restart=lambda: False)
+                                     restart=lambda: False, resume=lambda: None)
         def update(text):
             self.field.writes.append(text)
             if not self.field.ok:
@@ -142,14 +148,19 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.state.queue_report.call_args.args[2], "recovered")
         self.state.notify.assert_called_once()
 
-    async def test_changed_target_keeps_text_for_explicit_recovery(self):
+    async def test_a_field_that_never_comes_back_is_held_then_kept_quietly(self):
+        from thock.app import HOLDING
         self.field.ok = False
         with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="보관할 글"):
             session = self.start()
             session.stop()
+            await until(lambda: session.holding)
+            self.assertEqual(self.state.notify.call_args.args[0], HOLDING)
+            session.live.release()  # what a new dictation does
             await session.task
         self.state.recover.assert_called_once()
         self.assertEqual(self.state.recover.call_args.args[0], "보관할 글")
+        self.assertNotIn("copy", [call.kwargs.get("action") for call in self.state.notify.call_args_list])
         self.assertFalse(self.state.active)
 
     async def test_no_field_when_dictation_starts_leads_back_instead_of_recording(self):
@@ -249,6 +260,8 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         with patch("thock.app.transcribe", side_effect=transcribe):
             session = self.start()
             session.stop()
+            await until(lambda: session.holding)
+            session.live.release()
             await session.task
         self.state.recover.assert_called_once()
         self.assertEqual(self.state.recover.call_args.args[0], "보낸 뒤 잘린 글")

@@ -104,18 +104,59 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await live.finish("하나 둘"), "하나. 둘")
         self.assertEqual(len(self.errors), 1)
 
-    async def test_a_changed_field_is_never_written_again(self):
-        calls = []
+    async def test_a_field_that_cannot_be_written_holds_everything_until_a_new_dictation_lets_it_go(self):
+        self.errors = []
+        calls, paused = [], []
         def moved(text):
             calls.append(text)
             return False
-        live = self.make(write=moved)
+        live = LiveDictation(moved, None, lambda text: text, self.errors.append, on_pause=lambda: paused.append(1))
+        self.addAsyncCleanup(live.close)
         live.update("초안")
-        await until(lambda: live.blocked)
-        live.update("새 초안")
-        self.assertEqual(await live.finish("새 초안"), "새 초안")
-        self.assertEqual(calls, ["초안"])
-        self.assertEqual(len(self.errors), 1)
+        await until(lambda: live.paused)
+        live.update("새 초안")  # still heard while the field is away
+        finishing = asyncio.create_task(live.finish("새 초안"))
+        await asyncio.sleep(0.4)
+        self.assertFalse(finishing.done())  # held, waiting for the field
+        live.release()
+        self.assertEqual(await finishing, "새 초안")
+        self.assertEqual((calls, paused, live.complete, self.errors), (["초안"], [1], False, []))
+
+    async def test_writing_goes_on_when_the_field_is_back(self):
+        self.errors = []
+        fields, back = [[]], []
+        def write(text):
+            if not back:
+                return False  # another window took the front
+            fields[-1].append(text)
+            return True
+        def resume():
+            return back[0] if back else None
+        live = LiveDictation(write, None, lambda text: text, self.errors.append, resume=resume)
+        self.addAsyncCleanup(live.close)
+        live.update("앞 말")
+        await until(lambda: live.paused)
+        live.update("앞 말 뒤 말")
+        back.append("same")
+        self.assertEqual(await live.finish("앞 말 뒤 말"), "앞 말 뒤 말")
+        self.assertEqual((fields, live.complete), ([["앞 말 뒤 말"]], True))
+
+    async def test_a_field_the_user_changed_meanwhile_gets_only_the_rest_at_their_caret(self):
+        self.errors = []
+        writes, state = [], {"ok": True, "back": None}
+        def write(text):
+            writes.append(text)
+            return state["ok"]
+        live = LiveDictation(write, None, lambda text: text, self.errors.append, resume=lambda: state["back"])
+        self.addAsyncCleanup(live.close)
+        live.update("앞 말")
+        await until(lambda: writes == ["앞 말"])
+        state["ok"] = False
+        live.update("앞 말 뒤 말")
+        await until(lambda: live.paused)
+        state["ok"], state["back"] = True, "moved"
+        self.assertEqual(await live.finish("앞 말 뒤 말"), "앞 말 뒤 말")
+        self.assertEqual((writes[-1], live.complete), (" 뒤 말", True))
 
     async def test_after_a_user_edit_later_speech_starts_at_the_new_caret(self):
         fields, started, release = [[]], threading.Event(), threading.Event()
