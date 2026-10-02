@@ -40,6 +40,34 @@ WAITING = "입력할 곳을 클릭해 주세요."  # CapsLock with no text field
 ACCOUNT_STATES = {"signed_out", "access_unavailable", "access_suspended", "access_not_started", "access_expired",
                   "time_exhausted"}
 VOICE_LEVEL = 0.6  # microphone level (about -46 dBFS) taken as the start of speech, for diagnosis only
+MIC_WINDOW = 60  # the last 3 s of 50 ms levels: their quietest is this microphone's own noise
+
+
+def bar_height(level, window):
+    """The waveform bar for one level: how far above this microphone's own noise, against the loudest of the
+    last seconds. Microphones and rooms differ by tens of dB, so fixed decibels would leave one pill full."""
+    if not window:
+        return 0.0
+    floor = min(window)
+    span = max(max(window) - floor, 0.2)  # at least about 9 dB, so noise alone stays at the bottom
+    return min(max((level - floor - 0.04) / (span - 0.04), 0.0), 1.0)
+
+
+def microphones():
+    """The microphones Windows offers, by name, in the host API Thock records with (MME). Its first input is
+    Windows' sound mapper, which is the default microphone: the settings offer that as 자동 instead."""
+    inputs = [d["name"] for d in sd.query_devices() if d["hostapi"] == sd.default.hostapi and d["max_input_channels"]]
+    return list(dict.fromkeys(inputs[1:]))
+
+
+def input_device(name):
+    """The chosen microphone's device number now (numbers change as devices come and go); None, Windows'
+    default microphone, when none is chosen or the chosen one is not connected."""
+    if name:
+        for d in sd.query_devices():
+            if d["name"] == name and d["hostapi"] == sd.default.hostapi and d["max_input_channels"]:
+                return d["index"]
+    return None
 
 
 class Session:
@@ -74,7 +102,8 @@ class Session:
         self.finished = False
         self.cleanup_failed = False
         self.done = self.loop.create_future()
-        self.stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+        self.stream = sd.RawInputStream(device=input_device(self.settings["microphone"]),
+                                        samplerate=SAMPLE_RATE, channels=1, dtype="int16",
                                         blocksize=SAMPLE_RATE // 20, callback=self._on_audio)
         try:
             self.stream.start()
@@ -144,7 +173,9 @@ class Session:
         self._count(self.clipped, now, sum(1 for sample in samples if sample >= 32700 or sample <= -32700))
         if self.voice_at is None and level >= VOICE_LEVEL:
             self.voice_at = now
-        self.state.levels.append(level)
+        if rms:  # an all-zero block is a microphone still waking up, not its noise
+            self.state.mic_window.append(level)
+        self.state.levels.append(bar_height(level, self.state.mic_window))
 
     def _count(self, series, now, value, keep_max=False):
         """Add value (or keep the largest) for each half second since the key press."""
@@ -393,7 +424,8 @@ class App:
         self.recording = None
         self.toggle = False
         self.last = None
-        self.levels = deque([0.0] * BARS, maxlen=BARS)  # microphone loudness, newest last
+        self.levels = deque([0.0] * BARS, maxlen=BARS)  # waveform bar heights, newest last
+        self.mic_window = deque(maxlen=MIC_WINDOW)  # kept between dictations: the next starts already measured
         self.devices_changed = False
         self.microphone_fault = False
         self.open_settings = lambda: None  # set once the settings server exists
@@ -713,6 +745,7 @@ class App:
     def _rescan_audio(self):
         sd._terminate()
         sd._initialize()
+        self.mic_window.clear()  # possibly another microphone now, with its own noise
         self.devices_changed = False
         log.info("audio devices rescanned")
 
@@ -743,7 +776,7 @@ class App:
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"], "terms": s["terms"], "learn": s["learn"],
                 "sound_processing": s["sound_processing"],
-                "keep_audio": s["keep_audio"],
+                "keep_audio": s["keep_audio"], "microphone": s["microphone"], "microphones": microphones(),
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
                 "preview": s["preview"], "preview_font_ko": s["preview_font_ko"], "preview_font_en": s["preview_font_en"],
                 "preview_font_size": s["preview_font_size"], "preview_fonts": PREVIEW_FONTS,
@@ -762,6 +795,10 @@ class App:
             s["input_mode"] = body["input_mode"]
         if body.get("hotkey") in HOTKEYS:
             s["hotkey"] = body["hotkey"]
+        if "microphone" in body and (body["microphone"] is None or isinstance(body["microphone"], str)):
+            if body["microphone"] != s["microphone"]:
+                self.mic_window.clear()  # the next dictation measures the new microphone's noise
+            s["microphone"] = body["microphone"]
         if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:
             s["sound_keyboard"] = body["sound_keyboard"]
         for flag in ("polish", "learn", "sound_processing", "preview", "keep_audio"):

@@ -38,7 +38,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             notes=SimpleNamespace(terms=lambda: [], apply=lambda text: text),
             profile=SimpleNamespace(context=lambda *args: {}, history=Path("unused"), maybe_rebuild=Mock()),
             polisher=SimpleNamespace(polish=Mock(return_value="다듬은 글")),
-            watcher=SimpleNamespace(watch=Mock()), levels=deque(maxlen=18), recording=None, active=set(),
+            watcher=SimpleNamespace(watch=Mock()), levels=deque(maxlen=18), mic_window=deque(maxlen=60), recording=None, active=set(),
             last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
             report_error=Mock(), idle_since=time.perf_counter() - 3600)
         # The live input field: records what reached the target field; ok=False means it moved.
@@ -183,6 +183,26 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertIs(session.record, record)
         self.assertLess(time.perf_counter() - self.state.idle_since, 1)
 
+    async def test_bars_follow_this_microphones_own_noise(self):
+        # A noisy microphone at rest (about -41 dBFS) and speech only 12 dB above it: the bars still go from
+        # the bottom to the top. Silent blocks of a waking microphone do not count as its noise.
+        noise = array.array("h", [300, -300] * 800).tobytes()
+        speech = array.array("h", [1200, -1200] * 800).tobytes()
+        status = SimpleNamespace(input_overflow=False)
+        bars = []
+        async def transcribe(chunks, api_key, context, heard, endpoint, **kwargs):
+            for chunk in [bytes(3200)] * 5 + [noise] * 20 + [speech, noise]:
+                session._on_audio(chunk, 1600, None, status)
+                bars.append(self.state.levels[-1])
+            session.stop()
+            return ""
+        with patch("thock.app.transcribe", side_effect=transcribe):
+            session = self.start()
+            await session.task
+        self.assertEqual(max(bars[:25]), 0.0)
+        self.assertEqual(bars[-2:], [1.0, 0.0])
+        self.assertEqual(len(self.state.mic_window), 22)
+
     async def test_a_block_before_enter_is_recorded_and_the_text_kept(self):
         self.field.ok = False
         async def transcribe(chunks, api_key, context, heard, endpoint, **kwargs):
@@ -315,3 +335,19 @@ class SafePaste(unittest.TestCase):
             self.assertIsNone(paste("test", (10, (1,), 0), None, "test"))
         clipboard.assert_not_called()
         send.assert_not_called()
+
+
+@unittest.skipUnless(sys.platform == "win32", "Windows app")
+class MicrophoneChoice(unittest.TestCase):
+    def test_a_chosen_microphone_is_found_by_name_or_left_to_windows(self):
+        from thock import app
+        devices = [{"index": 0, "name": "Microsoft 사운드 매퍼 - Input", "hostapi": 0, "max_input_channels": 2},
+                   {"index": 1, "name": "마이크 (USB)", "hostapi": 0, "max_input_channels": 1},
+                   {"index": 2, "name": "스피커", "hostapi": 0, "max_input_channels": 0},
+                   {"index": 3, "name": "마이크 (Realtek)", "hostapi": 0, "max_input_channels": 2},
+                   {"index": 7, "name": "마이크 (Realtek)", "hostapi": 2, "max_input_channels": 2}]
+        with patch("thock.app.sd.query_devices", return_value=devices),                 patch("thock.app.sd.default", SimpleNamespace(hostapi=0)):
+            self.assertEqual(app.microphones(), ["마이크 (USB)", "마이크 (Realtek)"])  # no sound mapper, no speaker
+            self.assertEqual(app.input_device("마이크 (Realtek)"), 3)  # the recording host API's number
+            self.assertIsNone(app.input_device("빠진 마이크"))  # unplugged: Windows' default
+            self.assertIsNone(app.input_device(None))
