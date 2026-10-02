@@ -184,10 +184,10 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertLess(time.perf_counter() - self.state.idle_since, 1)
 
     async def test_bars_follow_this_microphones_own_noise(self):
-        # A noisy microphone at rest (about -41 dBFS) and speech only 12 dB above it: the bars still go from
-        # the bottom to the top. Silent blocks of a waking microphone do not count as its noise.
+        # A noisy microphone at rest (about -41 dBFS) and speech only 6 dB above it (a low input volume): the bars
+        # still go from the bottom to the top. Silent blocks of a waking microphone do not count as its noise.
         noise = array.array("h", [300, -300] * 800).tobytes()
-        speech = array.array("h", [1200, -1200] * 800).tobytes()
+        speech = array.array("h", [600, -600] * 800).tobytes()
         status = SimpleNamespace(input_overflow=False)
         bars = []
         async def transcribe(chunks, api_key, context, heard, endpoint, **kwargs):

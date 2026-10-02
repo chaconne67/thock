@@ -50,7 +50,7 @@ def bar_height(level, window):
     if not window:
         return 0.0
     floor = min(window)
-    span = max(max(window) - floor, 0.2)  # at least about 9 dB, so noise alone stays at the bottom
+    span = max(max(window) - floor, 0.12)  # at least about 5 dB, so noise alone stays at the bottom
     return min(max((level - floor - 0.04) / (span - 0.04), 0.0), 1.0)
 
 
