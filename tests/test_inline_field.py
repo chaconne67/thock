@@ -102,6 +102,34 @@ class InlineFieldContract(unittest.TestCase):
         self.assertEqual(field.failure, "focus_changed")
         self.assertFalse(field.restart())
 
+    def test_a_window_another_program_brought_up_is_put_back_twice_at_most(self):
+        import thock.win32 as win32
+        field = self.field()
+        self.assertTrue(field.update("초안"))
+        self.reader.snapshot.return_value = ("앞 초안", "", " 뒤")
+        stolen = [(77, (5,), 0)]  # a console took the front; no key or click from the user
+        def front():
+            return stolen[0] if stolen else self.target
+        brought = []
+        def bring(window):
+            brought.append(window)
+            stolen.clear()
+            return True
+        with patch("thock.win32.capture_target", side_effect=front), patch("thock.win32.bring_to_front", side_effect=bring):
+            self.assertTrue(field.update("초안 계속"))
+            self.assertEqual(brought, [12])
+            stolen.append((77, (5,), 0))
+            self.reader.snapshot.return_value = ("앞 초안 계속", "", " 뒤")
+            self.assertTrue(field.update("초안 계속 말"))
+            stolen.append((77, (5,), 0))
+            self.assertFalse(field.update("초안 계속 말한다"))  # a third time: two windows taking turns
+        self.assertEqual((field.failure, brought), ("focus_changed", [12, 12]))
+        with patch("thock.win32._input_revision", 1):  # the user's own key or click: no taking back
+            field = self.field()
+            win32._input_revision += 1
+            self.assertFalse(field.update("글"))
+            self.assertEqual(field.failure, "user_input")
+
     def test_a_field_without_a_readable_caret_stops_and_is_not_ready(self):
         from thock.win32 import InlineField, ready_target
         self.reader.snapshot.return_value = None

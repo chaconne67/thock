@@ -93,6 +93,19 @@ def allow_next_to_front():
     user32.SendInput(1, (INPUT * 1)(alt[1]), ctypes.sizeof(INPUT))
 
 
+def bring_to_front(window):
+    """Put a window the user did not leave back in front. Windows may refuse an app that is not in front;
+    a moment of Alt on the window that took the front lifts that, as allow_next_to_front does."""
+    if not user32.IsWindow(window):
+        return False
+    if user32.SetForegroundWindow(window) and user32.GetForegroundWindow() == window:
+        return True
+    alt = [INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(VK_MENU, 0, flags, 0, OWN_INPUT)))
+           for flags in (0, KEYEVENTF_KEYUP)]
+    user32.SendInput(2, (INPUT * 2)(*alt), ctypes.sizeof(INPUT))
+    return bool(user32.SetForegroundWindow(window)) and user32.GetForegroundWindow() == window
+
+
 input_events = deque(maxlen=300)  # (time, kind) of the user's own key and click events, for the trace
 
 
@@ -284,6 +297,7 @@ class InlineField:
     def __init__(self, target, mark=None):
         from .editwatch import field_reader
         self.target, self.current, self.written = target, None, None  # current: as the field shows written
+        self.restores = 0
         self.mark = mark or (lambda name, **values: None)
         self.revision = _input_revision
         self.mismatch = None  # diagnosis: how the field differed when it never showed the paste (lengths only)
@@ -301,6 +315,21 @@ class InlineField:
         self.__init__(capture_target(), self.mark)
         return not self.stopped
 
+    def _take_back(self):
+        """Another program took the front while the user pressed no key and clicked nothing (주인님 2026-10-02):
+        put the dictation's window back, twice at most so two windows cannot keep taking it from each other.
+        The caller then checks the field as always; a window the user left stays left."""
+        if self.restores >= 2 or _input_revision != self.revision:
+            return False
+        self.restores += 1
+        back = bring_to_front(self.target[0])
+        deadline = time.monotonic() + 0.5
+        while back and capture_target() != self.target and time.monotonic() < deadline:
+            time.sleep(0.02)
+        ok = back and capture_target() == self.target
+        self.mark("restored", ok=int(ok))
+        return ok
+
     def _refuse(self, failure):
         self.failure, self.stopped = failure, True
         self.mark("refused", why=failure, shape=self.mismatch)
@@ -313,7 +342,7 @@ class InlineField:
             return False
         if _input_revision != self.revision:
             return self._refuse("user_input")
-        if capture_target() != self.target:
+        if capture_target() != self.target and not self._take_back():
             return self._refuse("focus_changed")
         reader = field_reader()
         seen = reader.snapshot()
