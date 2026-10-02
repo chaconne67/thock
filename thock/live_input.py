@@ -16,9 +16,9 @@ PAUSE = 1.0  # seconds without new words after a phrase ends before the whole te
 
 class LiveDictation:
     def __init__(self, write, polish, apply_notes, on_error, restart=lambda: False, mark=lambda name, **values: None,
-                 resume=lambda: None, on_pause=lambda: None):
+                 resume=lambda: None, on_pause=lambda: None, on_resume=lambda: None):
         self.write, self.polish, self.apply_notes, self.on_error = write, polish, apply_notes, on_error
-        self.restart, self.mark, self.resume, self.on_pause = restart, mark, resume, on_pause
+        self.restart, self.mark, self.resume, self.on_pause, self.on_resume = restart, mark, resume, on_pause, on_resume
         self.paused = self.released = False
         self.skip = 0  # leading letters already in the field before the user moved the caret during a pause
         self.written = ""  # the whole text as of the last write the field showed
@@ -111,6 +111,7 @@ class LiveDictation:
                     self.skip, self.delivered = common, ""
                 self.paused = False
                 self.mark("resumed", how=back)
+                self.on_resume()
                 return
             await asyncio.sleep(0.3)
 

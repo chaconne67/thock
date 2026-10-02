@@ -317,7 +317,8 @@ class Session:
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
                                              lambda message: self.state.notify(message, fault=live.blocked),
                                              field.restart, self.mark, field.resume,
-                                             lambda: (self.state.notify(HOLDING, seconds=30), self.state._sync_sound()))
+                                             lambda: (self.state.notify(HOLDING, seconds=30), self.state._sync_sound()),
+                                             lambda: (self.state.withdraw(HOLDING), self.state._sync_sound()))
 
             def heard(words):
                 self._count(self.replies, time.perf_counter(), 1)
@@ -596,6 +597,11 @@ class App:
             session = self.recording or self.last
             if session is not None and session in self.active:
                 session.notices.append(text)
+
+    def withdraw(self, text):
+        """Take a message off the pill once it no longer holds (writing went on: 17:31 test)."""
+        if self.notice == text:
+            self.notice_until, self.notice_action = 0.0, None
 
     def act_on_notice(self):
         """The pill's button: 복사 copies the kept text, 확인 on an account message opens the account window."""

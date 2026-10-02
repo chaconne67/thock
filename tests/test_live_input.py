@@ -132,14 +132,16 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
             return True
         def resume():
             return back[0] if back else None
-        live = LiveDictation(write, None, lambda text: text, self.errors.append, resume=resume)
+        resumed = []
+        live = LiveDictation(write, None, lambda text: text, self.errors.append, resume=resume,
+                             on_resume=lambda: resumed.append(1))
         self.addAsyncCleanup(live.close)
         live.update("앞 말")
         await until(lambda: live.paused)
         live.update("앞 말 뒤 말")
         back.append("same")
         self.assertEqual(await live.finish("앞 말 뒤 말"), "앞 말 뒤 말")
-        self.assertEqual((fields, live.complete), ([["앞 말 뒤 말"]], True))
+        self.assertEqual((fields, live.complete, resumed), ([["앞 말 뒤 말"]], True, [1]))  # the message goes
 
     async def test_a_field_the_user_changed_meanwhile_gets_only_the_rest_at_their_caret(self):
         self.errors = []
