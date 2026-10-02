@@ -653,10 +653,13 @@ class App:
                     self.account_refresh_needed = True  # an access given meanwhile clears this message
                     self.notify(cached.get("error") or MESSAGES["access_unavailable"], action="account")
                     return
+                began = time.perf_counter()
                 target, why, element = ready_target()
+                waited = round((time.perf_counter() - began) * 1000)
                 if target is None:  # nothing to write into: lead there instead of recording
                     trace.info(json.dumps({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": VERSION,
-                                           "app": foreground_app(), "preflight": why, "element": element},
+                                           "app": foreground_app(), "preflight": why, "element": element,
+                                           "waited": waited},
                                           ensure_ascii=False))
                     self.notify(WAITING, action="dismiss")
                     return
@@ -671,7 +674,7 @@ class App:
                     self.notify("마이크를 확인해 주세요. Windows의 마이크 접근 허용과 입력 장치를 확인하세요.",
                                 action="dismiss", fault=True)
                     return
-                self.recording.mark("preflight", element=element, rescanned=int(rescanned))
+                self.recording.mark("preflight", element=element, rescanned=int(rescanned), waited=waited)
                 self.active.add(self.recording)
                 self.last = self.recording
                 self._sync_sound()

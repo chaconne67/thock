@@ -238,19 +238,22 @@ def capture_target():
     return window, identity, revision
 
 
+READY_WAIT = 0.5  # a Chromium app idle for long answers the first question with its window, not its field
+
+
 def ready_target():
     """(target, None, element) for the focused text field to dictate into, or (None, why not, element)
-    when no editable, readable field has the caret; element describes the focus for the trace."""
+    when no editable, readable field has the caret; element describes the focus for the trace.
+    A field not found is asked again for a moment: the first question wakes such an app up."""
     from .editwatch import field_reader
-    target, reader = capture_target(), field_reader()
-    element = reader.describe()
-    if not target:
-        return None, "no focus", element
-    if reader.read_only():
-        return None, "read only", element
-    if reader.snapshot() is None:
-        return None, "unreadable", element
-    return target, None, element
+    reader, deadline = field_reader(), time.perf_counter() + READY_WAIT
+    while True:
+        target, element = capture_target(), reader.describe()
+        why = ("no focus" if not target else "read only" if reader.read_only()
+               else "unreadable" if reader.snapshot() is None else None)
+        if why in (None, "read only") or time.perf_counter() >= deadline:
+            return (None if why else target), why, element
+        time.sleep(0.05)
 
 
 def shows(field, text):

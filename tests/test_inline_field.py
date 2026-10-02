@@ -100,6 +100,11 @@ class InlineFieldContract(unittest.TestCase):
         self.reader.read_only.return_value = True  # a web page's own text: readable, not writable
         self.assertEqual(ready_target()[:2], (None, "read only"))
 
+    def test_a_field_an_idle_app_shows_a_moment_late_is_still_ready(self):
+        from thock.win32 import ready_target
+        self.reader.snapshot.side_effect = [None, None, ("", "", "")]  # the first question wakes the app up
+        self.assertEqual(ready_target(), (self.target, None, "50004/test"))
+
     def test_failed_delivery_names_what_changed(self):
         import thock.win32 as win32
         self.paste.side_effect = lambda *args: None
