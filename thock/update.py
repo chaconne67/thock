@@ -48,7 +48,7 @@ def fetch():
     """The installer of a newer Thock, downloaded and matching its SHA-256: (version, path), or None."""
     latest = Account._request("/api/thock/latest", timeout=15)
     version, url, digest = latest.get("version"), latest.get("url"), str(latest.get("sha256") or "").lower()
-    if not newer(version) or not isinstance(url, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+    if not newer(version, VERSION) or not isinstance(url, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
         return None
     FOLDER.mkdir(exist_ok=True)
     path = FOLDER / f"Thock-setup-{version}.exe"
