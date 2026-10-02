@@ -19,7 +19,7 @@ from collections import deque
 import sounddevice as sd
 
 from .config import (APP_NAME, EMBEDDED, HOME, HOTKEYS, INPUT_MODES, POLISH_LEVELS, PREVIEW_FONT_SIZES, PREVIEW_FONTS,
-                     SAMPLE_RATE, SOUND_KEYBOARDS,
+                     SAMPLE_RATE, SOUND_KEYBOARDS, STYLE_CUSTOM_MAX, STYLES,
                      VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
@@ -287,7 +287,9 @@ class Session:
                 self.state.notify(WAITING, action="dismiss")
                 outcome = "empty"
                 return
-            polish = (lambda words: self.state.polisher.polish(words, self.app)) if s["polish"] else None
+            # A chosen style rewrites the whole text once, after the key is released; until then words go in as heard.
+            restyle = s["polish"] and s["style"] != "none"
+            polish = (lambda words: self.state.polisher.polish(words, self.app)) if s["polish"] and not restyle else None
             live = self.live = LiveDictation(field.update, polish, self.notes.apply,
                                              lambda message: self.state.notify(message, fault=live.blocked),
                                              field.restart, self.mark)
@@ -312,9 +314,22 @@ class Session:
                 record["heard_at_release"] = self.heard_at_release
             text = await live.finish(raw)
             self.mark("finished", length=len(text))
+            if restyle and text and not field.stopped:
+                began = time.perf_counter()
+                try:
+                    styled = await asyncio.to_thread(self.state.polisher.restyle, text)
+                except Exception as error:
+                    record["polish_error"] = type(error).__name__
+                    self.state.notify("문체를 바꾸지 못해 받아 적은 글을 남겼습니다.", fault=True)
+                else:
+                    await asyncio.to_thread(field.update, styled)
+                    text = styled
+                self.mark("restyle", style=s["style"], length=len(text), ms=round((time.perf_counter() - began) * 1000),
+                          error=record.get("polish_error"))
             outcome = "empty" if not raw else "delivered"
             if live.error:
                 record["polish_error"] = live.error
+            if record.get("polish_error"):
                 outcome = "recovered"  # the raw recognition was kept instead of a correction
             if self.entered:
                 record["ended"] = "enter"
@@ -327,7 +342,7 @@ class Session:
                 reason = "입력하지 못한 글을 보관했습니다."
                 self.state.recover(text or raw, reason)
                 self.state.notify(reason, action="copy", fault=True)
-            elif text and s["learn"] and not self.entered:
+            elif text and s["learn"] and not self.entered and not restyle:  # edits to a rewrite are not mishearings
                 self.state.watcher.watch(text)
             if self.entered and not field.failure:  # a kept text is never sent half-written
                 await asyncio.to_thread(self._send_enter, field)
@@ -776,7 +791,8 @@ class App:
     def public_settings(self):
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"],
-                "polish_level": s["polish_level"], "polish_levels": POLISH_LEVELS, "terms": s["terms"], "learn": s["learn"],
+                "polish_level": s["polish_level"], "polish_levels": POLISH_LEVELS,
+                "style": s["style"], "styles": STYLES, "style_custom": s["style_custom"], "terms": s["terms"], "learn": s["learn"],
                 "sound_processing": s["sound_processing"],
                 "keep_audio": s["keep_audio"], "microphone": s["microphone"], "microphones": microphones(),
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
@@ -797,6 +813,11 @@ class App:
             s["input_mode"] = body["input_mode"]
         if isinstance(body.get("polish_level"), str) and body["polish_level"] in POLISH_LEVELS:
             s["polish_level"] = body["polish_level"]
+        if isinstance(body.get("style_custom"), str):
+            s["style_custom"] = body["style_custom"].strip()[:STYLE_CUSTOM_MAX]
+        if isinstance(body.get("style"), str) and body["style"] in STYLES and (
+                body["style"] != "custom" or s["style_custom"]):
+            s["style"] = body["style"]
         if body.get("hotkey") in HOTKEYS:
             s["hotkey"] = body["hotkey"]
         if "microphone" in body and (body["microphone"] is None or isinstance(body["microphone"], str)):

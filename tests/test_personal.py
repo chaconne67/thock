@@ -37,6 +37,14 @@ class SettingsCompatibility(unittest.TestCase):
             (Path(temp)/"settings.json").write_text(json.dumps({"polish_level":"smooth"}))
             self.assertEqual(load_settings()["polish_level"],"smooth")
 
+    def test_a_style_not_offered_or_an_empty_own_style_is_no_style(self):
+        with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
+            self.assertEqual(load_settings()["style"],"none")
+            for stored, style in (({"style":"pirate"},"none"), ({"style":"custom","style_custom":" "},"none"),
+                                  ({"style":"custom","style_custom":"사극 말투"},"custom"), ({"style":"email"},"email")):
+                (Path(temp)/"settings.json").write_text(json.dumps(stored))
+                self.assertEqual(load_settings()["style"],style,stored)
+
     def test_new_install_uses_toggle_and_needs_separate_welcome(self):
         with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
             settings=load_settings()

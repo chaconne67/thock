@@ -37,7 +37,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
                 "api_key": "temporary-test", "max_session_seconds": 2})),
             notes=SimpleNamespace(terms=lambda: [], apply=lambda text: text),
             profile=SimpleNamespace(context=lambda *args: {}, history=Path("unused"), maybe_rebuild=Mock()),
-            polisher=SimpleNamespace(polish=Mock(return_value="다듬은 글")),
+            polisher=SimpleNamespace(polish=Mock(return_value="다듬은 글"), restyle=Mock(return_value="- 바꾼 글")),
             watcher=SimpleNamespace(watch=Mock()), levels=deque(maxlen=18), mic_window=deque(maxlen=60), recording=None, active=set(),
             last_session_id=None, _sync_sound=Mock(), notify=Mock(), recover=Mock(), queue_report=Mock(),
             report_error=Mock(), idle_since=time.perf_counter() - 3600)
@@ -100,6 +100,29 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         from thock.account import AccountError
         self.state.settings["polish"] = True
         self.state.polisher.polish.side_effect = AccountError("provider_unavailable")
+        with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="인식한 원문"):
+            session = self.start()
+            session.stop()
+            await session.task
+        self.assertEqual(self.field.writes[-1], "인식한 원문")
+        self.assertEqual(self.state.queue_report.call_args.args[2], "recovered")
+        self.state.notify.assert_called_once()
+
+    async def test_a_chosen_style_rewrites_the_whole_text_once_at_the_end(self):
+        self.state.settings.update(polish=True, style="bullets", learn=True)
+        with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="인식한 원문"):
+            session = self.start()
+            session.stop()
+            await session.task
+        self.state.polisher.polish.assert_not_called()  # no correction at pauses while a style is chosen
+        self.state.polisher.restyle.assert_called_once_with("인식한 원문")
+        self.assertEqual(self.field.writes[-1], "- 바꾼 글")
+        self.state.watcher.watch.assert_not_called()  # edits to a rewrite are not mishearings
+        self.assertEqual(self.state.queue_report.call_args.args[2], "delivered")
+
+    async def test_a_failed_restyle_keeps_the_text_as_heard_and_says_so(self):
+        self.state.settings.update(polish=True, style="email")
+        self.state.polisher.restyle.side_effect = TimeoutError()
         with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="인식한 원문"):
             session = self.start()
             session.stop()

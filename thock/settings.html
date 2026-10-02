@@ -170,6 +170,13 @@
       <div><label class="label" for="polish-level">다듬는 정도</label><p class="hint" id="polish-level-hint"></p></div>
       <select id="polish-level"></select>
     </div>
+    <div class="row">
+      <div><label class="label" for="style">문체 바꾸기 (고급)</label><p class="hint">말한 내용을 고른 문체로 다시 씁니다. 말하는 동안은 들린 대로 적고, 키를 뗀 뒤 한 번에 바꿉니다.</p></div>
+      <select id="style"></select>
+    </div>
+    <div class="row" id="style-custom-row" hidden>
+      <input id="style-custom" type="text" maxlength="200" placeholder="예: 회의록처럼 짧게, 사극 말투로" aria-label="원하는 문체">
+    </div>
     <div class="group">
       <div class="row">
         <div class="label" id="l-hotkey">단축키</div>
@@ -368,7 +375,8 @@ function renderHint() {
     : key + "을 한 번 눌러 시작하고, 다시 누르면 끝납니다.";
   $("hotkey-hint").textContent = message + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
   $("terms-count").textContent = `${termsList().length}개`;
-  $("polish-level").disabled = !$("polish").checked;
+  $("polish-level").disabled = $("style").disabled = $("style-custom").disabled = !$("polish").checked;
+  $("style-custom-row").hidden = $("style").value !== "custom";
   $("polish-level-hint").textContent = {
     verbatim: "단어는 들린 그대로 두고 문장부호와 띄어쓰기만 고칩니다.",
     clean: "음·어 같은 망설임 말과 끊긴 말 조각을 빼고, 잘못 들린 말과 용어 표기를 고칩니다.",
@@ -476,6 +484,9 @@ function fill(s) {
   $("polish").checked = s.polish;
   $("polish-level").replaceChildren(...Object.entries(s.polish_levels).map(([value,label])=>new Option(label,value)));
   $("polish-level").value = s.polish_level;
+  $("style").replaceChildren(...Object.entries(s.styles).map(([value,label])=>new Option(label,value)));
+  $("style").value = s.style;
+  $("style-custom").value = s.style_custom;
   $("learn").checked = s.learn;
   $("keep-audio").checked = s.keep_audio;
   $("sound-processing").checked = s.sound_processing;
@@ -512,7 +523,7 @@ $("save").addEventListener("click", async () => {
   setStatus("저장 중…");
   try {
     fill(await api("/api/settings", {
-      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, learn: $("learn").checked, terms: termsList(),
+      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, style: $("style").value, style_custom: $("style-custom").value, learn: $("learn").checked, terms: termsList(),
       sound_processing: $("sound-processing").checked,
       keep_audio: $("keep-audio").checked,
       sound_keyboard: $("sound-keyboard").value,
