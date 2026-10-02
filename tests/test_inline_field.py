@@ -147,6 +147,26 @@ class InlineFieldContract(unittest.TestCase):
             self.assertTrue(field.update("초안"))  # the field was as before: written again
         self.assertEqual((self.paste.call_count, field.failure, field.current), (2, None, "초안"))
 
+    def test_a_front_taken_while_selecting_is_put_back_and_selected_again(self):
+        field = self.field()
+        self.assertTrue(field.update("반복 반복"))
+        self.reader.snapshot.return_value = ("앞 반복 반복", "", " 뒤")
+        stolen, selected = [], []
+        def select(expected, tail):
+            selected.append(tail)
+            if len(selected) == 1:  # the console comes up while selecting
+                stolen.append((77, (5,), 0))
+                return None
+            return expected[0][:-len(tail)], tail, expected[2]
+        self.reader.select_tail.side_effect = select
+        def bring(window):
+            stolen.clear()
+            return True
+        with patch("thock.win32.capture_target", side_effect=lambda: stolen[0] if stolen else self.target), \
+                patch("thock.win32.bring_to_front", side_effect=bring):
+            self.assertTrue(field.update("반복 교정"))
+        self.assertEqual((selected, field.failure), (["반복", "반복"], None))
+
     def test_a_field_without_a_readable_caret_stops_and_is_not_ready(self):
         from thock.win32 import InlineField, ready_target
         self.reader.snapshot.return_value = None

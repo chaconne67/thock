@@ -327,6 +327,10 @@ class InlineField:
         while back and capture_target() != self.target and time.monotonic() < deadline:
             time.sleep(0.02)
         ok = back and capture_target() == self.target
+        # A Chromium window just put back reads its field as unreadable for a moment (16:07 test): wait for it.
+        from .editwatch import field_reader
+        while ok and field_reader().snapshot() is None and time.monotonic() < deadline + 1.0:
+            time.sleep(0.03)
         self.mark("restored", ok=int(ok))
         return ok
 
@@ -364,6 +368,9 @@ class InlineField:
                 return True
             selecting = time.monotonic()
             expected = reader.select_tail(seen, tail)
+            if (expected is None and _input_revision == self.revision and capture_target() != self.target
+                    and self._take_back()):  # the front was taken while selecting (16:06 test): once more
+                expected = reader.select_tail(seen, tail) if reader.snapshot() == seen else None
             self.mark("select", tail=len(tail), ms=round((time.monotonic() - selecting) * 1000))
             if expected is None:
                 return self._refuse("selection_unavailable")
