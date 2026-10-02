@@ -35,7 +35,7 @@ from .win32 import (foreground_app, capture_target, copy_text, InlineField, inpu
 from .personal import append_history, read_data, write_data, import_legacy, history_data, keep_audio
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
-IDLE_STOP = 10  # seconds without new speech that end a tap-started dictation
+IDLE_STOP = 5  # seconds without new speech that end a tap-started dictation
 WAITING = "입력할 곳을 클릭해 주세요."  # CapsLock with no text field to write into
 # Account states the member settles in the account window: the pill's 확인 opens it.
 ACCOUNT_STATES = {"signed_out", "access_unavailable", "access_suspended", "access_not_started", "access_expired",
