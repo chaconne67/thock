@@ -94,16 +94,27 @@ def allow_next_to_front():
 
 
 def bring_to_front(window):
-    """Put a window the user did not leave back in front. Windows may refuse an app that is not in front;
-    a moment of Alt on the window that took the front lifts that, as allow_next_to_front does."""
+    """Put a window the user did not leave back in front. Windows refuses an app in the background (16:12 test,
+    from Thock's worker thread); a moment of Alt, and sharing input with the window that took the front for the
+    call, lift that. The switch may land a moment later, so it is waited for."""
     if not user32.IsWindow(window):
         return False
-    if user32.SetForegroundWindow(window) and user32.GetForegroundWindow() == window:
-        return True
     alt = [INPUT(INPUT_KEYBOARD, INPUT._U(ki=KEYBDINPUT(VK_MENU, 0, flags, 0, OWN_INPUT)))
            for flags in (0, KEYEVENTF_KEYUP)]
     user32.SendInput(2, (INPUT * 2)(*alt), ctypes.sizeof(INPUT))
-    return bool(user32.SetForegroundWindow(window)) and user32.GetForegroundWindow() == window
+    mine = kernel32.GetCurrentThreadId()
+    theirs = user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
+    shared = bool(theirs) and theirs != mine and user32.AttachThreadInput(mine, theirs, True)
+    try:
+        user32.BringWindowToTop(window)
+        user32.SetForegroundWindow(window)
+    finally:
+        if shared:
+            user32.AttachThreadInput(mine, theirs, False)
+    deadline = time.monotonic() + 0.5
+    while user32.GetForegroundWindow() != window and time.monotonic() < deadline:
+        time.sleep(0.02)
+    return user32.GetForegroundWindow() == window
 
 
 input_events = deque(maxlen=300)  # (time, kind) of the user's own key and click events, for the trace
