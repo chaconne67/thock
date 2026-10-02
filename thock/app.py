@@ -30,6 +30,7 @@ from .settings_server import SettingsServer
 from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .live_input import LiveDictation
+from . import update
 from .win32 import (foreground_app, capture_target, copy_text, InlineField, input_events, kernel32, press_enter,
                     ready_target, run_key_hook, user32)
 from .personal import append_history, read_data, write_data, import_legacy, history_data, keep_audio
@@ -684,6 +685,7 @@ class App:
 
     async def maintain_account(self):
         last_check, greeted = 0, False
+        last_update_check, offered, updating = 0, None, update.enabled()
         while True:
             now = time.time()
             retry = self.account.cached.get("state") == "offline"
@@ -699,6 +701,17 @@ class App:
                 except Exception as error:
                     log.warning("account refresh failed: %s", type(error).__name__)
                 last_check = now
+            if updating and now - last_update_check >= update.CHECK_SECONDS:
+                last_update_check = now
+                try:
+                    offered = await asyncio.to_thread(update.fetch) or offered
+                except Exception as error:
+                    log.warning("update check failed: %s", type(error).__name__)
+            if (offered and not self.recording and not self.active
+                    and time.perf_counter() - self.idle_since >= update.IDLE_SECONDS):
+                log.info("installing Thock %s", offered[0])
+                update.install(*offered)
+                offered = None
             await self.send_reports()
             await asyncio.sleep(15)
 
@@ -908,6 +921,8 @@ def main():
                      daemon=True).start()
     asyncio.run_coroutine_threadsafe(app.maintain_account(), loop)
     log.info("started, hotkey=%s", app.settings["hotkey"])
+    if version := update.updated():
+        app.notify(f"Thock {version}로 업데이트했습니다.", seconds=8)
     try:
         run_overlay(app)
     finally:
