@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.4.9.dev1"
+APP_NAME, VERSION = "Thock", "0.4.9.dev2"
 # Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
 # its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
 EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
@@ -25,6 +25,7 @@ DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_level": "clean",
             "polish_provider": "chatgpt",  # keep old setting without using it
             "terms": [], "position": None, "learn": True, "input_mode": "toggle", "welcome_complete": False,
             "keep_audio": False, "sound_processing": True, "sound_keyboard": "rainy75",
+            "microphone": None,  # a microphone's name; None is Windows' default microphone
             "preview": True, "preview_font_ko": "Noto Sans KR", "preview_font_en": "Inter", "preview_font_size": 14}
 PREVIEW_FONT_SIZES = range(11, 21)  # pixels at 100% display scaling
 # Bundled in thock/fonts (family name: label). Korean fonts also carry Latin letters;
@@ -52,6 +53,8 @@ def load_settings():
         settings["polish_level"] = DEFAULTS["polish_level"]
     if not isinstance(settings["sound_keyboard"], str) or settings["sound_keyboard"] not in SOUND_KEYBOARDS:
         settings["sound_keyboard"] = DEFAULTS["sound_keyboard"]
+    if not isinstance(settings["microphone"], str):
+        settings["microphone"] = None
     for lang, fonts in PREVIEW_FONTS.items():
         if not isinstance(settings[f"preview_font_{lang}"], str) or settings[f"preview_font_{lang}"] not in fonts:
             settings[f"preview_font_{lang}"] = DEFAULTS[f"preview_font_{lang}"]

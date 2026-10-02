@@ -159,6 +159,10 @@
     <h2 id="h-dictation">받아쓰기</h2>
     <div class="row"><label class="label" for="input-mode">입력 방식</label><select id="input-mode"></select></div>
     <div class="row sep">
+      <div><label class="label" for="microphone">마이크</label><p class="hint">자동은 Windows 기본 마이크를 씁니다. 다음 받아쓰기부터 바뀝니다.</p></div>
+      <select id="microphone"></select>
+    </div>
+    <div class="row sep">
       <div><label class="label" for="polish">문장 다듬기</label><p class="hint">문맥을 보고 문장부호와 띄어쓰기를 고치고, 고른 정도만큼 말을 다듬습니다. 끄면 들린 그대로 문장부호 없이 넣습니다.</p></div>
       <span class="switch"><input type="checkbox" id="polish" role="switch"></span>
     </div>
@@ -465,6 +469,10 @@ function fill(s) {
   document.querySelector(`input[name=hotkey][value=${s.hotkey}]`).checked = true;
   $("input-mode").replaceChildren(...Object.entries(s.input_modes).map(([value,label])=>new Option(label,value)));
   $("input-mode").value = s.input_mode;
+  const mics = s.microphones.map((name) => new Option(name, name));
+  if (s.microphone && !s.microphones.includes(s.microphone)) mics.push(new Option(s.microphone + " (연결 안 됨)", s.microphone));
+  $("microphone").replaceChildren(new Option("자동 (Windows 기본 마이크)", ""), ...mics);
+  $("microphone").value = s.microphone || "";
   $("polish").checked = s.polish;
   $("polish-level").replaceChildren(...Object.entries(s.polish_levels).map(([value,label])=>new Option(label,value)));
   $("polish-level").value = s.polish_level;
@@ -508,6 +516,7 @@ $("save").addEventListener("click", async () => {
       sound_processing: $("sound-processing").checked,
       keep_audio: $("keep-audio").checked,
       sound_keyboard: $("sound-keyboard").value,
+      microphone: $("microphone").value || null,
       ...($("error-reports").checked !== reportsShown ? {error_reports: $("error-reports").checked} : {}),
     }));
     setStatus("저장했습니다. 바로 적용됩니다.");
