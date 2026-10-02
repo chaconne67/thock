@@ -37,6 +37,9 @@ from .personal import append_history, read_data, write_data, import_legacy, hist
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 5  # seconds without new speech that end a tap-started dictation
 WAITING = "입력할 곳을 클릭해 주세요."  # CapsLock with no text field to write into
+# A dictation the granted time stopped is never stopped silently (주인님 2026-10-02).
+LIMIT_REACHED = "사용 한도를 모두 써서 받아쓰기를 멈췄습니다. 지금까지 말한 글은 입력합니다."
+LONGEST = "한 번에 5분까지 받아쓸 수 있어 멈췄습니다. 다시 눌러 이어서 말해 주세요."
 # Account states the member settles in the account window: the pill's 확인 opens it.
 ACCOUNT_STATES = {"signed_out", "access_unavailable", "access_suspended", "access_not_started", "access_expired",
                   "time_exhausted"}
@@ -111,7 +114,7 @@ class Session:
         except BaseException:
             self.stream.close()
             raise
-        self.limit_timer = self.loop.call_later(300, self.stop)
+        self.limit_timer = self.loop.call_later(300, self._at_limit)
         self.task = asyncio.create_task(self.run())
         self.loop.call_later(IDLE_STOP, self._stop_when_idle)
 
@@ -203,7 +206,19 @@ class Session:
             self.captured_frames += len(chunk) // 2
             self.audio.put_nowait(chunk)
         if self.captured_frames >= self.max_frames:
-            self.stop()
+            self._at_limit()
+
+    def _at_limit(self):
+        """The granted time ran out while the microphone was still on: stop and say why. Under five minutes the
+        grant was the account's remaining time (the server never grants more than 300 s at once)."""
+        if self.released is not None:
+            return
+        self.mark("limit")
+        self.stop()
+        if self.max_frames < 300 * SAMPLE_RATE:
+            self.state.notify(LIMIT_REACHED, action="account")
+        else:
+            self.state.notify(LONGEST)
 
     def mark(self, name, **values):
         """One step of this dictation's trace (any thread): when, as ms from the key press, and what."""
@@ -276,9 +291,9 @@ class Session:
             remaining = self.max_frames / SAMPLE_RATE - (time.perf_counter() - self.started)
             if self.released is None:
                 if remaining <= 0:
-                    self.stop()
+                    self._at_limit()
                 else:
-                    self.limit_timer = self.loop.call_later(remaining, self.stop)
+                    self.limit_timer = self.loop.call_later(remaining, self._at_limit)
             if self.previous:
                 await asyncio.shield(self.previous)  # earlier dictation finishes writing first
                 self.mark("previous_done")

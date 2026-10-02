@@ -45,6 +45,21 @@ class InlineFieldContract(unittest.TestCase):
         self.reader.select_tail.assert_called_once_with(("앞 안녕 하세요", "", " 뒤"), " 하세요")
         self.paste.assert_called_with("하세요", self.target, ("앞 안녕", " 하세요", " 뒤"), "안녕하세요")
 
+    def test_a_blank_line_the_editor_makes_a_paragraph_break_is_still_thocks_text(self):
+        # Claude's input (ProseMirror) reads a pasted blank line back as one line break (2026-10-02).
+        self.paste.side_effect = lambda text, target, expected, written: (
+            expected[0] + text.replace("\n\n", "\n"), "", expected[2])
+        field = self.field()
+        self.assertTrue(field.update("첫 문단.\n\n둘째 문단."))
+        self.assertEqual((field.initial[0], field.current), ("앞 ", "첫 문단.\n둘째 문단."))
+        self.reader.snapshot.return_value = ("앞 첫 문단.\n둘째 문단.", "", " 뒤")
+        self.assertTrue(field.update("첫 문단.\n\n둘째 문단."))  # the same text: nothing is written again
+        self.assertEqual(self.paste.call_count, 1)
+        self.assertTrue(field.update("첫 문단.\n\n둘째 문단입니다."))
+        self.reader.select_tail.assert_called_once_with(("앞 첫 문단.\n둘째 문단.", "", " 뒤"), "둘째 문단.")
+        from thock.win32 import shows
+        self.assertFalse(shows(("앞 첫 문단 둘째 문단.", "", ""), "첫 문단.\n\n둘째 문단."))  # other letters: not shown
+
     def test_existing_user_selection_is_the_only_initial_replacement(self):
         self.reader.snapshot.return_value = ("앞 ", "선택한 글", " 뒤")
         field = self.field()

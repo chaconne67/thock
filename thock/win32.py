@@ -1,6 +1,7 @@
 """Windows: key hook, foreground app, clipboard, paste."""
 
 import ctypes
+import re
 import threading
 import ctypes.wintypes as wt
 import time
@@ -256,17 +257,33 @@ def ready_target():
         time.sleep(0.05)
 
 
-def shows(field, text):
-    """Thock's own text sits right before an empty caret. The rest of the field is the editor's: an
+def shown(field, text):
+    """How the field shows Thock's own text right before an empty caret, or None when it does not. A rich editor
+    turns a blank line into a paragraph break and reads it back as one line break, so a run of line breaks may
+    come back shorter; every other character must be as written. The rest of the field is the editor's: an
     empty-field cue or a trailing line break it shows or removes as typing starts is not checked."""
-    return field is not None and not field[1] and field[0].endswith(text)
+    if field is None or field[1]:
+        return None
+    if field[0].endswith(text):
+        return text
+    want = re.sub(r"\n+", "\n", text)
+    for length in range(len(want), len(text)):
+        tail = field[0][len(field[0]) - length:]
+        if re.sub(r"\n+", "\n", tail) == want:
+            return tail
+    return None
+
+
+def shows(field, text):
+    """Thock's own text sits right before an empty caret (see shown)."""
+    return shown(field, text) is not None
 
 
 class InlineField:
     """Own exactly the selected range and the text subsequently inserted there."""
     def __init__(self, target, mark=None):
         from .editwatch import field_reader
-        self.target, self.current = target, None
+        self.target, self.current, self.written = target, None, None  # current: as the field shows written
         self.mark = mark or (lambda name, **values: None)
         self.revision = _input_revision
         self.mismatch = None  # diagnosis: how the field differed when it never showed the paste (lengths only)
@@ -305,6 +322,8 @@ class InlineField:
             self.mismatch = mismatch(seen, self.initial if self.current is None
                                      else (self.initial[0] + self.current, "", self.initial[2]))
             return self._refuse("content_or_caret_changed")
+        if text == self.written:
+            return True
         expected, common = seen, 0
         if self.current is not None:
             for old, new in zip(self.current, text):
@@ -332,8 +351,8 @@ class InlineField:
                 self.mismatch = mismatch(reader.snapshot(), (expected[0] + text[common:], "", expected[2]))
             self.mark("refused", why=self.failure, shape=self.mismatch)
             return False
-        self.initial = actual[0][:len(actual[0]) - len(text)], "", actual[2]
-        self.current = text
+        self.current, self.written = shown(actual, text), text
+        self.initial = actual[0][:len(actual[0]) - len(self.current)], "", actual[2]
         return True
 
 

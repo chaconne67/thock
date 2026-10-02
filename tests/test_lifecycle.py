@@ -77,6 +77,17 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
         self.state.notify.assert_called_once()
         self.assertEqual(self.state.notify.call_args.kwargs, {"action": "account"})  # 확인 opens the account window
 
+    async def test_running_out_of_time_mid_dictation_says_so(self):
+        self.state.account.start_session.return_value["max_session_seconds"] = 0
+        with patch("thock.app.transcribe", new_callable=AsyncMock, return_value="지금까지 말한 글"):
+            session = self.start()
+            await session.task
+        self.assertEqual(self.field.writes[-1], "지금까지 말한 글")
+        self.assertTrue(any(event[1] == "limit" for event in session.events))
+        self.state.notify.assert_called_once()
+        self.assertIn("사용 한도", self.state.notify.call_args.args[0])
+        self.assertEqual(self.state.notify.call_args.kwargs, {"action": "account"})
+
     async def test_stop_is_idempotent_and_buffer_is_capped_to_grant(self):
         from thock.config import SAMPLE_RATE
         self.state.account.start_session.return_value["max_session_seconds"] = 1
