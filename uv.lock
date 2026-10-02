@@ -102,7 +102,7 @@ wheels = [
 
 [[package]]
 name = "voicetype"
-version = "0.5.1.dev13"
+version = "0.5.1"
 source = { virtual = "." }
 dependencies = [
     { name = "sounddevice" },
