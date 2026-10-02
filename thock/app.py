@@ -163,7 +163,8 @@ class Session:
         if status.input_overflow:
             self.overflows += 1
         now = time.perf_counter()
-        if self.first_audio is None:
+        first = self.first_audio is None
+        if first:
             self.first_audio = now
         chunk = bytes(indata)
         self.loop.call_soon_threadsafe(self._enqueue, chunk)
@@ -174,7 +175,9 @@ class Session:
         self._count(self.clipped, now, sum(1 for sample in samples if sample >= 32700 or sample <= -32700))
         if self.voice_at is None and level >= VOICE_LEVEL:
             self.voice_at = now
-        if rms:  # an all-zero block is a microphone still waking up, not its noise
+        # The first block of a just-opened microphone is partly silence, and an all-zero block is a microphone
+        # still waking up: neither is its noise, and taken as the floor they would fill the bars for 3 s.
+        if rms and not first:
             self.state.mic_window.append(level)
         self.state.levels.append(bar_height(level, self.state.mic_window))
 
