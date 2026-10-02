@@ -67,6 +67,10 @@ jobs:
           $log
           if (-not (Get-Process Thock -ErrorAction SilentlyContinue)) { throw "Thock is not running after install" }
           if ($log -notmatch "started, hotkey=") { throw "Thock did not log its start" }
+          # Crema's mic finds a Thock running on its own by this file (its settings page's port and token).
+          $control = Get-Content "$env:USERPROFILE\.voicetype\control.json" -Raw | ConvertFrom-Json
+          $page = Invoke-WebRequest "http://127.0.0.1:$($control.port)/?t=$($control.token)&w=0" -UseBasicParsing
+          if ($page.StatusCode -ne 200) { throw "control.json does not lead to the settings page" }
 
       - name: Uninstall removes it
         shell: pwsh

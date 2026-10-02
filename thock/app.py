@@ -867,9 +867,10 @@ def main():
     app = App(load_settings())
     server = SettingsServer(app)
     app.open_settings, app.open_welcome, app.open_recovery = server.open, server.open_welcome, server.open_recovery
-    if EMBEDDED:  # Crema shows this run's settings page inside its own settings and drives the mic from here
-        (HOME / "embedded.json").write_text(json.dumps({"port": server.httpd.server_port, "token": server.token}),
-                                            encoding="utf-8")
+    # Crema shows this run's settings page inside its own settings and drives its mic from here: the Thock
+    # built into Crema (embedded.json in Crema's Thock folder) or, without one, a Thock running on its own.
+    control = HOME / ("embedded.json" if EMBEDDED else "control.json")
+    control.write_text(json.dumps({"port": server.httpd.server_port, "token": server.token}), encoding="utf-8")
     loop = asyncio.new_event_loop()
     app.loop = loop
     threading.Thread(target=loop.run_forever, daemon=True).start()
@@ -892,3 +893,4 @@ def main():
             log.warning("shutdown cleanup did not complete within its deadline")
         app.sounds.set_mode(None)
         loop.call_soon_threadsafe(loop.stop)
+        control.unlink(missing_ok=True)
