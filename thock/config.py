@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.6.0.dev3"
+APP_NAME, VERSION = "Thock", "0.6.0.dev4"
 # Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
 # its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
 EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
@@ -18,16 +18,25 @@ INPUT_MODES = {"hold": "누르고 있는 동안 녹음", "toggle": "눌러서 �
 # How far the editor goes (주인님 결정 2026-10-02); its instructions per level are in correction.py.
 POLISH_LEVELS = {"verbatim": "문장부호만", "clean": "군더더기만 빼기", "smooth": "읽기 좋게 다듬기"}
 # Styles the whole dictation can be rewritten in once, after the key is released (주인님 결정 2026-10-02);
-# what the writer is told for each is in correction.STYLES. Only styles that clearly change the text are kept, and
-# each is a menu item: a free-text style left users guessing what to write (주인님 결정 2026-10-03).
-STYLES = {"none": "바꾸지 않음", "bullets": "개조식", "email": "이메일", "written": "문어체", "polite": "존댓말로",
-          "casual": "반말로"}
+# what the writer is told for each is in correction.STYLES. Every style is a menu item, grouped by kind; a free-text
+# style left users guessing what to write (주인님 결정 2026-10-03). The trendy styles come from Controlroom
+# thock/docs/research (MZ 말투 조사 2026-10-03).
+STYLE_GROUPS = {"": {"none": "바꾸지 않음"},
+                "업무용": {"formal": "합니다체", "eumseum": "음슴체", "bullets": "개조식", "written": "보고서체",
+                        "email": "이메일"},
+                "일상": {"polite": "해요체", "casual": "반말"},
+                "사투리": {"gyeongsang": "경상도", "jeolla": "전라도", "chungcheong": "충청도", "jeju": "제주"},
+                "요즘 말투": {"mz": "요즘 말체", "lucky": "긍정왕체", "praise": "어화둥둥체", "deadpan": "담담체",
+                          "sageuk": "사극체"}}
+STYLES = {key: label for group in STYLE_GROUPS.values() for key, label in group.items()}
+# Experimental (주인님 결정 2026-10-03): how many emoji the editor or the writer adds; rules in correction.EMOJI_RULES.
+EMOJI_LEVELS = {"none": "넣지 않음", "some": "조금", "lots": "많이"}
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",
                    "hhkb": "HHKB Professional Hybrid", "leopold": "Leopold FC660M",
                    "technics": "Technics · Gateron Yellow", "keychron": "Keychron K10 · Linear"}
 DEFAULTS = {"hotkey": "capslock", "polish": True, "polish_level": "clean", "style": "none",
-            "emoji": False,  # experimental: the editor or writer adds fitting emoji (주인님 결정 2026-10-03)
+            "emoji": "none",
             "polish_provider": "chatgpt",  # keep old setting without using it
             "terms": [], "position": None, "learn": True, "input_mode": "toggle", "welcome_complete": False,
             "keep_audio": False, "sound_processing": True, "sound_keyboard": "rainy75",
@@ -67,6 +76,10 @@ def load_settings():
         settings["polish_level"] = DEFAULTS["polish_level"]
     if not isinstance(settings["style"], str) or settings["style"] not in STYLES:
         settings["style"] = DEFAULTS["style"]
+    if settings["emoji"] is True:  # 0.6.0.dev1~dev3 had an on/off switch
+        settings["emoji"] = "some"
+    if not isinstance(settings["emoji"], str) or settings["emoji"] not in EMOJI_LEVELS:
+        settings["emoji"] = DEFAULTS["emoji"]
     if not isinstance(settings["sound_keyboard"], str) or settings["sound_keyboard"] not in SOUND_KEYBOARDS:
         settings["sound_keyboard"] = DEFAULTS["sound_keyboard"]
     if not isinstance(settings["microphone"], str):

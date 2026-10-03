@@ -171,12 +171,12 @@
       <select id="polish-level"></select>
     </div>
     <div class="row">
-      <div><label class="label" for="style">문체 바꾸기 (고급)</label><p class="hint">말한 내용을 고른 문체로 다시 씁니다. 말하는 동안은 들린 대로 적고, 받아쓰기가 끝나면 한 번에 바꿉니다. 문체를 고르면 다듬는 정도 대신 이 문체가 적용됩니다.</p></div>
+      <div><label class="label" for="style">문체 바꾸기 (실험)</label><p class="hint">말한 내용을 고른 문체로 다시 씁니다. 문체에 맞게 표현을 바꾸거나 보탤 수 있습니다. 말하는 동안은 들린 대로 적고, 받아쓰기가 끝나면 한 번에 바꿉니다. 문체를 고르면 다듬는 정도 대신 이 문체가 적용됩니다.</p></div>
       <select id="style"></select>
     </div>
     <div class="row">
-      <div><label class="label" for="emoji">이모지 넣기 (실험)</label><p class="hint">글을 다듬거나 문체를 바꿀 때, 내용에 어울리는 문장 끝에 이모지를 붙입니다. 모든 문장에 붙지는 않습니다.</p></div>
-      <span class="switch"><input type="checkbox" id="emoji" role="switch"></span>
+      <div><label class="label" for="emoji">이모지 (실험)</label><p class="hint">글을 다듬거나 문체를 바꿀 때 이모지를 붙입니다. 조금은 감정이 담긴 문장에만, 많이는 모든 문장에 붙입니다. 문체와 함께 쓸 수 있습니다.</p></div>
+      <select id="emoji"></select>
     </div>
     <div class="group">
       <div class="row">
@@ -499,9 +499,17 @@ function fill(s) {
   $("polish").checked = s.polish;
   $("polish-level").replaceChildren(...Object.entries(s.polish_levels).map(([value,label])=>new Option(label,value)));
   $("polish-level").value = s.polish_level;
-  $("style").replaceChildren(...Object.entries(s.styles).map(([value,label])=>new Option(label,value)));
+  $("style").replaceChildren(...Object.entries(s.style_groups).flatMap(([group, styles]) => {
+    const options = Object.entries(styles).map(([value,label])=>new Option(label,value));
+    if (!group) return options;
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = group;
+    optgroup.append(...options);
+    return [optgroup];
+  }));
   $("style").value = s.style;
-  $("emoji").checked = s.emoji;
+  $("emoji").replaceChildren(...Object.entries(s.emoji_levels).map(([value,label])=>new Option(label,value)));
+  $("emoji").value = s.emoji;
   $("learn").checked = s.learn;
   $("keep-audio").checked = s.keep_audio;
   $("autostart-row").hidden = s.autostart === null;
@@ -540,7 +548,7 @@ $("save").addEventListener("click", async () => {
   setStatus("저장 중…");
   try {
     fill(await api("/api/settings", {
-      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, style: $("style").value, emoji: $("emoji").checked, learn: $("learn").checked, terms: termsList(),
+      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, style: $("style").value, emoji: $("emoji").value, learn: $("learn").checked, terms: termsList(),
       sound_processing: $("sound-processing").checked,
       keep_audio: $("keep-audio").checked,
       ...($("autostart-row").hidden ? {} : {autostart: $("autostart").checked}),

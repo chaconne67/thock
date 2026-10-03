@@ -21,7 +21,7 @@ from pathlib import Path
 import sounddevice as sd
 
 from .config import (APP_NAME, EMBEDDED, HOME, HOTKEYS, INPUT_MODES, POLISH_LEVELS, PREVIEW_FONT_SIZES, PREVIEW_FONTS,
-                     SAMPLE_RATE, SOUND_KEYBOARDS, STYLES,
+                     SAMPLE_RATE, SOUND_KEYBOARDS, STYLE_GROUPS, STYLES, EMOJI_LEVELS,
                      VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
@@ -884,7 +884,7 @@ class App:
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"],
                 "polish_level": s["polish_level"], "polish_levels": POLISH_LEVELS,
-                "style": s["style"], "styles": STYLES, "emoji": s["emoji"],
+                "style": s["style"], "style_groups": STYLE_GROUPS, "emoji": s["emoji"], "emoji_levels": EMOJI_LEVELS,
                 "terms": s["terms"], "learn": s["learn"],
                 "sound_processing": s["sound_processing"],
                 "keep_audio": s["keep_audio"], "microphone": s["microphone"], "microphones": microphones(),
@@ -910,6 +910,8 @@ class App:
             s["polish_level"] = body["polish_level"]
         if isinstance(body.get("style"), str) and body["style"] in STYLES:
             s["style"] = body["style"]
+        if isinstance(body.get("emoji"), str) and body["emoji"] in EMOJI_LEVELS:
+            s["emoji"] = body["emoji"]
         if body.get("hotkey") in HOTKEYS:
             s["hotkey"] = body["hotkey"]
         if "microphone" in body and (body["microphone"] is None or isinstance(body["microphone"], str)):
@@ -918,7 +920,7 @@ class App:
             s["microphone"] = body["microphone"]
         if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:
             s["sound_keyboard"] = body["sound_keyboard"]
-        for flag in ("polish", "emoji", "learn", "sound_processing", "preview", "keep_audio"):
+        for flag in ("polish", "learn", "sound_processing", "preview", "keep_audio"):
             if isinstance(body.get(flag), bool):
                 s[flag] = body[flag]
         for lang, fonts in PREVIEW_FONTS.items():

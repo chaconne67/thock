@@ -41,9 +41,16 @@ class SettingsCompatibility(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
             self.assertEqual(load_settings()["style"],"none")
             for stored, style in (({"style":"pirate"},"none"), ({"style":"custom","style_custom":" "},"none"),
-                                  ({"style":"custom","style_custom":"사극 말투"},"none"), ({"style":"jeolla"},"none"), ({"style":"email"},"email")):
+                                  ({"style":"custom","style_custom":"사극 말투"},"none"), ({"style":"seoul90"},"none"), ({"style":"jeolla"},"jeolla"), ({"style":"email"},"email")):
                 (Path(temp)/"settings.json").write_text(json.dumps(stored))
                 self.assertEqual(load_settings()["style"],style,stored)
+
+    def test_the_old_emoji_switch_reads_as_some_emoji(self):
+        with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
+            self.assertEqual(load_settings()["emoji"],"none")
+            for stored, emoji in ((True,"some"), (False,"none"), ("lots","lots"), ("loud","none")):
+                (Path(temp)/"settings.json").write_text(json.dumps({"emoji":stored}))
+                self.assertEqual(load_settings()["emoji"],emoji,stored)
 
     def test_new_install_uses_toggle_and_needs_separate_welcome(self):
         with tempfile.TemporaryDirectory() as temp, patch("thock.config.HOME",Path(temp)):
