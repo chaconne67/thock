@@ -104,7 +104,8 @@ STYLES = {
 # and the writer alike.
 # Each emoji goes right after the sentence it reacts to, so it reads with that sentence; gathered at the end of the
 # text it reads as one tag on the whole message (주인님 2026-10-04).
-_EMOJI_PLACE = ("이모지는 그것이 나타내는 문장의 문장부호 바로 뒤에 붙이고, 글 맨 끝에 몰아 붙이지 않는다. "
+_EMOJI_PLACE = ("이모지는 문장 하나를 다 쓴 그 자리에서 그 문장의 문장부호 바로 뒤에 붙이고 다음 문장으로 넘어간다. 여러 문장의 "
+                "이모지를 글 맨 끝에 모아 두지 않는다. 끝에 모이면 읽는 사람이 어느 문장에 대한 반응인지 알 수 없다. "
                 "예) 드디어 끝났다! 🎉 오늘 저녁 뭐 먹지? 🤔 치킨 어때? 🍗 (틀림: 드디어 끝났다! 오늘 저녁 뭐 먹지? 치킨 어때? 🎉🤔🍗) "
                 "이모지는 새로 보태는 말로 치지 않는다. 말한 단어를 이모지로 바꾸지는 않는다.")
 EMOJI_RULES = {
