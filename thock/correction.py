@@ -102,13 +102,17 @@ STYLES = {
 
 # Experimental (주인님 결정 2026-10-03): config.EMOJI_LEVELS other than "none" add one of these rules for the editor
 # and the writer alike.
-_EMOJI_EXCEPTION = "이모지는 새로 보태는 말로 치지 않는다. 말한 단어를 이모지로 바꾸지는 않는다."
+# Each emoji goes right after the sentence it reacts to, so it reads with that sentence; gathered at the end of the
+# text it reads as one tag on the whole message (주인님 2026-10-04).
+_EMOJI_PLACE = ("이모지는 그것이 나타내는 문장의 문장부호 바로 뒤에 붙이고, 글 맨 끝에 몰아 붙이지 않는다. "
+                "예) 드디어 끝났다! 🎉 오늘 저녁 뭐 먹지? 🤔 치킨 어때? 🍗 (틀림: 드디어 끝났다! 오늘 저녁 뭐 먹지? 치킨 어때? 🎉🤔🍗) "
+                "이모지는 새로 보태는 말로 치지 않는다. 말한 단어를 이모지로 바꾸지는 않는다.")
 EMOJI_RULES = {
-    "some": ("- 이모지: 감정이나 분위기가 담긴 문장(기쁨, 축하, 감사, 사과, 걱정, 응원, 인사, 음식·날씨·약속 같은 일상 이야기)에는 "
-             "그 문장 끝에 어울리는 이모지를 하나 붙인다. 감정 없이 사실이나 할 일만 말하는 문장과 코드·명령어·숫자가 중심인 문장에는 "
-             "붙이지 않는다. " + _EMOJI_EXCEPTION),
-    "lots": ("- 이모지: 모든 문장 끝에 내용과 감정에 맞는 이모지를 두세 개씩 붙이고, 문장 중간의 낱말 뒤에도 어울리는 이모지를 넣어 "
-             "글 전체를 이모지로 풍성하게 꾸민다. " + _EMOJI_EXCEPTION),
+    "some": ("- 이모지: 감정이나 분위기가 담긴 문장(기쁨, 축하, 감사, 사과, 걱정, 응원, 인사, 음식·날씨·약속 같은 일상 이야기)마다 "
+             "그 문장에 어울리는 이모지를 하나 붙인다. 감정 없이 사실이나 할 일만 말하는 문장과 코드·명령어·숫자가 중심인 문장에는 "
+             "붙이지 않는다. " + _EMOJI_PLACE),
+    "lots": ("- 이모지: 모든 문장마다 그 문장의 내용과 감정에 맞는 이모지를 한두 개씩 붙이고, 문장 중간의 낱말 뒤에도 어울리는 "
+             "이모지를 넣어 글 전체를 이모지로 풍성하게 꾸민다. " + _EMOJI_PLACE),
 }
 
 
