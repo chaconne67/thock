@@ -65,9 +65,9 @@ STYLES = {
 }
 
 # Experimental (주인님 결정 2026-10-03): with settings emoji on, the editor and the writer both get this one rule.
-EMOJI_RULE = ("- 이모지: 감정이나 내용이 이모지와 잘 어울리는 문장에는 그 문장 끝에 어울리는 이모지를 하나 붙인다. 모든 문장에 붙이지 "
-              "않고, 코드·명령어·숫자가 중심인 문장에는 붙이지 않는다. 이모지는 말을 보태지 않는다는 규칙의 예외이며, 말한 단어를 "
-              "이모지로 바꾸지는 않는다.")
+EMOJI_RULE = ("- 이모지: 감정이나 분위기가 담긴 문장(기쁨, 축하, 감사, 사과, 걱정, 응원, 인사, 음식·날씨·약속 같은 일상 이야기)에는 "
+              "그 문장 끝에 어울리는 이모지를 하나 붙인다. 감정 없이 사실이나 할 일만 말하는 문장과 코드·명령어·숫자가 중심인 문장에는 "
+              "붙이지 않는다. 이모지는 말을 보태지 않는다는 규칙의 예외이며, 말한 단어를 이모지로 바꾸지는 않는다.")
 
 
 PROFILE_PROMPT = """You keep a short profile that helps a dictation app spell this user's words correctly.

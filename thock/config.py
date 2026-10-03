@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.6.0.dev1"
+APP_NAME, VERSION = "Thock", "0.6.0.dev2"
 # Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
 # its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
 EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
