@@ -106,7 +106,7 @@ STYLES = {
 # text it reads as one tag on the whole message (주인님 2026-10-04).
 _EMOJI_PLACE = ("이모지는 문장 하나를 다 쓴 그 자리에서 그 문장의 문장부호 바로 뒤에 붙이고 다음 문장으로 넘어간다. 여러 문장의 "
                 "이모지를 글 맨 끝에 모아 두지 않는다. 끝에 모이면 읽는 사람이 어느 문장에 대한 반응인지 알 수 없다. "
-                "예) 드디어 끝났다! 🎉 오늘 저녁 뭐 먹지? 🤔 치킨 어때? 🍗 (틀림: 드디어 끝났다! 오늘 저녁 뭐 먹지? 치킨 어때? 🎉🤔🍗) "
+                "예) 드디어 끝났다! 🎉 오늘 저녁 뭐 먹지? 🤔 치킨 어때? 🍗 "
                 "이모지는 새로 보태는 말로 치지 않는다. 말한 단어를 이모지로 바꾸지는 않는다.")
 EMOJI_RULES = {
     "some": ("- 이모지: 감정이나 분위기가 담긴 문장(기쁨, 축하, 감사, 사과, 걱정, 응원, 인사, 음식·날씨·약속 같은 일상 이야기)마다 "
@@ -170,7 +170,8 @@ class Polisher:
         """The editor's own answer. The whole dictation is sent, so the answer may be as long as it is."""
         terms = self._terms()
         rules, examples = POLISH_RULES[self.settings["polish_level"]]
-        rules += "\n" + EMOJI_RULES[self.settings["emoji"]] if self.settings["emoji"] in EMOJI_RULES else ""
+        # Last before the answer, after the examples that carry no emoji, so they do not outweigh it.
+        examples += "\n" + EMOJI_RULES[self.settings["emoji"]] if self.settings["emoji"] in EMOJI_RULES else ""
         return self.complete(POLISH_PROMPT.format(rules=rules, examples=examples),
                              f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
                              max_tokens=max(600, len(text) * 3))
