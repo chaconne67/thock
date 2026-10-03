@@ -1,7 +1,6 @@
 import asyncio
 import threading
 import unittest
-from unittest.mock import patch
 from thock.live_input import LiveDictation
 
 
@@ -12,11 +11,6 @@ async def until(predicate):
 
 
 class LiveInput(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        pause = patch("thock.live_input.PAUSE", 0.05)
-        pause.start()
-        self.addCleanup(pause.stop)
-
     def make(self, polish=None, write=None):
         self.writes, self.errors = [], []
         def record(text):
@@ -35,23 +29,22 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await live.finish("내일 회의 하자"), "내일 회의하자.")
         self.assertEqual(self.writes[-1], "내일 회의하자.")
 
-    async def test_slow_correction_keeps_new_words_and_does_not_block_live_input(self):
-        started, release = threading.Event(), threading.Event()
+    async def test_words_go_in_as_heard_and_the_whole_is_corrected_once_at_the_end(self):
+        # 주인님 결정 2026-10-03: no correction at pauses, one of the whole text when the dictation ends.
+        calls = []
         def polish(text):
-            if text == "첫 문장.":
-                started.set()
-                release.wait(2)
-            return text.replace("첫", "교정한 첫")
+            calls.append(text)
+            return text + "."
         live = self.make(polish)
-        live.update("첫 문장.")
-        live.endpoint("첫 문장.")
-        await until(started.is_set)
-        live.update("첫 문장. 다음 문장")
-        await until(lambda: self.writes and self.writes[-1].endswith("다음 문장"))
-        release.set()
-        await until(lambda: live.processed == "첫 문장.")
-        self.assertEqual(await live.finish("첫 문장. 다음 문장"), "교정한 첫 문장. 다음 문장")
-        self.assertEqual(self.writes[-1], "교정한 첫 문장. 다음 문장")
+        live.update("첫 문장")
+        live.endpoint("첫 문장")
+        live.update("첫 문장 다음 문장")
+        live.endpoint("첫 문장 다음 문장")
+        await until(lambda: self.writes and self.writes[-1] == "첫 문장 다음 문장")
+        await asyncio.sleep(0.3)
+        self.assertEqual(calls, [])  # nothing corrected while speaking, however long the pause
+        self.assertEqual(await live.finish("첫 문장 다음 문장"), "첫 문장 다음 문장.")
+        self.assertEqual((calls, self.writes[-1]), (["첫 문장 다음 문장"], "첫 문장 다음 문장."))
 
     async def test_endpoint_spaces_and_empty_finalization_do_not_duplicate_text(self):
         calls = []
@@ -61,48 +54,10 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         live = self.make(polish)
         live.update("하나. ")
         live.endpoint("하나. ")
-        await until(lambda: live.processed == "하나.")
         live.update("하나. 둘.")
         live.endpoint("하나. 둘.")
         self.assertEqual(await live.finish("하나. 둘."), "하나. 둘.")
-        self.assertEqual(calls, ["하나.", "하나. 둘."])  # always the whole text so far
-
-    async def test_a_later_correction_of_the_whole_text_moves_an_earlier_mark(self):
-        answers = {"회의는 세 시에": "회의는 세 시에.", "회의는 세 시에 시작합니다": "회의는 세 시에 시작합니다."}
-        live = self.make(answers.get)
-        live.update("회의는 세 시에")
-        live.endpoint("회의는 세 시에")
-        await until(lambda: self.writes and self.writes[-1] == "회의는 세 시에.")
-        live.update("회의는 세 시에 시작합니다")
-        self.assertEqual(await live.finish("회의는 세 시에 시작합니다"), "회의는 세 시에 시작합니다.")
-        self.assertEqual(self.writes[-1], "회의는 세 시에 시작합니다.")
-
-    async def test_speech_within_the_pause_leaves_one_correction_of_the_whole(self):
-        calls = []
-        def polish(text):
-            calls.append(text)
-            return text + "."
-        live = self.make(polish)
-        live.update("앞 말")
-        live.endpoint("앞 말")
-        live.update("앞 말 뒤 말")  # speaking again before the pause is over
-        await asyncio.sleep(0.15)
-        self.assertEqual(calls, [])
-        self.assertEqual(await live.finish("앞 말 뒤 말"), "앞 말 뒤 말.")
-        self.assertEqual(calls, ["앞 말 뒤 말"])
-
-    async def test_a_failed_correction_keeps_the_earlier_one(self):
-        def answer(text):
-            if text == "하나 둘":
-                raise RuntimeError("empty correction")
-            return "하나."
-        live = self.make(answer)
-        live.update("하나")
-        live.endpoint("하나")
-        await until(lambda: live.processed == "하나")
-        live.update("하나 둘")
-        self.assertEqual(await live.finish("하나 둘"), "하나. 둘")
-        self.assertEqual(len(self.errors), 1)
+        self.assertEqual(calls, ["하나. 둘."])  # the whole text, once
 
     async def test_a_field_that_cannot_be_written_holds_everything_until_a_new_dictation_lets_it_go(self):
         self.errors = []
@@ -161,7 +116,7 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((writes[-1], live.complete), (" 뒤 말", True))
 
     async def test_after_a_user_edit_later_speech_starts_at_the_new_caret(self):
-        fields, started, release = [[]], threading.Event(), threading.Event()
+        fields = [[]]
         def write(text):
             if text.endswith("다시 말한다"):
                 if len(fields) == 1:
@@ -172,20 +127,15 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
             fields.append([])
             return True
         def polish(text):
-            if text == "지울 문장.":
-                started.set()
-                release.wait(2)
             return text.replace("말한다", "말한다.")
         self.errors = []
         live = LiveDictation(write, polish, lambda text: text, self.errors.append, restart)
         self.addAsyncCleanup(live.close)
         live.update("지울 문장.")
         live.endpoint("지울 문장.")
-        await until(started.is_set)
         await until(lambda: fields[0])
         live.update("지울 문장. 다시 말한다")
         await until(lambda: len(fields) == 2 and fields[1])
-        release.set()
         self.assertEqual(await live.finish("지울 문장. 다시 말한다"), "다시 말한다.")
         self.assertEqual(fields[0], ["지울 문장."])
         self.assertEqual(fields[1][0], "다시 말한다")
@@ -231,6 +181,5 @@ class LiveInput(unittest.IsolatedAsyncioTestCase):
         live = self.make(lambda text: text.upper())
         live.update("hello. old")
         live.endpoint("hello.")
-        await until(lambda: live.processed == "hello.")
         live.update("hello. new")
         self.assertEqual(await live.finish("hello. new"), "HELLO. NEW")

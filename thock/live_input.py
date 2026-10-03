@@ -1,8 +1,9 @@
-"""One dictation's live draft, corrected as a whole when the speaker pauses and at the end.
+"""One dictation's live draft: words go in as heard, and the whole text is corrected once, at the end
+(주인님 결정 2026-10-03; until then it was corrected again at every pause and the text kept changing).
 
 The writer owns only its inserted text. Speech callbacks never wait for UI or a model.
-The correction model always sees everything said so far, so punctuation follows the whole text
-rather than each short phrase, and a mark set earlier can still move.
+The correction model sees everything said, so punctuation follows the whole text rather than each
+short phrase.
 When the user edits during dictation, what was written stays as is and later speech starts
 again at their caret.
 Hearing never depends on writing (주인님 2026-10-02): when the field cannot be written (another window in
@@ -10,8 +11,6 @@ front, the field changed, anything), writing pauses while everything heard is ke
 dictation's field is back, until a new dictation lets the held text go.
 """
 import asyncio
-
-PAUSE = 1.0  # seconds without new words after a phrase ends before the whole text is corrected
 
 
 class LiveDictation:
@@ -55,11 +54,7 @@ class LiveDictation:
             await self.segment_ready.wait()
             self.segment_ready.clear()
             if not self.ending:
-                try:
-                    await asyncio.wait_for(self.spoke.wait(), PAUSE)
-                    continue  # still speaking: the next pause corrects all of it
-                except TimeoutError:
-                    pass
+                continue  # while speaking, words go in as heard; the whole text is corrected once at the end
             boundary, piece = self.boundary, self.piece
             if not boundary.startswith(self.processed):
                 raise RuntimeError("speech endpoint moved backwards")
