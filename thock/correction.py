@@ -102,25 +102,19 @@ STYLES = {
 
 # Experimental (주인님 결정 2026-10-03): config.EMOJI_LEVELS other than "none" add one of these rules for the editor
 # and the writer alike.
-_EMOJI_NOTE = "이모지는 새로 보태는 말로 치지 않는다. 말한 단어를 이모지로 바꾸지는 않는다."
+# Each emoji goes right after the sentence it reacts to, so it reads with that sentence; gathered at the end of the
+# text it reads as one tag on the whole message (주인님 2026-10-04).
+_EMOJI_PLACE = ("이모지는 문장 하나를 다 쓴 그 자리에서 그 문장의 문장부호 바로 뒤에 붙이고 다음 문장으로 넘어간다. 여러 문장의 "
+                "이모지를 글 맨 끝에 모아 두지 않는다. 끝에 모이면 읽는 사람이 어느 문장에 대한 반응인지 알 수 없다. "
+                "예) 드디어 끝났다! 🎉 오늘 저녁 뭐 먹지? 🤔 치킨 어때? 🍗 (틀림: 드디어 끝났다! 오늘 저녁 뭐 먹지? 치킨 어때? 🎉🤔🍗) "
+                "이모지는 새로 보태는 말로 치지 않는다. 말한 단어를 이모지로 바꾸지는 않는다.")
 EMOJI_RULES = {
     "some": ("- 이모지: 감정이나 분위기가 담긴 문장(기쁨, 축하, 감사, 사과, 걱정, 응원, 인사, 음식·날씨·약속 같은 일상 이야기)마다 "
              "그 문장에 어울리는 이모지를 하나 붙인다. 감정 없이 사실이나 할 일만 말하는 문장과 코드·명령어·숫자가 중심인 문장에는 "
-             "붙이지 않는다. " + _EMOJI_NOTE),
+             "붙이지 않는다. " + _EMOJI_PLACE),
     "lots": ("- 이모지: 모든 문장마다 그 문장의 내용과 감정에 맞는 이모지를 한두 개씩 붙이고, 문장 중간의 낱말 뒤에도 어울리는 "
-             "이모지를 넣어 글 전체를 이모지로 풍성하게 꾸민다. " + _EMOJI_NOTE),
+             "이모지를 넣어 글 전체를 이모지로 풍성하게 꾸민다. " + _EMOJI_PLACE),
 }
-# Told "don't gather them at the end", the model still put two sentences' emoji after the last one (dev9~11, 주인님
-# 2026-10-04: each emoji belongs with its sentence). Written one sentence per line, each emoji ends its own line; the
-# app joins the lines with a space (one_line). Styles laid out in lines of their own keep their lines.
-EMOJI_LINES = ("- 출력 형식: 한 줄에 한 문장씩 쓰고, 그 문장에 붙일 이모지는 그 줄 끝에 둔다. 줄을 이어 붙이는 일은 앱이 한다.\n"
-               "  예)\n  드디어 끝났다! 🎉\n  오늘 저녁 뭐 먹지? 🤔")
-KEEPS_LINES = {"bullets", "email"}
-
-
-def one_line(text):
-    """The editor's or writer's answer written one sentence per line, joined back into running text."""
-    return " ".join(line.strip() for line in text.splitlines() if line.strip())
 
 
 PROFILE_PROMPT = """You keep a short profile that helps a dictation app spell this user's words correctly.
@@ -176,25 +170,20 @@ class Polisher:
         """The editor's own answer. The whole dictation is sent, so the answer may be as long as it is."""
         terms = self._terms()
         rules, examples = POLISH_RULES[self.settings["polish_level"]]
-        emoji = EMOJI_RULES.get(self.settings["emoji"])
-        rules += "\n" + emoji + "\n" + EMOJI_LINES if emoji else ""
-        out = self.complete(POLISH_PROMPT.format(rules=rules, examples=examples),
-                            f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
-                            max_tokens=max(600, len(text) * 3))
-        return one_line(out) if emoji else out
+        rules += "\n" + EMOJI_RULES[self.settings["emoji"]] if self.settings["emoji"] in EMOJI_RULES else ""
+        return self.complete(POLISH_PROMPT.format(rules=rules, examples=examples),
+                             f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
+                             max_tokens=max(600, len(text) * 3))
 
     def restyle(self, text):
         """The whole dictation rewritten in the chosen style.
         An empty answer is an error: the dictation keeps the text as heard and says so."""
         style = STYLES[self.settings["style"]]
-        emoji = EMOJI_RULES.get(self.settings["emoji"])
-        lines = emoji and self.settings["style"] not in KEEPS_LINES
-        style += "\n" + emoji + ("\n" + EMOJI_LINES if lines else "") if emoji else ""
+        style += "\n" + EMOJI_RULES[self.settings["emoji"]] if self.settings["emoji"] in EMOJI_RULES else ""
         terms = self._terms()
         out = self.complete(STYLE_PROMPT.format(style=style),
                             f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
                             max_tokens=max(800, len(text) * 4))
-        out = one_line(out) if lines else out
         if not out:
             raise RuntimeError("empty restyle")
         return out
