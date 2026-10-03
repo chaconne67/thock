@@ -217,11 +217,13 @@ class Polisher:
 
     def _jev(self, key, sentences):
         """Jev's answer to one Choice question per sentence, all in one call."""
-        body = json.dumps({"model": "jev-latest", "state": {"sentences": sentences}, "questions": {
+        # Each question quotes its own sentence: pointing at sentences[i] let a neighbour's topic leak in.
+        body = json.dumps({"model": "jev-latest", "state": {"message": " ".join(sentences)}, "questions": {
             f"s{i}": {"type": "choice", "criteria": EMOJI_PALETTE,
-                      "instructions": f"Which emoji best fits the feeling or topic of sentences[{i}]? "
-                                      "Choose none if that sentence shows no feeling."}
-            for i in range(len(sentences))}})
+                      "instructions": f"This sentence is part of the message: {json.dumps(sentence, ensure_ascii=False)} "
+                                      "Which emoji best fits the feeling or topic of this sentence alone? "
+                                      "Choose none if this sentence shows no feeling."}
+            for i, sentence in enumerate(sentences)}})
         conn = http.client.HTTPSConnection("api.typesafe.ai", timeout=3)
         try:
             conn.request("POST", "/v1/systemone", body, {"Content-Type": "application/json",
