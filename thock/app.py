@@ -21,7 +21,7 @@ from pathlib import Path
 import sounddevice as sd
 
 from .config import (APP_NAME, EMBEDDED, HOME, HOTKEYS, INPUT_MODES, POLISH_LEVELS, PREVIEW_FONT_SIZES, PREVIEW_FONTS,
-                     SAMPLE_RATE, SOUND_KEYBOARDS, STYLE_CUSTOM_MAX, STYLES,
+                     SAMPLE_RATE, SOUND_KEYBOARDS, STYLES,
                      VERSION, load_settings, log, save_settings, trace)
 from .account import MESSAGES, Account, AccountError
 from .correction import PROFILE_PROMPT, Polisher
@@ -884,7 +884,7 @@ class App:
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"],
                 "polish_level": s["polish_level"], "polish_levels": POLISH_LEVELS,
-                "style": s["style"], "styles": STYLES, "style_custom": s["style_custom"], "emoji": s["emoji"],
+                "style": s["style"], "styles": STYLES, "emoji": s["emoji"],
                 "terms": s["terms"], "learn": s["learn"],
                 "sound_processing": s["sound_processing"],
                 "keep_audio": s["keep_audio"], "microphone": s["microphone"], "microphones": microphones(),
@@ -908,10 +908,7 @@ class App:
             s["input_mode"] = body["input_mode"]
         if isinstance(body.get("polish_level"), str) and body["polish_level"] in POLISH_LEVELS:
             s["polish_level"] = body["polish_level"]
-        if isinstance(body.get("style_custom"), str):
-            s["style_custom"] = body["style_custom"].strip()[:STYLE_CUSTOM_MAX]
-        if isinstance(body.get("style"), str) and body["style"] in STYLES and (
-                body["style"] != "custom" or s["style_custom"]):
+        if isinstance(body.get("style"), str) and body["style"] in STYLES:
             s["style"] = body["style"]
         if body.get("hotkey") in HOTKEYS:
             s["hotkey"] = body["hotkey"]

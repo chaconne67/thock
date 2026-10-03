@@ -26,7 +26,7 @@ class DirectCorrection(unittest.TestCase):
             "api_key": "renewed" if force else "cached", "model": "openai/gpt-6-luna", "expires": 0}))
         profile = types.SimpleNamespace(terms=lambda: [], summary=lambda: "")
         notes = types.SimpleNamespace(hint=lambda: "", terms=lambda: ["FundKeeper"])
-        polisher = Polisher({"terms": ["Thock"], "polish_level": "clean", "style": "none", "style_custom": "",
+        polisher = Polisher({"terms": ["Thock"], "polish_level": "clean", "style": "none",
                              "emoji": False},
                             notes, account, profile)
         conn = Mock()
@@ -73,12 +73,12 @@ class DirectCorrection(unittest.TestCase):
             for other, (other_rules, _) in POLISH_RULES.items():
                 self.assertEqual(json_text(other_rules) in sent, other == level, (level, other))
 
-    def test_the_writer_gets_the_chosen_style_or_the_users_own_line(self):
+    def test_the_writer_gets_the_chosen_style(self):
         from thock.correction import STYLES
         body = b'{"choices": [{"message": {"content": "- \\ub2e4\\ub4ec\\uc74c"}}]}'
-        for style, wanted in (("bullets", STYLES["bullets"]), ("custom", "사용자가 적은 문체: 회의록처럼")):
+        for style, wanted in (("bullets", STYLES["bullets"]), ("casual", STYLES["casual"])):
             polisher, _, conn = self.polisher([Response(200, body)])
-            polisher.settings.update(style=style, style_custom=" 회의록처럼 ")
+            polisher.settings.update(style=style)
             with patch("thock.correction.http.client.HTTPSConnection", return_value=conn):
                 self.assertEqual(polisher.restyle("다듬을 글"), "- 다듬음")
             self.assertIn(json_text(wanted), conn.request.call_args.args[2])

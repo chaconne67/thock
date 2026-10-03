@@ -174,9 +174,6 @@
       <div><label class="label" for="style">문체 바꾸기 (고급)</label><p class="hint">말한 내용을 고른 문체로 다시 씁니다. 말하는 동안은 들린 대로 적고, 받아쓰기가 끝나면 한 번에 바꿉니다. 문체를 고르면 다듬는 정도 대신 이 문체가 적용됩니다.</p></div>
       <select id="style"></select>
     </div>
-    <div class="row" id="style-custom-row" hidden>
-      <input id="style-custom" type="text" maxlength="200" placeholder="예: 경상도 사투리로, 회의록처럼 짧게" aria-label="원하는 문체">
-    </div>
     <div class="row">
       <div><label class="label" for="emoji">이모지 넣기 (실험)</label><p class="hint">글을 다듬거나 문체를 바꿀 때, 내용에 어울리는 문장 끝에 이모지를 붙입니다. 모든 문장에 붙지는 않습니다.</p></div>
       <span class="switch"><input type="checkbox" id="emoji" role="switch"></span>
@@ -394,8 +391,7 @@ function renderHint() {
     : key + "을 한 번 눌러 시작하고, 다시 누르면 끝납니다.";
   $("hotkey-hint").textContent = message + (key === "CapsLock" ? " 대문자 고정은 Shift+CapsLock입니다." : "");
   $("terms-count").textContent = `${termsList().length}개`;
-  $("polish-level").disabled = $("style").disabled = $("style-custom").disabled = $("emoji").disabled = !$("polish").checked;
-  $("style-custom-row").hidden = $("style").value !== "custom";
+  $("polish-level").disabled = $("style").disabled = $("emoji").disabled = !$("polish").checked;
   $("polish-level-hint").textContent = {
     verbatim: "단어는 들린 그대로 두고 문장부호와 띄어쓰기만 고칩니다.",
     clean: "음·어 같은 망설임 말과 끊긴 말 조각을 빼고, 잘못 들린 말과 용어 표기를 고칩니다.",
@@ -505,7 +501,6 @@ function fill(s) {
   $("polish-level").value = s.polish_level;
   $("style").replaceChildren(...Object.entries(s.styles).map(([value,label])=>new Option(label,value)));
   $("style").value = s.style;
-  $("style-custom").value = s.style_custom;
   $("emoji").checked = s.emoji;
   $("learn").checked = s.learn;
   $("keep-audio").checked = s.keep_audio;
@@ -545,7 +540,7 @@ $("save").addEventListener("click", async () => {
   setStatus("저장 중…");
   try {
     fill(await api("/api/settings", {
-      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, style: $("style").value, style_custom: $("style-custom").value, emoji: $("emoji").checked, learn: $("learn").checked, terms: termsList(),
+      hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, style: $("style").value, emoji: $("emoji").checked, learn: $("learn").checked, terms: termsList(),
       sound_processing: $("sound-processing").checked,
       keep_audio: $("keep-audio").checked,
       ...($("autostart-row").hidden ? {} : {autostart: $("autostart").checked}),

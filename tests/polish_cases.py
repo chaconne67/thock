@@ -5,7 +5,7 @@ or adds other words. It prints the model's own answer, which the app writes as i
 questions get a question mark, commands are kept as text, not answered, misheard words are fixed only when
 clear, hesitations and words cut off and said again go.
 Run: uv run python tests/polish_cases.py [verbatim|clean|smooth]  (the level of settings, clean by default)
-     or uv run python tests/polish_cases.py style <style> [own style line]  (STYLE_CASES rewritten by the writer)
+     or uv run python tests/polish_cases.py style <style>  (STYLE_CASES rewritten by the writer)
      add emoji to either to switch the experimental emoji rule on"""
 
 import sys
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     s["polish_level"] = args[0] if args and args[0] != "style" else "clean"
     styling = len(args) > 1 and args[0] == "style"
     if styling:
-        s["style"], s["style_custom"] = args[1], " ".join(args[2:])
+        s["style"] = args[1]
     account = Account()
     status = account.status(force=True)
     if not status.get("ready"):

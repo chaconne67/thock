@@ -129,10 +129,9 @@ class Polisher:
                              max_tokens=max(600, len(text) * 3))
 
     def restyle(self, text):
-        """The whole dictation rewritten in the chosen style (settings style, or the user's own style_custom line).
+        """The whole dictation rewritten in the chosen style.
         An empty answer is an error: the dictation keeps the text as heard and says so."""
-        style = self.settings["style"]
-        style = f"사용자가 적은 문체: {self.settings['style_custom'].strip()}" if style == "custom" else STYLES[style]
+        style = STYLES[self.settings["style"]]
         style += "\n" + EMOJI_RULE if self.settings["emoji"] else ""
         terms = self._terms()
         out = self.complete(STYLE_PROMPT.format(style=style),
