@@ -499,7 +499,7 @@ function fill(s) {
   $("polish").checked = s.polish;
   $("polish-level").replaceChildren(...Object.entries(s.polish_levels).map(([value,label])=>new Option(label,value)));
   $("polish-level").value = s.polish_level;
-  $("style").replaceChildren(...Object.entries(s.style_groups).flatMap(([group, styles]) => {
+  $("style").replaceChildren(...s.style_groups.flatMap(([group, styles]) => {
     const options = Object.entries(styles).map(([value,label])=>new Option(label,value));
     if (!group) return options;
     const optgroup = document.createElement("optgroup");

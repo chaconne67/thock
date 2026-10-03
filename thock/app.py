@@ -884,7 +884,8 @@ class App:
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"],
                 "polish_level": s["polish_level"], "polish_levels": POLISH_LEVELS,
-                "style": s["style"], "style_groups": STYLE_GROUPS, "emoji": s["emoji"], "emoji_levels": EMOJI_LEVELS,
+                "style": s["style"], "style_groups": list(STYLE_GROUPS.items()),  # pairs: a JSON key may not be empty (PowerShell)
+                "emoji": s["emoji"], "emoji_levels": EMOJI_LEVELS,
                 "terms": s["terms"], "learn": s["learn"],
                 "sound_processing": s["sound_processing"],
                 "keep_audio": s["keep_audio"], "microphone": s["microphone"], "microphones": microphones(),
