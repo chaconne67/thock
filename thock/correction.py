@@ -55,22 +55,19 @@ STYLE_PROMPT = """너는 음성 받아쓰기를 사용자가 고른 문체로 �
 다시 쓴 글만 출력한다."""
 
 STYLES = {
-    "bullets": "개조식. 말한 내용을 핵심 항목으로 나눠 줄마다 '- '로 시작하고, 각 항목은 '~함', '~할 것'이나 명사형처럼 짧게 끝낸다.",
+    "bullets": "개조식. 말한 내용을 핵심 항목으로 나눠 줄마다 '- '로 시작하고, 각 항목은 '~함', '~할 것'이나 명사형처럼 짧게 끝낸다. "
+               "요청은 '~해 줄 것'처럼 요청으로 남기고, '~해 달라는 요청임'처럼 요청을 설명하는 말로 바꾸지 않는다.",
     "email": "업무 이메일 본문. 받는 사람에게 쓰는 정중한 존댓말로, 짧은 인사로 시작해 용건을 문단으로 정리하고 짧은 맺음말로 끝낸다. "
              "인사와 맺음말만은 말하지 않았어도 붙인다. 받는 사람 이름, 날짜, 서명처럼 말하지 않은 내용은 지어내지 않는다.",
     "written": "문어체. 보고서나 문서에 쓰는 간결한 글말. 모든 문장을 '~다', '~한다'로 끝내고, 요청은 '~하기 바란다'처럼 글말로 쓴다.",
     "polite": "존댓말. 모든 문장을 '~요'나 '~습니다' 같은 존댓말로 바꾼다.",
     "casual": "반말. 모든 문장을 가까운 친구에게 하듯 반말로 바꾼다.",
-    "friendly": "부드러운 대화체. 모든 문장을 '~요'로 끝나는 상냥한 존댓말로 쓰고, 딱딱한 말은 부드러운 말로 바꿔 읽는 사람이 편하게 느끼게 쓴다.",
-    "mz": "요즘 20대가 메신저에서 쓰는 가볍고 트렌디한 반말. 문장 끝을 '~함', '~임', '~각', 'ㄱㄱ', 'ㅇㅇ'처럼 짧게 끊고, "
-          "'완전', '찐', 'ㄹㅇ' 같은 말과 줄임말을 자연스럽게 섞는다. 뜻은 바꾸지 않는다.",
-    "seoul90": "1990년대 서울 드라마 속 말씨. '~했니?', '~하잖니', '~거든요', '~해 줄래요?', '어머', '얘' 같은 그 시절 서울말 "
-                "어미와 말버릇을 살려 대사처럼 쓴다.",
-    "gyeongsang": "경상도 사투리. 경상도 사람이 실제로 쓰는 어미와 말투로 쓰되, 다른 지역 사람도 뜻을 알아볼 수 있게 쓴다.",
-    "jeolla": "전라도 사투리. 전라도 사람이 실제로 쓰는 어미와 말투로 쓰되, 다른 지역 사람도 뜻을 알아볼 수 있게 쓴다.",
-    "chungcheong": "충청도 사투리. 충청도 사람이 실제로 쓰는 어미와 느긋한 말투로 쓰되, 다른 지역 사람도 뜻을 알아볼 수 있게 쓴다.",
-    "jeju": "제주 사투리. 제주 사람이 쓰는 어미와 말투로 쓰되, 다른 지역 사람도 뜻을 알아볼 수 있게 쓴다.",
 }
+
+# Experimental (주인님 결정 2026-10-03): with settings emoji on, the editor and the writer both get this one rule.
+EMOJI_RULE = ("- 이모지: 감정이나 내용이 이모지와 잘 어울리는 문장에는 그 문장 끝에 어울리는 이모지를 하나 붙인다. 모든 문장에 붙이지 "
+              "않고, 코드·명령어·숫자가 중심인 문장에는 붙이지 않는다. 이모지는 말을 보태지 않는다는 규칙의 예외이며, 말한 단어를 "
+              "이모지로 바꾸지는 않는다.")
 
 
 PROFILE_PROMPT = """You keep a short profile that helps a dictation app spell this user's words correctly.
@@ -126,6 +123,7 @@ class Polisher:
         """The editor's own answer. The whole dictation is sent, so the answer may be as long as it is."""
         terms = self._terms()
         rules, examples = POLISH_RULES[self.settings["polish_level"]]
+        rules += "\n" + EMOJI_RULE if self.settings["emoji"] else ""
         return self.complete(POLISH_PROMPT.format(rules=rules, examples=examples),
                              f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
                              max_tokens=max(600, len(text) * 3))
@@ -135,6 +133,7 @@ class Polisher:
         An empty answer is an error: the dictation keeps the text as heard and says so."""
         style = self.settings["style"]
         style = f"사용자가 적은 문체: {self.settings['style_custom'].strip()}" if style == "custom" else STYLES[style]
+        style += "\n" + EMOJI_RULE if self.settings["emoji"] else ""
         terms = self._terms()
         out = self.complete(STYLE_PROMPT.format(style=style),
                             f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",

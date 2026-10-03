@@ -26,7 +26,8 @@ class DirectCorrection(unittest.TestCase):
             "api_key": "renewed" if force else "cached", "model": "openai/gpt-6-luna", "expires": 0}))
         profile = types.SimpleNamespace(terms=lambda: [], summary=lambda: "")
         notes = types.SimpleNamespace(hint=lambda: "", terms=lambda: ["FundKeeper"])
-        polisher = Polisher({"terms": ["Thock"], "polish_level": "clean", "style": "none", "style_custom": ""},
+        polisher = Polisher({"terms": ["Thock"], "polish_level": "clean", "style": "none", "style_custom": "",
+                             "emoji": False},
                             notes, account, profile)
         conn = Mock()
         replies = iter(statuses)
@@ -86,6 +87,17 @@ class DirectCorrection(unittest.TestCase):
         polisher.complete = lambda *args, **kwargs: ""
         with self.assertRaises(RuntimeError):
             polisher.restyle("다듬을 글")
+
+    def test_the_emoji_rule_reaches_the_editor_and_the_writer_only_when_switched_on(self):
+        from thock.correction import EMOJI_RULE
+        body = b'{"choices": [{"message": {"content": "ok"}}]}'
+        for emoji in (False, True):
+            for style in ("none", "polite"):
+                polisher, _, conn = self.polisher([Response(200, body)])
+                polisher.settings.update(emoji=emoji, style=style)
+                with patch("thock.correction.http.client.HTTPSConnection", return_value=conn):
+                    (polisher.correct if style == "none" else polisher.restyle)("다듬을 글")
+                self.assertEqual(json_text(EMOJI_RULE) in conn.request.call_args.args[2], emoji, (emoji, style))
 
     def test_a_term_given_with_its_sound_reaches_the_editor_and_recognition_both_ways(self):
         from thock.learning import Profile

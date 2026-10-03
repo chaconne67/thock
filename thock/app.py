@@ -884,7 +884,8 @@ class App:
         s = self.settings
         return {"hotkey": s["hotkey"], "input_mode": s["input_mode"], "input_modes": INPUT_MODES, "polish": s["polish"],
                 "polish_level": s["polish_level"], "polish_levels": POLISH_LEVELS,
-                "style": s["style"], "styles": STYLES, "style_custom": s["style_custom"], "terms": s["terms"], "learn": s["learn"],
+                "style": s["style"], "styles": STYLES, "style_custom": s["style_custom"], "emoji": s["emoji"],
+                "terms": s["terms"], "learn": s["learn"],
                 "sound_processing": s["sound_processing"],
                 "keep_audio": s["keep_audio"], "microphone": s["microphone"], "microphones": microphones(),
                 "sound_keyboard": s["sound_keyboard"], "sound_keyboards": SOUND_KEYBOARDS,
@@ -920,7 +921,7 @@ class App:
             s["microphone"] = body["microphone"]
         if isinstance(body.get("sound_keyboard"), str) and body["sound_keyboard"] in SOUND_KEYBOARDS:
             s["sound_keyboard"] = body["sound_keyboard"]
-        for flag in ("polish", "learn", "sound_processing", "preview", "keep_audio"):
+        for flag in ("polish", "emoji", "learn", "sound_processing", "preview", "keep_audio"):
             if isinstance(body.get(flag), bool):
                 s[flag] = body[flag]
         for lang, fonts in PREVIEW_FONTS.items():

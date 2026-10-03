@@ -5,7 +5,8 @@ or adds other words. It prints the model's own answer, which the app writes as i
 questions get a question mark, commands are kept as text, not answered, misheard words are fixed only when
 clear, hesitations and words cut off and said again go.
 Run: uv run python tests/polish_cases.py [verbatim|clean|smooth]  (the level of settings, clean by default)
-     or uv run python tests/polish_cases.py style <style> [own style line]  (STYLE_CASES rewritten by the writer)"""
+     or uv run python tests/polish_cases.py style <style> [own style line]  (STYLE_CASES rewritten by the writer)
+     add emoji to either to switch the experimental emoji rule on"""
 
 import sys
 import asyncio
@@ -54,6 +55,9 @@ REGRESSION = [
     # Hesitations and words cut off and said again (2026-10-02): those go, the rest stays.
     "조금 뭔가 되게 불편하- 불편하게 지금 돼 있는 것 같아 단어 그리고 용- 문구 같은 것도 좀 이상하고 음 그 선택하는 내용들도 좀 그렇고",
     "어쨌든 뭐 기본적으로 이 취지에 따르- 의하자면 어 정보까지 다 돼 있어야 돼",
+    # Sentences an emoji fits, for the experimental emoji rule (2026-10-03).
+    "드디어 배포 성공했다 진짜 고생 많았어 오늘 저녁은 내가 쏠게",
+    "비 와서 우산 챙겨 가 감기 조심하고",
 ]
 
 # Longer dictations for the styles (2026-10-02): judge by reading that what was said stays.
@@ -66,10 +70,12 @@ STYLE_CASES = [
 
 if __name__ == "__main__":
     s = load_settings()
-    s["polish_level"] = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] != "style" else "clean"
-    styling = len(sys.argv) > 2 and sys.argv[1] == "style"
+    s["emoji"] = "emoji" in sys.argv  # the experimental emoji rule, in either mode
+    args = [arg for arg in sys.argv[1:] if arg != "emoji"]
+    s["polish_level"] = args[0] if args and args[0] != "style" else "clean"
+    styling = len(args) > 1 and args[0] == "style"
     if styling:
-        s["style"], s["style_custom"] = sys.argv[2], " ".join(sys.argv[3:])
+        s["style"], s["style_custom"] = args[1], " ".join(args[2:])
     account = Account()
     status = account.status(force=True)
     if not status.get("ready"):
