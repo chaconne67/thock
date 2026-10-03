@@ -21,6 +21,7 @@ class InlineFieldContract(unittest.TestCase):
         self.reader.snapshot.return_value = ("앞 ", "", " 뒤")
         self.reader.read_only.return_value = False
         self.reader.describe.return_value = "50004/test"
+        self.reader.focus_only_field.return_value = False
         self.reader.select_tail.side_effect = lambda expected, tail: (
             expected[0][:-len(tail)], tail, expected[2]) if tail else expected
         for item in (
@@ -151,6 +152,18 @@ class InlineFieldContract(unittest.TestCase):
         self.reader.snapshot.return_value = ("", "", "")
         self.assertEqual(ready_target(), (self.target, None, "50004/test"))
         self.reader.read_only.return_value = True  # a web page's own text: readable, not writable
+        self.assertEqual(ready_target()[:2], (None, "read only"))
+
+    def test_a_window_with_one_field_gets_its_focus_there(self):
+        from thock.win32 import ready_target
+        self.reader.read_only.side_effect = [True, False]  # nothing writable has the focus, then the field has
+        self.reader.focus_only_field.return_value = True
+        self.assertEqual(ready_target(), (self.target, None, "50004/test"))
+        self.reader.focus_only_field.assert_called_once()
+        self.reader.read_only.side_effect = None
+        self.reader.read_only.return_value = True
+        self.reader.focus_only_field.reset_mock(return_value=True)
+        self.reader.focus_only_field.return_value = False  # two fields or none: the user's to choose
         self.assertEqual(ready_target()[:2], (None, "read only"))
 
     def test_a_field_an_idle_app_shows_a_moment_late_is_still_ready(self):

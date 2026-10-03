@@ -31,13 +31,14 @@ from .sound import KeyboardSounds, selected_mode
 from .speech import transcribe
 from .live_input import LiveDictation
 from . import update
-from .win32 import (foreground_app, capture_target, copy_text, InlineField, input_events, kernel32, press_enter,
-                    ready_target, run_key_hook, user32)
+from .win32 import (clicks, foreground_app, capture_target, copy_text, InlineField, input_events, kernel32,
+                    press_enter, ready_target, run_key_hook, user32)
 from .personal import append_history, read_data, write_data, import_legacy, history_data, keep_audio
 
 TYPING_HOLD = 0.6  # seconds the typing sound outlasts the last change in recognized text
 IDLE_STOP = 5  # seconds without new speech that end a tap-started dictation
 WAITING = "입력할 곳을 클릭해 주세요."  # CapsLock with no text field to write into
+WAITING_SECONDS = 5  # it goes by itself, or at a click, Esc or the next CapsLock (주인님 2026-10-03)
 # A dictation the granted time stopped is never stopped silently (주인님 2026-10-02).
 LIMIT_REACHED = "사용 한도를 모두 써서 받아쓰기를 멈췄습니다. 지금까지 말한 글은 입력합니다."
 HOLDING = "입력창으로 돌아가면 이어서 입력합니다."  # writing paused; everything heard is kept
@@ -313,7 +314,7 @@ class Session:
                 self.stop()
                 record["input_failure"] = field.failure
                 log.info("dictation not started: %s", field.mismatch)
-                self.state.notify(WAITING, action="dismiss")
+                self.state.notify(WAITING, seconds=WAITING_SECONDS)
                 outcome = "empty"
                 return
             # A chosen style rewrites the whole text once, after the key is released; until then words go in as heard.
@@ -595,7 +596,7 @@ class App:
     def notify(self, text, seconds=12, action=None, fault=False):
         """Show text inside the pill. With an action it stays, with its button, until pressed or the next
         dictation; without one it goes after seconds. A fault is kept in the app log and its dictation."""
-        self.notice, self.notice_action = text, action
+        self.notice, self.notice_action, self.notice_clicks = text, action, clicks()
         self.notice_until = float("inf") if action else time.perf_counter() + seconds
         if fault:
             log.warning("fault notice: %s", text)
@@ -724,6 +725,9 @@ class App:
 
     def on_key(self, event):
         """Runs on the asyncio thread; the user chooses hold or toggle."""
+        if event == "escape":
+            self.withdraw(WAITING)
+            return
         if self.recording:
             self.recording.mark("hotkey_" + event)
         mode = self.recording.settings["input_mode"] if self.recording else self.settings["input_mode"]
@@ -731,6 +735,7 @@ class App:
             if self.recording and self.toggle:
                 self._stop()
             elif not self.recording:
+                waiting = self.preview() == WAITING  # pressed again with still no field: the guide just goes
                 self.notice_action, self.notice_until = None, 0.0  # a new press answers the last message
                 # Preflight: a state that cannot dictate is said on the pill before the microphone opens.
                 if getattr(self, "microphone_fault", False):
@@ -755,7 +760,8 @@ class App:
                                            "app": foreground_app(), "preflight": why, "element": element,
                                            "waited": waited},
                                           ensure_ascii=False))
-                    self.notify(WAITING, action="dismiss")
+                    if not waiting:
+                        self.notify(WAITING, seconds=WAITING_SECONDS)
                     return
                 self.toggle = mode == "toggle"
                 self.levels.extend([0.0] * BARS)
@@ -829,6 +835,8 @@ class App:
             return "recording", self.toggle
         if any(not session.holding for session in self.active):
             return "processing", False
+        if self.notice == WAITING and clicks() != self.notice_clicks:
+            self.withdraw(WAITING)  # the user clicked, as it asked
         if time.perf_counter() < self.notice_until:
             return "notice", False
         return None, False

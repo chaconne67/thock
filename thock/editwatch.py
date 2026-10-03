@@ -180,6 +180,63 @@ class FieldReader:
             oleaut32.VariantClear(ctypes.byref(value))
             _release(element)
 
+    def focus_only_field(self, window):
+        """Give the focus to the window's one field to write into, when it has exactly one (주인님 2026-10-03:
+        CapsLock pressed before clicking a field). It must be shown, enabled, focusable, not a password box and
+        say it is writable; a browser's address bar does not count, so a page's text never goes there. Two or
+        more stay the user's to choose."""
+        root, found, fields = ctypes.c_void_p(), ctypes.c_void_p(), []
+        try:
+            if not self.uia or not window:
+                return False
+            _ok(_com(self.uia, 6, ctypes.c_void_p, _PP)(self.uia, window, ctypes.byref(root)))  # ElementFromHandle
+            if not root:
+                return False
+            _ok(_com(root, 6, ctypes.c_int, ctypes.c_void_p, _PP)(  # FindAll(TreeScope_Descendants)
+                root, 4, self._typable(), ctypes.byref(found)))
+            count = ctypes.c_int()
+            _ok(_com(found, 3, ctypes.POINTER(ctypes.c_int))(found, ctypes.byref(count)))  # get_Length
+            for i in range(count.value):
+                element, value, name = ctypes.c_void_p(), VARIANT(), ctypes.c_void_p()
+                _ok(_com(found, 4, ctypes.c_int, _PP)(found, i, ctypes.byref(element)))  # GetElement
+                fields.append(element)
+                _ok(_com(element, 11, ctypes.c_int, ctypes.c_int, ctypes.POINTER(VARIANT))(
+                    element, 30046, 1, ctypes.byref(value)))  # ValueIsReadOnly, without a default
+                _ok(_com(element, 30, _PP)(element, ctypes.byref(name)))  # get_CurrentClassName
+                if value.vt != 11 or bytes(value.data[:2]) != b"\0\0" or _bstr(name.value) == "OmniboxViewViews":
+                    fields.pop()
+                    _release(element)
+            return len(fields) == 1 and _com(fields[0], 3)(fields[0]) >= 0  # SetFocus
+        except (OSError, RuntimeError):
+            return False
+        finally:
+            for element in fields:
+                _release(element)
+            _release(found)
+            _release(root)
+
+    def _typable(self):
+        """Edit or document elements shown, enabled, focusable and not a password box (built once)."""
+        if not getattr(self, "typable", None):
+            def condition(prop, vt, number):
+                value, made = VARIANT(), ctypes.c_void_p()
+                value.vt, value.data[0], value.data[1] = vt, number & 0xFF, number >> 8 & 0xFF
+                _ok(_com(self.uia, 23, ctypes.c_int, VARIANT, _PP)(self.uia, prop, value, ctypes.byref(made)))
+                return made
+
+            def joined(index, first, second):  # CreateAndCondition / CreateOrCondition
+                made = ctypes.c_void_p()
+                _ok(_com(self.uia, index, ctypes.c_void_p, ctypes.c_void_p, _PP)(
+                    self.uia, first, second, ctypes.byref(made)))
+                return made
+
+            made = joined(28, condition(30003, 3, 50004), condition(30003, 3, 50030))  # ControlType Edit, Document
+            for prop, number in ((30010, 0xFFFF), (30009, 0xFFFF), (30022, 0), (30019, 0)):
+                # IsEnabled, IsKeyboardFocusable, not IsOffscreen, not IsPassword (VT_BOOL)
+                made = joined(25, made, condition(prop, 11, number))
+            self.typable = made
+        return self.typable
+
     def describe(self):
         """The focused element's control type and class name, for the dictation trace."""
         element, name = ctypes.c_void_p(), ctypes.c_void_p()

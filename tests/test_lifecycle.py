@@ -171,7 +171,7 @@ class SessionLifecycle(unittest.IsolatedAsyncioTestCase):
             await session.task
         speech.assert_not_called()
         self.mic.close.assert_called_once()
-        self.state.notify.assert_called_once_with(WAITING, action="dismiss")
+        self.state.notify.assert_called_once_with(WAITING, seconds=5)
         self.assertEqual(self.state.queue_report.call_args.args[2], "empty")
         self.state.recover.assert_not_called()
         self.assertEqual(self.field.mismatch, "start: unreadable")
@@ -360,7 +360,16 @@ class InputModes(unittest.TestCase):
             app.on_key("down")
         self.assertIn('"preflight": "read only"', logs.output[0])
         app._start_session.assert_not_called()
-        self.assertEqual((app.notice, app.notice_action), (WAITING, "dismiss"))  # 확인 folds the pill back
+        self.assertEqual((app.notice, app.notice_action, app.status()), (WAITING, None, ("notice", False)))
+        with self.assertLogs("voicetype.trace", level="INFO"):
+            app.on_key("down")  # pressed again with still no field: the guide goes, not shown again
+        self.assertEqual(app.status(), (None, False))
+        app.notify(WAITING, seconds=5)
+        app.on_key("escape")
+        self.assertEqual(app.status(), (None, False))
+        app.notify(WAITING, seconds=5)
+        with patch("thock.app.clicks", return_value=app.notice_clicks + 1):  # the user clicked
+            self.assertEqual(app.status(), (None, False))
         self.ready.return_value = ((1, (2,), 0), None, "50004/test")
         app.on_key("down")
         app._start_session.assert_called_once_with((1, (2,), 0))

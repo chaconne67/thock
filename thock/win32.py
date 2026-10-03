@@ -74,7 +74,7 @@ kernel32.CreateMutexW.restype = wt.HANDLE
 WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 13, 0x100, 0x101, 0x104, 0x105
 WM_TIMER = 0x113
 VK_SHIFT, VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x10, 0x11, 0x56, 2, 1
-VK_RETURN, VK_MENU = 0x0D, 0x12
+VK_RETURN, VK_MENU, VK_ESCAPE = 0x0D, 0x12, 0x1B
 CF_UNICODETEXT, GMEM_MOVEABLE = 13, 2
 GDI_FORMATS = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}  # handles that are not global memory
 HOOK_REARM_MS = 30_000
@@ -125,6 +125,8 @@ def run_key_hook(get_vk, on_key, hold_enter=lambda: False):
                     return 1
                 _input_revision += 1
                 input_events.append((time.perf_counter(), "key_down" if down else "key_up"))
+                if down and info.vkCode == VK_ESCAPE:
+                    on_key("escape")  # reported, not swallowed: the app under it gets its Esc too
             if info.vkCode == get_vk():
                 if wparam in (WM_KEYDOWN, WM_SYSKEYDOWN):
                     if not state["down"]:
@@ -244,17 +246,25 @@ def capture_target():
 READY_WAIT = 0.5  # a Chromium app idle for long answers the first question with its window, not its field
 
 
+def clicks():
+    return _click_revision
+
+
 def ready_target():
     """(target, None, element) for the focused text field to dictate into, or (None, why not, element)
     when no editable, readable field has the caret; element describes the focus for the trace.
-    A field not found is asked again for a moment: the first question wakes such an app up."""
+    A field not found is asked again for a moment: the first question wakes such an app up. Then a window
+    with exactly one field to write into gets its focus there, and that field is asked for in turn."""
     from .editwatch import field_reader
-    reader, deadline = field_reader(), time.perf_counter() + READY_WAIT
+    reader, deadline, moved = field_reader(), time.perf_counter() + READY_WAIT, False
     while True:
         target, element = capture_target(), reader.describe()
         why = ("no focus" if not target else "read only" if reader.read_only()
                else "unreadable" if reader.snapshot() is None else None)
         if why in (None, "read only") or time.perf_counter() >= deadline:
+            if why and not moved and reader.focus_only_field(user32.GetForegroundWindow()):
+                moved, deadline = True, time.perf_counter() + READY_WAIT
+                continue
             return (None if why else target), why, element
         time.sleep(0.05)
 
