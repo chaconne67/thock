@@ -120,7 +120,8 @@ EMOJI_PALETTE = {
     "😱": "panic, scared", "😢": "sad", "😭": "crying, very sad or deeply moved", "😥": "worried, troubled",
     "😰": "anxious, nervous", "😤": "annoyed, frustrated", "😡": "angry", "🙄": "eye roll, unimpressed",
     "😒": "displeased, meh", "😩": "exhausted, fed up", "😴": "tired, sleepy", "🤒": "sick, feeling ill",
-    "🤧": "a cold, sneezing", "🤫": "secret, keep it quiet",
+    "🤧": "a cold, sneezing", "🤫": "secret, keep it quiet", "🥹": "moved, touched, grateful to tears",
+    "😋": "yummy, delicious food",
     # kinds of question
     "🤔": "wondering, thinking it over, a question with doubt", "🧐": "asking to check or verify something closely",
     "🤨": "skeptical, suspicious question", "❓": "a plain question, asking what or how", "🙋": "I have a question, raising a hand",
@@ -129,14 +130,15 @@ EMOJI_PALETTE = {
     "👍": "agreement, okay, approval", "👌": "perfect, all fine", "👏": "applause, well done", "🙌": "hooray, praise",
     "🙏": "thanks, asking a favor politely", "💪": "cheering, encouragement, strength", "👋": "hello, goodbye",
     "👀": "look at it, check it later", "🤝": "deal, cooperation between people", "🫡": "understood, on it",
-    "✌️": "peace, victory",
+    "✌️": "peace, victory", "🫶": "heartfelt thanks, love you", "🙆": "yes, okay, sounds good",
+    "🙅": "no, not allowed, refusing", "🤞": "hoping, wishing luck",
     # symbols
     "❤️": "love, affection", "💔": "heartbreak, disappointment", "✨": "sparkle, something new or nice",
     "🔥": "hot, intense, hype", "💯": "totally right, perfect", "⭐": "highlight, favorite", "💡": "idea, tip",
     "❗": "important, attention", "⚠️": "warning, caution", "✅": "done, completed, passed",
     "❌": "no, wrong, failed, cancelled", "🎯": "on target, goal",
     # celebration
-    "🎉": "celebration, success, good news", "🎂": "birthday", "🎁": "gift", "🏆": "winning, achievement",
+    "🎉": "celebration, success, good news", "💐": "congratulations or thanks with flowers", "🎂": "birthday", "🎁": "gift", "🏆": "winning, achievement",
     # work and tech
     "🚀": "launch, deploy, ship, go ahead", "🛠️": "fixing, repairing, building", "🐛": "bug, software error",
     "💻": "computer, coding", "📱": "phone, mobile app", "📄": "document, file", "📊": "numbers, chart, data",
@@ -147,7 +149,8 @@ EMOJI_PALETTE = {
     "☕": "coffee, a break", "🍽️": "meal, eating together", "🍲": "stew, soup, warm food", "🍜": "noodles",
     "🍕": "pizza, casual food", "🍗": "chicken", "🍺": "beer, drinks after work", "🍰": "dessert, cake",
     # weather, places, daily life
-    "☀️": "sunny, good weather", "☔": "rain, umbrella", "❄️": "snow, cold weather", "🌈": "hopeful, rainbow",
+    "☀️": "sunny, good weather", "⛅": "cloudy", "☔": "rain, umbrella", "❄️": "snow", "🥶": "freezing cold",
+    "🥵": "hot weather, sweating", "🌸": "spring, flowers", "🍂": "autumn, fallen leaves", "🌈": "hopeful, rainbow",
     "🌙": "night, good night", "🏠": "home", "🏢": "office, work", "🚗": "car, traffic, commute", "✈️": "travel, flight",
     "🏃": "running, in a hurry, exercise", "🎵": "music", "🎮": "game", "📚": "study, books", "🐶": "dog", "🐱": "cat",
 }
