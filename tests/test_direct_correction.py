@@ -88,17 +88,39 @@ class DirectCorrection(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             polisher.restyle("다듬을 글")
 
-    def test_the_chosen_emoji_rule_reaches_the_editor_and_the_writer_and_none_adds_nothing(self):
-        from thock.correction import EMOJI_RULES
+    def test_jev_picks_go_right_after_their_sentences_at_the_chosen_level(self):
+        import tempfile
+        from pathlib import Path
+        answers = {"s0": {"choice": "🤔", "confidence": 0.9, "probabilities": {"🤔": 0.9, "none": 0.1}},
+                   "s1": {"choice": "🤩", "confidence": 0.5, "probabilities": {"🤩": 0.5, "🤔": 0.3, "none": 0.2}},
+                   "s2": {"choice": "none", "confidence": 0.8, "probabilities": {"none": 0.8, "💸": 0.15, "📄": 0.05}}}
+        text = "되나? 짱이다! 4.5원이다.\n- 끝"
+        with tempfile.TemporaryDirectory() as temp, patch("thock.correction.HOME", Path(temp)):
+            polisher, _, _ = self.polisher([])
+            asked = []
+            polisher._jev = lambda key, sentences: asked.append(sentences) or dict(answers, s3=answers["s2"])
+            polisher.settings["emoji"] = "some"
+            self.assertEqual(polisher.emojify(text), text)  # no key on this PC: the text goes in as it is
+            (Path(temp) / "typesafe.key").write_text("k")
+            self.assertEqual(polisher.emojify(text), "되나? 🤔 짱이다! 4.5원이다.\n- 끝")
+            self.assertEqual(asked[-1], ["되나?", "짱이다!", "4.5원이다.", "- 끝"])
+            polisher.settings["emoji"] = "lots"
+            self.assertEqual(polisher.emojify(text), "되나? 🤔 짱이다! 🤩 4.5원이다. 💸\n- 끝 💸")
+            polisher.settings["emoji"] = "none"
+            self.assertEqual(polisher.emojify(text), text)
+            polisher.settings["emoji"] = "lots"
+            polisher._jev = Mock(side_effect=RuntimeError("typesafe 500"))
+            self.assertEqual(polisher.emojify(text), text)  # Jev failing leaves the dictation without emoji
+
+    def test_luna_is_not_told_about_emoji(self):
         body = b'{"choices": [{"message": {"content": "ok"}}]}'
-        for emoji in ("none", "some", "lots"):
-            for style in ("none", "gyeongsang"):
-                polisher, _, conn = self.polisher([Response(200, body)])
-                polisher.settings.update(emoji=emoji, style=style)
-                with patch("thock.correction.http.client.HTTPSConnection", return_value=conn):
-                    (polisher.correct if style == "none" else polisher.restyle)("다듬을 글")
-                for level, rule in EMOJI_RULES.items():
-                    self.assertEqual(json_text(rule) in conn.request.call_args.args[2], level == emoji, (emoji, style))
+        for style in ("none", "gyeongsang"):
+            polisher, _, conn = self.polisher([Response(200, body)])
+            polisher.settings.update(emoji="lots", style=style)
+            polisher.emojify = lambda text: text
+            with patch("thock.correction.http.client.HTTPSConnection", return_value=conn):
+                (polisher.correct if style == "none" else polisher.restyle)("다듬을 글")
+            self.assertNotIn(json_text("이모지"), conn.request.call_args.args[2], style)
 
     def test_a_term_given_with_its_sound_reaches_the_editor_and_recognition_both_ways(self):
         from thock.learning import Profile

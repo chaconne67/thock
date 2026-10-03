@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.6.0.dev13"
+APP_NAME, VERSION = "Thock", "0.6.0.dev14"
 # Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
 # its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
 EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
@@ -29,7 +29,7 @@ STYLE_GROUPS = {"": {"none": "바꾸지 않음"},
                 "요즘 말투": {"mz": "요즘 말체", "lucky": "긍정왕체", "praise": "어화둥둥체", "deadpan": "담담체",
                           "sageuk": "사극체"}}
 STYLES = {key: label for group in STYLE_GROUPS.values() for key, label in group.items()}
-# Experimental (주인님 결정 2026-10-03): how many emoji the editor or the writer adds; rules in correction.EMOJI_RULES.
+# Experimental (주인님 결정 2026-10-03): how many emoji go after the sentences; picked by Jev in correction.emojify.
 EMOJI_LEVELS = {"none": "넣지 않음", "some": "조금", "lots": "많이"}
 HOTKEYS = {"capslock": 0x14, "scrolllock": 0x91}
 SOUND_KEYBOARDS = {"rainy75": "Rainy75", "ikki68": "Ikki68 Aurora · WS Brown",

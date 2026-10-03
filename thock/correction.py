@@ -2,9 +2,10 @@
 
 import http.client
 import json
+import re
 import threading
 
-from .config import APP_NAME, VERSION, term_parts
+from .config import APP_NAME, HOME, VERSION, log, term_parts
 
 # Correction tuning, step 3 (주인님 결정 2026-10-01): Soniox is the stenographer and only writes what it hears
 # (its punctuation is removed in speech.unpunctuated); the model is the editor and, from the whole text, sets the
@@ -100,21 +101,24 @@ STYLES = {
               "예) 점심 먹고 서류 보내 줄게 → 점심 수라를 든 뒤 문서를 올려 보내겠나이다.",
 }
 
-# Experimental (주인님 결정 2026-10-03): config.EMOJI_LEVELS other than "none" add one of these rules for the editor
-# and the writer alike.
-# Each emoji goes right after the sentence it reacts to, so it reads with that sentence; gathered at the end of the
-# text it reads as one tag on the whole message (주인님 2026-10-04).
-_EMOJI_PLACE = ("이모지는 문장 하나를 다 쓴 그 자리에서 그 문장의 문장부호 바로 뒤에 붙이고 다음 문장으로 넘어간다. 여러 문장의 "
-                "이모지를 글 맨 끝에 모아 두지 않는다. 끝에 모이면 읽는 사람이 어느 문장에 대한 반응인지 알 수 없다. "
-                "예) 드디어 끝났다! 🎉 오늘 저녁 뭐 먹지? 🤔 치킨 어때? 🍗 (틀림: 드디어 끝났다! 오늘 저녁 뭐 먹지? 치킨 어때? 🎉🤔🍗) "
-                "이모지는 새로 보태는 말로 치지 않는다. 말한 단어를 이모지로 바꾸지는 않는다.")
-EMOJI_RULES = {
-    "some": ("- 이모지: 감정이나 분위기가 담긴 문장(기쁨, 축하, 감사, 사과, 걱정, 응원, 인사, 음식·날씨·약속 같은 일상 이야기)마다 "
-             "그 문장에 어울리는 이모지를 하나 붙인다. 감정 없이 사실이나 할 일만 말하는 문장과 코드·명령어·숫자가 중심인 문장에는 "
-             "붙이지 않는다. " + _EMOJI_PLACE),
-    "lots": ("- 이모지: 모든 문장마다 그 문장의 내용과 감정에 맞는 이모지를 한두 개씩 붙이고, 문장 중간의 낱말 뒤에도 어울리는 "
-             "이모지를 넣어 글 전체를 이모지로 풍성하게 꾸민다. " + _EMOJI_PLACE),
+# Experimental emoji (주인님 결정 2026-10-03/04): Luna writes the text; TypeSafe's Jev picks one emoji from this palette
+# for each sentence, and the code puts it right after that sentence. Told where to put them, Luna kept gathering a
+# message's emoji after its last sentence (0.6.0.dev9~12). Jev reads English best, so the descriptions are English.
+# The key is this PC's own for now (~/.voicetype/typesafe.key); the account server is to issue it later.
+EMOJI_PALETTE = {
+    "none": "No emoji: the sentence only states a fact, a task, a request or code, with no feeling to show",
+    "😊": "warm, friendly, pleased", "😄": "light joke, playful", "😂": "very funny", "🎉": "celebration, success, good news",
+    "👍": "agreement, okay, approval", "🙏": "asking a favor politely, thanks", "❤️": "affection, love",
+    "🤔": "a question with doubt or wondering, unsure", "😢": "sad", "😥": "worried, troubled, trouble happened",
+    "😤": "annoyed, frustrated", "😮": "surprised", "🤩": "excited, awesome, amazing", "💪": "cheering, encouragement",
+    "✅": "done, completed, passed", "🚀": "launch, deploy, ship, go ahead", "🛠️": "fixing, repairing",
+    "📄": "document, file, report", "📅": "schedule, date, meeting time", "🍽️": "meal, eating together",
+    "☕": "coffee, a break", "☔": "rain, umbrella, weather", "😴": "tired, sleepy", "👀": "look at it, check it later",
+    "💸": "money, cost, price", "🐱": "cat",
 }
+EMOJI_CONFIDENCE = 0.6  # "some" adds Jev's pick only when Jev is at least this sure; "lots" adds the likeliest emoji
+# A sentence runs to . ? ! followed by a space or the end, or to the end of its line ("4.5" stays whole).
+SENTENCE = re.compile(r"[^\n]*?\S[^\n]*?(?:[.?!]+(?=\s|$)|$)", re.M)
 
 
 PROFILE_PROMPT = """You keep a short profile that helps a dictation app spell this user's words correctly.
@@ -170,23 +174,66 @@ class Polisher:
         """The editor's own answer. The whole dictation is sent, so the answer may be as long as it is."""
         terms = self._terms()
         rules, examples = POLISH_RULES[self.settings["polish_level"]]
-        rules += "\n" + EMOJI_RULES[self.settings["emoji"]] if self.settings["emoji"] in EMOJI_RULES else ""
-        return self.complete(POLISH_PROMPT.format(rules=rules, examples=examples),
-                             f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
-                             max_tokens=max(600, len(text) * 3))
+        return self.emojify(self.complete(POLISH_PROMPT.format(rules=rules, examples=examples),
+                                          f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
+                                          max_tokens=max(600, len(text) * 3)))
 
     def restyle(self, text):
         """The whole dictation rewritten in the chosen style.
         An empty answer is an error: the dictation keeps the text as heard and says so."""
-        style = STYLES[self.settings["style"]]
-        style += "\n" + EMOJI_RULES[self.settings["emoji"]] if self.settings["emoji"] in EMOJI_RULES else ""
         terms = self._terms()
-        out = self.complete(STYLE_PROMPT.format(style=style),
+        out = self.complete(STYLE_PROMPT.format(style=STYLES[self.settings["style"]]),
                             f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
                             max_tokens=max(800, len(text) * 4))
         if not out:
             raise RuntimeError("empty restyle")
-        return out
+        return self.emojify(out)
+
+    def emojify(self, text):
+        """The text with Jev's emoji right after each sentence, at the chosen level. Without a key, or when Jev fails,
+        the text goes in as it is: the emoji are extra, the dictation is not."""
+        level = self.settings["emoji"]
+        spans = list(SENTENCE.finditer(text)) if level in ("some", "lots") else []
+        if not spans:
+            return text
+        try:
+            key = (HOME / "typesafe.key").read_text(encoding="utf-8").strip()
+            answers = self._jev(key, [span.group().strip() for span in spans])
+            picks = []
+            for i in range(len(spans)):
+                answer = answers[f"s{i}"]
+                emoji = {k: p for k, p in answer["probabilities"].items() if k != "none"}
+                picks.append(max(emoji, key=emoji.get) if level == "lots" else
+                             answer["choice"] if answer["choice"] != "none" and answer["confidence"] >= EMOJI_CONFIDENCE
+                             else None)
+        except (OSError, http.client.HTTPException, RuntimeError, ValueError, KeyError) as error:
+            log.info("emoji skipped: %s", type(error).__name__)
+            return text
+        out, last = [], 0
+        for span, emoji in zip(spans, picks):
+            out.append(text[last:span.end()] + (" " + emoji if emoji else ""))
+            last = span.end()
+        return "".join(out) + text[last:]
+
+    def _jev(self, key, sentences):
+        """Jev's answer to one Choice question per sentence, all in one call."""
+        body = json.dumps({"model": "jev-latest", "state": {"sentences": sentences}, "questions": {
+            f"s{i}": {"type": "choice", "criteria": EMOJI_PALETTE,
+                      "instructions": f"Which emoji best fits the feeling or topic of sentences[{i}]? "
+                                      "Choose none if that sentence shows no feeling."}
+            for i in range(len(sentences))}})
+        conn = http.client.HTTPSConnection("api.typesafe.ai", timeout=3)
+        try:
+            conn.request("POST", "/v1/systemone", body, {"Content-Type": "application/json",
+                                                         "Authorization": f"Bearer {key}",
+                                                         "User-Agent": f"{APP_NAME}/{VERSION}"})
+            response = conn.getresponse()
+            data = response.read()
+        finally:
+            conn.close()
+        if response.status != 200:
+            raise RuntimeError(f"typesafe {response.status}")
+        return json.loads(data)["answers"]
 
     def _openrouter(self, channel, key, prompt, user, max_tokens):
         body = json.dumps({
