@@ -569,6 +569,8 @@ class App:
                     self.data_root = None
                     self.account_status()
                 (HOME / "legacy-account.json").write_text(json.dumps({"assigned": True}), encoding="utf-8")
+            if not self.settings["welcome_complete"] and update.enabled():
+                set_autostart(True)  # the sign-in screen says Thock starts with Windows; settings can turn it off
             self.settings["welcome_complete"] = True
             save_settings(self.settings)
         if (self.account.cached.get("error_reports") or {}).get("enabled") is None:

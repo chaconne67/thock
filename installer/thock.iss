@@ -47,3 +47,10 @@ begin
     Result := SuppressibleMsgBox('Thock이 실행 중입니다. 작업 표시줄 위 Thock 막대를 오른쪽 클릭해 "Thock 종료"를 누른 뒤 확인을 눌러 주세요.',
       mbInformation, MB_OKCANCEL, IDCANCEL) = IDOK;
 end;
+
+// Thock's own "start with Windows" entry (settings) goes with it.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Thock');
+end;
