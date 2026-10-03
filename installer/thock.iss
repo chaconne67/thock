@@ -1,4 +1,4 @@
-; Thock installer: per-user install (no admin), starts with Windows, starts right after install.
+; Thock installer: per-user install (no admin). It asks before closing a running Thock and offers to start Thock at the end; starting with Windows is a choice in Thock's settings.
 ; Built by .github/workflows/windows-installer.yml from the PyInstaller folder dist\Thock.
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -9,7 +9,7 @@ AppId={{6C0B7F2E-3D41-4B8A-9E57-2F1D8A6C4E93}
 AppName=Thock
 AppVerName=Thock {#AppVersion}
 AppVersion={#AppVersion}
-AppPublisher=chaconne67
+AppPublisher=AI Shift
 DefaultDirName={localappdata}\Programs\Thock
 DisableDirPage=yes
 DisableProgramGroupPage=yes
@@ -20,6 +20,9 @@ OutputDir=..\dist
 OutputBaseFilename=Thock-setup-x64
 Compression=lzma2
 SolidCompression=yes
+; A running Thock is closed through Windows Restart Manager: the wizard lists it and asks first; a silent update
+; (thock/update.py) closes it without asking, and the [Run] entry starts the new one.
+CloseApplications=force
 UninstallDisplayIcon={app}\Thock.exe
 
 [Files]
@@ -31,20 +34,16 @@ Type: filesandordirs; Name: "{app}\_internal"
 
 [Icons]
 Name: "{userprograms}\Thock"; Filename: "{app}\Thock.exe"
-Name: "{userstartup}\Thock"; Filename: "{app}\Thock.exe"
 
 [Run]
 Filename: "{app}\Thock.exe"; Description: "Thock 시작"; Flags: nowait postinstall
 
-[UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM Thock.exe"; Flags: runhidden; RunOnceId: "StopThock"
-
 [Code]
-// A running Thock holds its files and the single-instance lock, so stop it before copying.
-function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  Code: Integer;
+// Removing Thock while it runs would leave its files behind: ask the user to quit it first.
+function InitializeUninstall(): Boolean;
 begin
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM Thock.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Result := '';
+  Result := True;
+  while Result and CheckForMutexes('Local\VoiceTypeSingleton') do
+    Result := SuppressibleMsgBox('Thock이 실행 중입니다. 작업 표시줄 위 Thock 막대를 오른쪽 클릭해 "Thock 종료"를 누른 뒤 확인을 눌러 주세요.',
+      mbInformation, MB_OKCANCEL, IDCANCEL) = IDOK;
 end;

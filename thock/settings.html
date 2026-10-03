@@ -187,6 +187,13 @@
       </div>
       <p class="hint" id="hotkey-hint"></p>
     </div>
+    <div class="row sep" id="autostart-row" hidden>
+      <div>
+        <label class="label" for="autostart">Windows 시작 시 실행</label>
+        <p class="hint">컴퓨터를 켜면 Thock이 저절로 켜집니다.</p>
+      </div>
+      <span class="switch"><input type="checkbox" id="autostart" role="switch"></span>
+    </div>
     <div class="row sep">
       <div>
         <div class="label">표시 위치</div>
@@ -497,6 +504,8 @@ function fill(s) {
   $("style-custom").value = s.style_custom;
   $("learn").checked = s.learn;
   $("keep-audio").checked = s.keep_audio;
+  $("autostart-row").hidden = s.autostart === null;
+  $("autostart").checked = !!s.autostart;
   $("sound-processing").checked = s.sound_processing;
   $("sound-keyboard").replaceChildren(...Object.entries(s.sound_keyboards).map(([id, label]) => new Option(label, id)));
   $("sound-keyboard").value = s.sound_keyboard;
@@ -534,6 +543,7 @@ $("save").addEventListener("click", async () => {
       hotkey: hotkey(), input_mode: $("input-mode").value, polish: $("polish").checked, polish_level: $("polish-level").value, style: $("style").value, style_custom: $("style-custom").value, learn: $("learn").checked, terms: termsList(),
       sound_processing: $("sound-processing").checked,
       keep_audio: $("keep-audio").checked,
+      ...($("autostart-row").hidden ? {} : {autostart: $("autostart").checked}),
       sound_keyboard: $("sound-keyboard").value,
       microphone: $("microphone").value || null,
       ...($("error-reports").checked !== reportsShown ? {error_reports: $("error-reports").checked} : {}),

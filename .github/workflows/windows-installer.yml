@@ -61,7 +61,9 @@ jobs:
           }
           $fonts = Get-ChildItem "$env:LOCALAPPDATA\Programs\Thock\_internal\thock\fonts\*.ttf"
           if ($fonts.Count -ne 7) { throw "expected 7 preview fonts, found $($fonts.Count)" }
-          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Thock.lnk")) { throw "no startup shortcut" }
+          # Starting with Windows is the user's choice in settings, not the installer's.
+          if (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Thock.lnk") { throw "installer made a startup shortcut" }
+          if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").Thock) { throw "installer made a Run entry" }
           Start-Sleep 15
           $log = Get-Content "$env:USERPROFILE\.voicetype\voicetype.log" -Raw -ErrorAction SilentlyContinue
           $log
@@ -71,10 +73,33 @@ jobs:
           $control = Get-Content "$env:USERPROFILE\.voicetype\control.json" -Raw | ConvertFrom-Json
           $page = Invoke-WebRequest "http://127.0.0.1:$($control.port)/?t=$($control.token)&w=0" -UseBasicParsing
           if ($page.StatusCode -ne 200) { throw "control.json does not lead to the settings page" }
+          # The settings switch adds and removes the Run entry.
+          $api = "http://127.0.0.1:$($control.port)/api/settings"
+          $headers = @{ "X-Token" = $control.token }
+          $on = Invoke-RestMethod $api -Method Post -Headers $headers -ContentType "application/json" -Body '{"autostart": true}'
+          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").Thock
+          if (-not $on.autostart -or $run -ne "`"$app`"") { throw "switching on did not add the Run entry: $run" }
+          $off = Invoke-RestMethod $api -Method Post -Headers $headers -ContentType "application/json" -Body '{"autostart": false}'
+          if ($off.autostart -or (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").Thock) { throw "switching off left the Run entry" }
+
+      - name: Update over a running Thock (silent, as thock/update.py runs it)
+        shell: pwsh
+        run: |
+          $before = (Get-Process Thock).Id
+          $run = Start-Process dist\Thock-setup-x64.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru
+          $run.WaitForExit()
+          if ($run.ExitCode) { throw "update exit $($run.ExitCode)" }
+          Start-Sleep 15
+          $after = Get-Process Thock -ErrorAction SilentlyContinue
+          if (-not $after) { throw "Thock is not running after the update" }
+          if ($after.Id -contains $before) { throw "the update did not replace the running Thock" }
 
       - name: Uninstall removes it
         shell: pwsh
         run: |
+          # The uninstaller asks the user to quit a running Thock first; quit it as the user would.
+          Stop-Process -Name Thock
+          for ($i = 0; $i -lt 30 -and (Get-Process Thock -ErrorAction SilentlyContinue); $i++) { Start-Sleep 1 }
           (Start-Process "$env:LOCALAPPDATA\Programs\Thock\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -PassThru).WaitForExit()
           $app = "$env:LOCALAPPDATA\Programs\Thock\Thock.exe"
           for ($i = 0; $i -lt 30 -and (Test-Path $app); $i++) { Start-Sleep 1 }

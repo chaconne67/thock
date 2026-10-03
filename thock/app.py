@@ -9,12 +9,14 @@ import uuid
 import logging
 import logging.handlers
 import math
+import os
 import platform
 import sys
 import threading
 import time
 import traceback
 from collections import deque
+from pathlib import Path
 
 import sounddevice as sd
 
@@ -58,6 +60,37 @@ def bar_height(level, window):
     floor = min(window)
     span = max(max(window) - floor, 0.12)  # at least about 5 dB, so noise alone stays at the bottom
     return min(max((level - floor - 0.04) / (span - 0.04), 0.0), 1.0)
+
+
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+STARTUP_LINK = Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs\Startup\Thock.lnk"
+
+
+def autostart():
+    """Thock starts with Windows: its Run entry, or the Startup shortcut installers before 0.5.9 made."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+            winreg.QueryValueEx(key, APP_NAME)
+            return True
+    except OSError:
+        return STARTUP_LINK.exists()
+
+
+def set_autostart(on):
+    import winreg
+    if on == autostart():
+        return
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+        if on:
+            winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{sys.executable}"')
+        else:
+            try:
+                winreg.DeleteValue(key, APP_NAME)
+            except FileNotFoundError:
+                pass
+    if not on:
+        STARTUP_LINK.unlink(missing_ok=True)
 
 
 def microphones():
@@ -862,6 +895,8 @@ class App:
                 "personal_ready": self.data_root is not None,
                 "personal_key": self.data_root.name if self.data_root else None,
                 "recovery": self.recovery, "embedded": EMBEDDED,
+                # Only a Thock from the installer chooses this; Crema and the Store start their own.
+                "autostart": autostart() if update.enabled() else None,
                 "account": self.account.cached, "version": VERSION}
 
     def update_settings(self, body):
@@ -896,6 +931,8 @@ class App:
             write_data(self.data_root / "terms.protected", s["terms"])
         if self.watcher.enabled != s["learn"]:
             self.watcher.configure(self.notes, s["learn"])
+        if isinstance(body.get("autostart"), bool) and update.enabled():
+            set_autostart(body["autostart"])
         if "position" in body and body["position"] is None:
             s["position"] = None
         if isinstance(body.get("error_reports"), bool) and self.account.token:
