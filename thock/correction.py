@@ -105,18 +105,54 @@ STYLES = {
 # for each sentence, and the code puts it right after that sentence. Told where to put them, Luna kept gathering a
 # message's emoji after its last sentence (0.6.0.dev9~12). Jev reads English best, so the descriptions are English.
 # The key is this PC's own for now (~/.voicetype/typesafe.key); the account server is to issue it later.
+# Jev only picks from this list, so a feeling it lacks comes out as the nearest one (four questions in a row all got
+# 🤔 from 28 options, 주인님 2026-10-04); kinds of question, joy, worry and everyday topics each have several.
 EMOJI_PALETTE = {
     "none": "No emoji: the sentence only states a fact, a task, a request or code, with no feeling to show",
-    "😊": "warm, friendly, pleased", "😄": "light joke, playful", "😂": "very funny", "🎉": "celebration, success, good news",
-    "👍": "agreement, okay, approval", "🙏": "asking a favor politely, thanks", "❤️": "affection, love",
-    "🤔": "a question with doubt or wondering, unsure", "😢": "sad", "😥": "worried, troubled, trouble happened",
-    "😤": "annoyed, frustrated", "😮": "surprised", "🤩": "excited, awesome, amazing", "💪": "cheering, encouragement",
-    "✅": "done, completed, passed", "🚀": "launch, deploy, ship, go ahead", "🛠️": "fixing, repairing",
-    "📄": "document, file, report", "📅": "schedule, date, meeting time", "🍽️": "meal, eating together",
-    "☕": "coffee, a break", "☔": "rain, umbrella, weather", "😴": "tired, sleepy", "👀": "look at it, check it later",
-    "💸": "money, cost, price", "🐱": "cat",
+    # feelings
+    "😊": "warm, friendly, pleased", "😄": "cheerful, happy", "😆": "amused, playful laugh", "😂": "very funny",
+    "🤣": "absurdly funny, rolling with laughter", "😅": "a little awkward or embarrassed, phew", "🙂": "polite, mildly fine",
+    "😉": "wink, a joking hint", "😍": "loving something, adore it", "🥰": "feeling loved, affectionate",
+    "🤗": "hug, comfort, welcome", "🤩": "excited, awesome, amazing", "😎": "cool, confident",
+    "🥳": "partying, celebrating a personal occasion", "😌": "relieved, calm", "😇": "innocent, a good deed",
+    "😏": "smirk, sly", "🥲": "smiling through tears, bittersweet", "🫠": "melting, overwhelmed",
+    "🤯": "mind blown", "😬": "grimace, oops, tense", "😮": "surprised, wow", "😲": "shocked, astonished",
+    "😱": "panic, scared", "😢": "sad", "😭": "crying, very sad or deeply moved", "😥": "worried, troubled",
+    "😰": "anxious, nervous", "😤": "annoyed, frustrated", "😡": "angry", "🙄": "eye roll, unimpressed",
+    "😒": "displeased, meh", "😩": "exhausted, fed up", "😴": "tired, sleepy", "🤒": "sick, feeling ill",
+    "🤧": "a cold, sneezing", "🤫": "secret, keep it quiet",
+    # kinds of question
+    "🤔": "wondering, thinking it over, a question with doubt", "🧐": "asking to check or verify something closely",
+    "🤨": "skeptical, suspicious question", "❓": "a plain question, asking what or how", "🙋": "I have a question, raising a hand",
+    "🥺": "pleading, asking softly, please",
+    # gestures
+    "👍": "agreement, okay, approval", "👌": "perfect, all fine", "👏": "applause, well done", "🙌": "hooray, praise",
+    "🙏": "thanks, asking a favor politely", "💪": "cheering, encouragement, strength", "👋": "hello, goodbye",
+    "👀": "look at it, check it later", "🤝": "deal, cooperation between people", "🫡": "understood, on it",
+    "✌️": "peace, victory",
+    # symbols
+    "❤️": "love, affection", "💔": "heartbreak, disappointment", "✨": "sparkle, something new or nice",
+    "🔥": "hot, intense, hype", "💯": "totally right, perfect", "⭐": "highlight, favorite", "💡": "idea, tip",
+    "❗": "important, attention", "⚠️": "warning, caution", "✅": "done, completed, passed",
+    "❌": "no, wrong, failed, cancelled", "🎯": "on target, goal",
+    # celebration
+    "🎉": "celebration, success, good news", "🎂": "birthday", "🎁": "gift", "🏆": "winning, achievement",
+    # work and tech
+    "🚀": "launch, deploy, ship, go ahead", "🛠️": "fixing, repairing, building", "🐛": "bug, software error",
+    "💻": "computer, coding", "📱": "phone, mobile app", "📄": "document, file", "📊": "numbers, chart, data",
+    "📅": "schedule, date, meeting time", "⏰": "deadline, time, hurry", "📌": "note to remember", "📝": "writing, memo",
+    "📧": "email", "📞": "phone call", "🔍": "search, investigate", "🔒": "security, private", "⏳": "waiting, in progress",
+    "🔄": "retry, update, again", "💸": "spending, cost, price", "💰": "money, earnings", "🛒": "shopping, buying",
+    # food and drink
+    "☕": "coffee, a break", "🍽️": "meal, eating together", "🍲": "stew, soup, warm food", "🍜": "noodles",
+    "🍕": "pizza, casual food", "🍗": "chicken", "🍺": "beer, drinks after work", "🍰": "dessert, cake",
+    # weather, places, daily life
+    "☀️": "sunny, good weather", "☔": "rain, umbrella", "❄️": "snow, cold weather", "🌈": "hopeful, rainbow",
+    "🌙": "night, good night", "🏠": "home", "🏢": "office, work", "🚗": "car, traffic, commute", "✈️": "travel, flight",
+    "🏃": "running, in a hurry, exercise", "🎵": "music", "🎮": "game", "📚": "study, books", "🐶": "dog", "🐱": "cat",
 }
 EMOJI_CONFIDENCE = 0.6  # "some" adds Jev's pick only when Jev is at least this sure; "lots" adds the likeliest emoji
+EMOJI_RUNNER_UP = 0.1  # the same emoji as the sentence before gives way to Jev's next pick if it is at least this likely
 # A sentence runs to . ? ! followed by a space or the end, or to the end of its line ("4.5" stays whole).
 SENTENCE = re.compile(r"[^\n]*?\S[^\n]*?(?:[.?!]+(?=\s|$)|$)", re.M)
 
@@ -142,7 +178,8 @@ class Polisher:
         self.settings, self.notes, self.account, self.profile = settings, notes, account, profile
         # Slow background calls (the profile) never share a lock or connection with dictation corrections.
         self.channels = {False: {"lock": threading.Lock(), "conn": None},
-                         True: {"lock": threading.Lock(), "conn": None}}
+                         True: {"lock": threading.Lock(), "conn": None},
+                         "jev": {"lock": threading.Lock(), "conn": None}}
 
     def complete(self, instructions, user, max_tokens=600, background=False):
         """One model answer. A refused key is renewed once."""
@@ -202,10 +239,13 @@ class Polisher:
             picks = []
             for i in range(len(spans)):
                 answer = answers[f"s{i}"]
-                emoji = {k: p for k, p in answer["probabilities"].items() if k != "none"}
-                picks.append(max(emoji, key=emoji.get) if level == "lots" else
-                             answer["choice"] if answer["choice"] != "none" and answer["confidence"] >= EMOJI_CONFIDENCE
-                             else None)
+                probability = answer["probabilities"]
+                ranked = sorted((k for k in probability if k != "none"), key=probability.get, reverse=True)
+                pick = ranked[0] if level == "lots" or (
+                    answer["choice"] != "none" and answer["confidence"] >= EMOJI_CONFIDENCE) else None
+                if pick and picks and pick == picks[-1] and len(ranked) > 1 and probability[ranked[1]] >= EMOJI_RUNNER_UP:
+                    pick = ranked[1]
+                picks.append(pick)
         except (OSError, http.client.HTTPException, RuntimeError, ValueError, KeyError) as error:
             log.info("emoji skipped: %s", type(error).__name__)
             return text
@@ -224,15 +264,21 @@ class Polisher:
                                       "Which emoji best fits the feeling or topic of this sentence alone? "
                                       "Choose none if this sentence shows no feeling."}
             for i, sentence in enumerate(sentences)}})
-        conn = http.client.HTTPSConnection("api.typesafe.ai", timeout=3)
-        try:
-            conn.request("POST", "/v1/systemone", body, {"Content-Type": "application/json",
-                                                         "Authorization": f"Bearer {key}",
-                                                         "User-Agent": f"{APP_NAME}/{VERSION}"})
-            response = conn.getresponse()
-            data = response.read()
-        finally:
-            conn.close()
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": f"{APP_NAME}/{VERSION}"}
+        channel = self.channels["jev"]
+        with channel["lock"]:
+            for attempt in (1, 2):  # a kept-alive connection may have been closed by the server
+                try:
+                    if channel["conn"] is None:
+                        channel["conn"] = http.client.HTTPSConnection("api.typesafe.ai", timeout=3)
+                    channel["conn"].request("POST", "/v1/systemone", body, headers)
+                    response = channel["conn"].getresponse()
+                    data = response.read()
+                    break
+                except (http.client.HTTPException, OSError):
+                    channel["conn"] = None
+                    if attempt == 2:
+                        raise
         if response.status != 200:
             raise RuntimeError(f"typesafe {response.status}")
         return json.loads(data)["answers"]

@@ -106,6 +106,11 @@ class DirectCorrection(unittest.TestCase):
             self.assertEqual(asked[-1], ["되나?", "짱이다!", "4.5원이다.", "- 끝"])
             polisher.settings["emoji"] = "lots"
             self.assertEqual(polisher.emojify(text), "되나? 🤔 짱이다! 🤩 4.5원이다. 💸\n- 끝 💸")
+            again = {"s0": answers["s0"],  # the same emoji twice in a row gives way to Jev's next pick
+                     "s1": {"choice": "🤔", "confidence": 0.6, "probabilities": {"🤔": 0.6, "😮": 0.3, "none": 0.1}}}
+            polisher._jev = lambda key, sentences: again
+            self.assertEqual(polisher.emojify("되나? 진짜?"), "되나? 🤔 진짜? 😮")
+            polisher._jev = lambda key, sentences: asked.append(sentences) or dict(answers, s3=answers["s2"])
             polisher.settings["emoji"] = "none"
             self.assertEqual(polisher.emojify(text), text)
             polisher.settings["emoji"] = "lots"
