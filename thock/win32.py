@@ -80,6 +80,7 @@ GDI_FORMATS = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}  # handles that are not glob
 HOOK_REARM_MS = 30_000
 OWN_INPUT = 0x54484F434B
 _input_revision = 0
+_click_revision = 0  # the clicks among the user's inputs
 _input_tracking = False
 
 
@@ -141,12 +142,13 @@ def run_key_hook(get_vk, on_key, hold_enter=lambda: False):
         return user32.CallNextHookEx(None, code, wparam, lparam)
 
     def mouse_proc(code, wparam, lparam):
-        global _input_revision
+        global _input_revision, _click_revision
         if code == 0 and wparam in (0x0201, 0x0204, 0x0207, 0x020B):
             # MSLLHOOKSTRUCT's POINT has the same layout as MOUSEINPUT's two LONGs.
             info = ctypes.cast(lparam, ctypes.POINTER(MOUSEINPUT)).contents
             if info.dwExtraInfo != OWN_INPUT:
                 _input_revision += 1
+                _click_revision += 1
                 input_events.append((time.perf_counter(), "click"))
         return user32.CallNextHookEx(None, code, wparam, lparam)
 
@@ -286,7 +288,7 @@ class InlineField:
         self.target, self.current, self.written = target, None, None  # current: as the field shows written
         self.attempt = None  # the last text a write tried to show
         self.mark = mark or (lambda name, **values: None)
-        self.revision = _input_revision
+        self.revision, self.clicks = _input_revision, _click_revision
         self.mismatch = None  # diagnosis: how the field differed when it never showed the paste (lengths only)
         # Before the first write the field must still be as found; afterwards this is only its last seen shape.
         self.initial = field_reader().snapshot() if target and capture_target() == target else None
@@ -313,7 +315,7 @@ class InlineField:
         seen = field_reader().snapshot()
         if seen is None:
             return None
-        self.target, self.revision = target, _input_revision
+        self.target, self.revision, self.clicks = target, _input_revision, _click_revision
         self.failure, self.mismatch, self.stopped = None, None, False
         landed = shown(seen, self.attempt) if self.attempt is not None else None
         if landed is not None:
@@ -336,7 +338,14 @@ class InlineField:
         if self.stopped:
             return False
         if _input_revision != self.revision:
-            return self._refuse("user_input")
+            # Clicks alone that left the field, its text and its caret as Thock left them are not an edit: the
+            # final correction still goes in (Crema 2026-10-03 12:02, two clicks while correcting). A key is.
+            clicks_only = _input_revision - self.revision == _click_revision - self.clicks
+            target, seen = capture_target(), field_reader().snapshot()
+            if not (clicks_only and target and target[:2] == self.target[:2]
+                    and (seen == self.initial if self.current is None else shows(seen, self.current))):
+                return self._refuse("user_input")
+            self.target, self.revision, self.clicks = target, _input_revision, _click_revision
         if capture_target() != self.target:
             return self._refuse("focus_changed")
         reader = field_reader()

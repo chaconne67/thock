@@ -76,6 +76,28 @@ class InlineFieldContract(unittest.TestCase):
         self.assertEqual(field.resume(), "moved")  # the user changed it: from their caret
         self.assertEqual((field.current, field.initial), (None, ("사용자가 고친 글", "", "")))
 
+    def test_a_click_that_changes_nothing_is_not_an_edit(self):
+        import thock.win32 as win32
+        with patch("thock.win32._input_revision", 0), patch("thock.win32._click_revision", 0):
+            field = self.field()
+            self.assertTrue(field.update("교정 전"))
+            self.reader.snapshot.return_value = ("앞 교정 전", "", " 뒤")
+            win32._input_revision += 2  # two clicks; the field, its text and caret stay as Thock left them
+            win32._click_revision += 2
+            self.assertTrue(field.update("교정 후."))
+            self.assertIsNone(field.failure)
+            self.reader.snapshot.return_value = ("앞 교정 후.", "", " 뒤")
+            win32._input_revision += 1  # a key, though nothing seems changed
+            self.assertFalse(field.update("교정 후. 더"))
+            self.assertEqual(field.failure, "user_input")
+            field = self.field()
+            self.assertTrue(field.update("새 글"))
+            win32._input_revision += 1
+            win32._click_revision += 1
+            self.reader.snapshot.return_value = ("앞 새", "", " 글 뒤")  # a click moved the caret
+            self.assertFalse(field.update("새 글."))
+            self.assertEqual(field.failure, "user_input")
+
     def test_existing_user_selection_is_the_only_initial_replacement(self):
         self.reader.snapshot.return_value = ("앞 ", "선택한 글", " 뒤")
         field = self.field()

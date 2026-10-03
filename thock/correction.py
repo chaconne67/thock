@@ -4,7 +4,7 @@ import http.client
 import json
 import threading
 
-from .config import APP_NAME, VERSION
+from .config import APP_NAME, VERSION, term_parts
 
 # Correction tuning, step 3 (주인님 결정 2026-10-01): Soniox is the stenographer and only writes what it hears
 # (its punctuation is removed in speech.unpunctuated); the model is the editor and, from the whole text, sets the
@@ -116,10 +116,15 @@ class Polisher:
             raise RuntimeError("empty correction")
         return out
 
-    def correct(self, text):
-        """The editor's own answer. The whole dictation is sent, so the answer may be as long as it is."""
+    def _terms(self):
+        """The terms the editor spells by; one given with its sound reads "exdigm (소리: 엑스딤)"."""
         terms = [t for t in dict.fromkeys(self.settings.get("terms", []) + self.notes.terms() + self.profile.terms())
                  if isinstance(t, str)][:150]
+        return [f"{spelling} (소리: {sound})" if sound else spelling for spelling, sound in map(term_parts, terms)]
+
+    def correct(self, text):
+        """The editor's own answer. The whole dictation is sent, so the answer may be as long as it is."""
+        terms = self._terms()
         rules, examples = POLISH_RULES[self.settings["polish_level"]]
         return self.complete(POLISH_PROMPT.format(rules=rules, examples=examples),
                              f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
@@ -130,8 +135,7 @@ class Polisher:
         An empty answer is an error: the dictation keeps the text as heard and says so."""
         style = self.settings["style"]
         style = f"사용자가 적은 문체: {self.settings['style_custom'].strip()}" if style == "custom" else STYLES[style]
-        terms = [t for t in dict.fromkeys(self.settings.get("terms", []) + self.notes.terms() + self.profile.terms())
-                 if isinstance(t, str)][:150]
+        terms = self._terms()
         out = self.complete(STYLE_PROMPT.format(style=style),
                             f"<terms>\n{', '.join(terms)}\n</terms>\n<dictation>\n{text}\n</dictation>",
                             max_tokens=max(800, len(text) * 4))

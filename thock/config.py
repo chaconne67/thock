@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.5.6"
+APP_NAME, VERSION = "Thock", "0.5.7.dev1"
 # Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
 # its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
 EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
@@ -46,6 +46,14 @@ log = logging.getLogger("voicetype")
 # One JSON line per dictation and per refused key press: what happened and when, as numbers and codes.
 # Never the dictated text, the keys typed or window titles. Written to trace.log, rotated by size.
 trace = logging.getLogger("voicetype.trace")
+
+
+def term_parts(term):
+    """A dictionary line "표기 = 소리" (주인님 2026-10-03): how the term is written and, when given, how it sounds.
+    Recognition hears "exdigm" said as 엑스딤 as XTIME; given the sound it hears 엑스다임, which the editor writes
+    as the term."""
+    spelling, _, sound = term.partition("=")
+    return spelling.strip(), sound.strip()
 
 
 def load_settings():

@@ -8,7 +8,7 @@ import threading
 import time
 import unicodedata
 
-from .config import log
+from .config import log, term_parts
 from .personal import read_data, write_data, history_data
 
 
@@ -149,7 +149,8 @@ class Profile:
             general.append({"key": "domain", "value": self.data["domain"]})
         if self.data.get("topics"):
             general.append({"key": "topics", "value": ", ".join(self.data["topics"])})
-        return {"general": general, "terms": [t[:80] for t in dict.fromkeys(terms + self.terms()) if isinstance(t, str)][:150]}
+        heard = [part for t in terms + self.terms() if isinstance(t, str) for part in term_parts(t) if part]
+        return {"general": general, "terms": [t[:80] for t in dict.fromkeys(heard)][:150]}  # a term and its sound
 
     def _texts(self):
         return [r["text"] for r in history_data(self.history)["rows"] if r.get("text")]

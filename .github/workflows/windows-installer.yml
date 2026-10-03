@@ -34,7 +34,11 @@ jobs:
         run: uv run python -m unittest discover -s tests -p "test_*.py"
 
       - name: Build app
-        run: uv run --with pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/welcome.html;thock" --add-data "thock/recovery.html;thock" --add-data "thock/sounds;thock/sounds" --add-data "thock/fonts;thock/fonts" voicetype.py
+        env:
+          # PyInstaller built from source compiles its own launcher here. The prebuilt launcher is what antivirus
+          # machine learning keeps flagging (Defender Trojan:Win32/Bearfoos.A!ml on 0.4.6 and 0.5.5).
+          PYINSTALLER_COMPILE_BOOTLOADER: "1"
+        run: uv run --with pyinstaller --no-binary-package pyinstaller pyinstaller --noconfirm --windowed --name Thock --add-data "thock/settings.html;thock" --add-data "thock/welcome.html;thock" --add-data "thock/recovery.html;thock" --add-data "thock/sounds;thock/sounds" --add-data "thock/fonts;thock/fonts" voicetype.py
 
       - name: Build installer
         shell: pwsh

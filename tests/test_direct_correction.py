@@ -87,6 +87,17 @@ class DirectCorrection(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             polisher.restyle("다듬을 글")
 
+    def test_a_term_given_with_its_sound_reaches_the_editor_and_recognition_both_ways(self):
+        from thock.learning import Profile
+        polisher, _, _ = self.polisher([])
+        polisher.settings["terms"] = ["exdigm = 엑스딤", "Thock"]
+        self.assertEqual(polisher._terms()[:2], ["exdigm (소리: 엑스딤)", "Thock"])
+        profile = Profile.__new__(Profile)
+        profile.data = {}
+        profile.terms = lambda: []
+        self.assertEqual(Profile.context(profile, "app.exe", ["exdigm = 엑스딤", "Thock"])["terms"],
+                         ["exdigm", "엑스딤", "Thock"])
+
     def test_an_empty_or_cut_off_answer_is_an_error_not_a_correction(self):
         polisher, _, _ = self.polisher([])
         polisher.correct = lambda text: ""
