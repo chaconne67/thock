@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME, VERSION = "Thock", "0.5.4"
+APP_NAME, VERSION = "Thock", "0.5.5"
 # Inside Crema (Crema's 9,900원 plan): Crema starts Thock with THOCK_EMBEDDED=1, its data folder (THOCK_HOME),
 # its server and sign-in (account.py) and its own path (THOCK_HOST_EXE). Unset, Thock is the Thock app.
 EMBEDDED = os.environ.get("THOCK_EMBEDDED") == "1"
@@ -16,7 +16,7 @@ SONIOX_URL = "wss://stt-rt.soniox.com/transcribe-websocket"
 SONIOX_MODEL = "stt-rt-v5"
 INPUT_MODES = {"hold": "누르고 있는 동안 녹음", "toggle": "눌러서 녹음 켜고 끄기"}
 # How far the editor goes (주인님 결정 2026-10-02); its instructions per level are in correction.py.
-POLISH_LEVELS = {"verbatim": "말한 그대로", "clean": "군더더기만 빼기", "smooth": "읽기 좋게 다듬기"}
+POLISH_LEVELS = {"verbatim": "문장부호만", "clean": "군더더기만 빼기", "smooth": "읽기 좋게 다듬기"}
 # Styles the whole dictation can be rewritten in once, after the key is released (주인님 결정 2026-10-02);
 # what the writer is told for each is in correction.STYLES. "custom" is the user's own line (style_custom).
 STYLES = {"none": "바꾸지 않음", "bullets": "개조식", "email": "이메일", "written": "문어체", "polite": "존댓말로",

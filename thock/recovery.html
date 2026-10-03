@@ -1,6 +1,6 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thock 글 복구</title><style>
 :root{color-scheme:light dark}body{font:15px/1.7 "Malgun Gothic",sans-serif;max-width:640px;margin:auto;padding:30px}h1{font-size:23px}article{border:1px solid #8886;border-radius:14px;padding:20px;margin:16px 0}p{overflow-wrap:anywhere;white-space:pre-wrap}small{opacity:.7}button{min-height:44px;padding:8px 18px;margin-right:10px;border:1px solid #8888;border-radius:8px;font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #4285f4}#status{min-height:24px}article p{user-select:text}</style></head><body>
-<h1>보관한 글</h1><small>최근 5건을 이 Windows 사용자에게 보호해 보관합니다. 복사하거나 삭제하면 목록에서 지워집니다.</small>
+<h1>보관한 글</h1><small>최근 5건을 이 PC의 내 Windows 계정만 열 수 있게 암호화해 보관합니다. 복사하거나 삭제하면 목록에서 지워집니다.</small>
 <div id="items"></div><p id="status" role="status"></p><script>
 const TOKEN="__TOKEN__",items=document.getElementById("items"),status=document.getElementById("status");
 async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error("처리하지 못했습니다. 다시 시도해 주세요.");return r.json()}
