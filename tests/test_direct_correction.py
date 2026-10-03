@@ -100,6 +100,16 @@ class DirectCorrection(unittest.TestCase):
                 for level, rule in EMOJI_RULES.items():
                     self.assertEqual(json_text(rule) in conn.request.call_args.args[2], level == emoji, (emoji, style))
 
+    def test_with_emoji_the_one_sentence_per_line_answer_is_joined_except_for_styles_laid_out_in_lines(self):
+        body = b'{"choices": [{"message": {"content": "\\ub418\\ub098? \\ud83e\\udd14\\n\\uc9f1\\uc774\\ub2e4! \\ud83e\\udd29"}}]}'
+        for emoji, style, wanted in (("some", "none", "되나? 🤔 짱이다! 🤩"), ("none", "none", "되나? 🤔\n짱이다! 🤩"),
+                                     ("lots", "casual", "되나? 🤔 짱이다! 🤩"), ("lots", "bullets", "되나? 🤔\n짱이다! 🤩")):
+            polisher, _, conn = self.polisher([Response(200, body)])
+            polisher.settings.update(emoji=emoji, style=style)
+            with patch("thock.correction.http.client.HTTPSConnection", return_value=conn):
+                answer = (polisher.correct if style == "none" else polisher.restyle)("되나 짱이다")
+            self.assertEqual(answer, wanted, (emoji, style))
+
     def test_a_term_given_with_its_sound_reaches_the_editor_and_recognition_both_ways(self):
         from thock.learning import Profile
         polisher, _, _ = self.polisher([])
