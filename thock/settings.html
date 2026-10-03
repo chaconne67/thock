@@ -352,8 +352,7 @@ function renderAccount(a) {
   $("account-login").hidden = connected;
   const x = a.access;
   $("account-usage").textContent = x?.label
-    ? x.label + " · 남은 " + Math.floor(x.remaining_seconds / 60) + "분 " + Math.floor(x.remaining_seconds % 60) + "초"
-      + (x.pending_seconds ? " · 사용 시간 확인 중" : "")
+    ? x.label
       + (x.period_end ? " · " + new Date(x.period_end).toLocaleDateString("ko-KR") + "까지" : "")
     : "";
   $("account-error").textContent = a.error || "";

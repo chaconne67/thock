@@ -43,7 +43,7 @@ async function refresh(){
  $("login").hidden=connected;$("login").disabled=a.state==="waiting";
  $("refresh").hidden=false;$("switch").hidden=!connected;$("reports").hidden=connected;
  $("access").hidden=!a.access?.label;
- if(a.access?.label){const x=a.access;$("access").textContent=x.label+" · 남은 "+Math.floor(x.remaining_seconds/60)+"분 "+Math.floor(x.remaining_seconds%60)+"초"+(x.period_end?" · "+new Date(x.period_end).toLocaleDateString("ko-KR")+"까지":"");}
+ if(a.access?.label){const x=a.access;$("access").textContent=x.label+(x.period_end?" · "+new Date(x.period_end).toLocaleDateString("ko-KR")+"까지":"");}
  if(a.state==="waiting"||a.state==="checking")timer=setTimeout(refresh,1500);
  if(a.ready&&!finishing){finishing=true;
   // Signed in with Thock access: finish without another click, bringing this PC's earlier data along.
